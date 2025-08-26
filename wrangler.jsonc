@@ -1,7 +1,7 @@
 {
   "main": ".open-next/worker.js",
   "name": "cracha",
-  "compatibility_date": "2025-08-24",
+  "compatibility_date": "2025-08-25",
   "compatibility_flags": [
     "nodejs_compat"
   ],

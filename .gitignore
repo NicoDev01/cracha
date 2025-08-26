@@ -32,6 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+.env.local
 
 # vercel
 .vercel
@@ -42,10 +43,6 @@ next-env.d.ts
 
 # crush local state
 .crush/
-
-# Cloudflare Workers
-.wrangler/
-.open-next/
 
 # Python virtual environments and cache
 __pycache__/

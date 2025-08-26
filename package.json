@@ -96,6 +96,6 @@
     "tw-animate-css": "^1.3.6",
     "typescript": "^5",
     "url-loader": "^4.1.1",
-    "wrangler": "^4.32.0"
+    "wrangler": "^4.33.0"
   }
 }
