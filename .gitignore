@@ -43,42 +43,26 @@ next-env.d.ts
 # crush local state
 .crush/
 
-# open-next build artifacts
+# Cloudflare Workers
+.wrangler/
 .open-next/
 
-# python virtual environments and build artifacts
-python/
-venv/
+# Python virtual environments and cache
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+*.py[cod]
+*$py.class
+venv/
+env/
+.venv/
+.env/
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-*~
 
-# wrangler
-.wrangler/
-wrangler.jsonc
+# OS
+Thumbs.db
+ehthumbs.db
+Desktop.ini

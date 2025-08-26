@@ -1,0 +1,65 @@
+export interface Message {
+  id: string
+  type: 'user' | 'assistant' | 'system'
+  content: string
+  timestamp: Date
+  sources?: Source[]
+  isStreaming?: boolean
+  isError?: boolean
+}
+
+export interface Source {
+  id: string
+  title: string
+  url: string
+  snippet: string
+  relevance_score: number
+}
+
+export interface ChatResponse {
+  message: string
+  sources: Source[]
+  metadata: {
+    query_time: number
+    tokens_used: number
+    model_used: string
+  }
+}
+
+export interface QueryRequest {
+  tenant_id: string
+  question: string
+  top_k?: number
+  stream?: boolean
+  language?: string
+  use_hyde?: boolean
+  rerank?: boolean
+  temperature?: number
+  max_tokens?: number
+}
+
+export interface ChatState {
+  messages: Message[]
+  selectedDatabase: string | null
+  isLoading: boolean
+  isStreaming: boolean
+  error: string | null
+  
+  // Actions
+  sendMessage: (question: string) => Promise<void>
+  clearChat: () => void
+  selectDatabase: (tenantId: string) => void
+  setError: (error: string | null) => void
+}
+
+export interface Database {
+  id: string
+  name: string
+  description?: string
+  created_at: Date
+  updated_at: Date
+  document_count: number
+  last_crawl?: Date
+  source_url?: string
+  status?: string
+}
