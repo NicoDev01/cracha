@@ -28,9 +28,9 @@ export const supabaseAdmin = (() => {
   try {
     return getSupabaseAdmin()
   } catch (error) {
-    // During build time, return a mock client to prevent build failures
+    // During build time, return a null client to prevent build failures
     console.warn('Supabase admin client not available during build:', error)
-    return null as any
+    return null
   }
 })()
 
