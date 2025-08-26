@@ -27,6 +27,7 @@ export const env = createEnv({
     NEXT_PUBLIC_ADMIN_WORKER_URL: z.string().url().optional(),
     
     // Application Config
+    NEXT_PUBLIC_APP_URL: z.string().url().optional(),
     NEXT_PUBLIC_USE_REAL_API: z.string().optional(),
   },
   runtimeEnv: {
@@ -51,6 +52,7 @@ export const env = createEnv({
     VECTORIZE_ACCOUNT_ID: process.env.VECTORIZE_ACCOUNT_ID,
     
     // Application Config
+    NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_USE_REAL_API: process.env.NEXT_PUBLIC_USE_REAL_API,
   },
 });
