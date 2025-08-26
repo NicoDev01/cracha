@@ -4,7 +4,7 @@ import { z } from "zod";
 export const env = createEnv({
   server: {
     // Supabase
-    SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
+    SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
     
     // API Keys
     OPENAI_API_KEY: z.string().optional(),
@@ -19,11 +19,11 @@ export const env = createEnv({
   },
   client: {
     // Supabase
-    NEXT_PUBLIC_SUPABASE_URL: z.string().url().optional(),
-    NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().optional(),
+    NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
     
     // Worker URLs
-    NEXT_PUBLIC_CRACHA_WORKER_URL: z.string().url().optional(),
+    NEXT_PUBLIC_CRACHA_WORKER_URL: z.string().url(),
     NEXT_PUBLIC_ADMIN_WORKER_URL: z.string().url().optional(),
     
     // Application Config
