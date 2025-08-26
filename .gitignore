@@ -44,6 +44,17 @@ next-env.d.ts
 # crush local state
 .crush/
 
+# Cloudflare Workers & OpenNext Build Artifacts
+.wrangler/
+.open-next/
+
+# CRITICAL: OpenNext build artifacts contain sensitive environment variables
+# These directories are auto-generated and contain API keys/secrets
+.open-next/**/*.env
+.open-next/**/next-env.mjs
+.open-next/server-functions/
+.open-next/cloudflare/
+
 # Python virtual environments and cache
 __pycache__/
 *.py[cod]
