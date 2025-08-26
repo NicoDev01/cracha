@@ -36,6 +36,11 @@ export const supabaseAdmin = (() => {
 
 // Helper function to manually confirm user (for development)
 export async function confirmUser(userId: string) {
+  if (!supabaseAdmin) {
+    console.error('Supabase admin client not available')
+    return { error: new Error('Supabase admin client not initialized') }
+  }
+
   const { data, error } = await supabaseAdmin.auth.admin.updateUserById(
     userId,
     { email_confirm: true }

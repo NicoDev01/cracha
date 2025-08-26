@@ -1,7 +1,7 @@
 'use client'
 
 import { create } from 'zustand'
-import type { Message, ChatState, Database } from '@/types/chat'
+import type { Message, ChatState } from '@/types/chat'
 
 export const useChatStore = create<ChatState>()((set, get) => ({
   messages: [],
