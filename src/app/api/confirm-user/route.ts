@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase/admin'
 
 export async function POST(request: NextRequest) {
   // Only allow in development
@@ -8,6 +7,15 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    // Lazy import to avoid build-time issues
+    const { supabaseAdmin } = await import('@/lib/supabase/admin')
+    
+    if (!supabaseAdmin) {
+      return NextResponse.json({ 
+        error: 'Supabase admin client not available. Please check environment variables.' 
+      }, { status: 500 })
+    }
+
     const { email } = await request.json()
 
     if (!email) {
