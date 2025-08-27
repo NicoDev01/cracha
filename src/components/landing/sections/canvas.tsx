@@ -36,9 +36,9 @@ import { Icons } from "@/components/shared/icons";
 
 export default function CanvasSection() {
   return (
-    <div className="hidden md:block pb-16 pt-4 sm:pb-24">
+    <div id="canvas-section" className="hidden md:block pb-16 pt-37 sm:pb-24 overflow-hidden">
       <MaxWidthWrapper>
-        <div className="relative h-[42vh] w-full">
+        <div className="relative h-[42vh] w-full overflow-hidden">
           <ImaginationCanvas />
         </div>
         <div className="flex flex-col items-center gap-7 text-center">

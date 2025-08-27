@@ -22,11 +22,37 @@ import { ThemeToggleButton } from "@/components/dashboard/common/ThemeToggleButt
 export function NavMobile() {
     const pathname = usePathname();
     const [open, setOpen] = React.useState(false);
+    const [scrolled, setScrolled] = React.useState(false);
+
+    React.useEffect(() => {
+        const handleScroll = () => {
+            setScrolled(window.scrollY > 50);
+        };
+
+        window.addEventListener("scroll", handleScroll);
+        return () => window.removeEventListener("scroll", handleScroll);
+    }, []);
+
+    const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+        e.preventDefault();
+        setOpen(false);
+        
+        if (href.startsWith("#")) {
+            const element = document.getElementById(href.substring(1));
+            if (element) {
+                element.scrollIntoView({ behavior: "smooth" });
+            }
+        } else {
+            window.location.href = href;
+        }
+    };
 
     return (
         <Sheet open={open} onOpenChange={setOpen}>
             {/* Mobile Top Bar */}
-            <div className="md:hidden px-4 pt-8">
+            <div className={`sticky top-0 z-50 md:hidden px-4 pt-8 backdrop-blur-xl transition-all ${
+                scrolled ? "bg-background/60" : "bg-transparent"
+            }`}>
                 {/* Logo above */}
                 <div className="flex h-10 items-center justify-start">
                     <Link href="/" className="flex items-center">
@@ -111,42 +137,42 @@ export function NavMobile() {
                 <div className="my-4 h-[calc(100vh-8rem)] pb-10 pl-6">
                     <div className="flex flex-col space-y-4">
                         <Link
-                            href="/#how-to-use"
+                            href="#how-to-use"
                             className={cn(
                                 "py-2 font-semibold transition-colors hover:text-foreground/80",
                                 pathname === "/#how-to-use" ? "text-foreground" : "text-foreground/60"
                             )}
-                            onClick={() => setOpen(false)}
+                            onClick={(e) => handleNavClick(e, "#how-to-use")}
                         >
                             Nutzung
                         </Link>
                         <Link
-                            href="/#why-cracha"
+                            href="#why-cracha"
                             className={cn(
                                 "py-2 font-semibold transition-colors hover:text-foreground/80",
                                 pathname === "/#why-cracha" ? "text-foreground" : "text-foreground/60"
                             )}
-                            onClick={() => setOpen(false)}
+                            onClick={(e) => handleNavClick(e, "#why-cracha")}
                         >
                             Warum CraCha?
                         </Link>
                         <Link
-                            href="/#features"
+                            href="#features"
                             className={cn(
                                 "py-2 font-semibold transition-colors hover:text-foreground/80",
                                 pathname === "/#features" ? "text-foreground" : "text-foreground/60"
                             )}
-                            onClick={() => setOpen(false)}
+                            onClick={(e) => handleNavClick(e, "#features")}
                         >
                             Features
                         </Link>
                         <Link
-                            href="/#canvas-section"
+                            href="#canvas-section"
                             className={cn(
                                 "py-2 font-semibold transition-colors hover:text-foreground/80",
                                 pathname === "/#canvas-section" ? "text-foreground" : "text-foreground/60"
                             )}
-                            onClick={() => setOpen(false)}
+                            onClick={(e) => handleNavClick(e, "#canvas-section")}
                         >
                             Jetzt loslegen
                         </Link>

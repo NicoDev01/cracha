@@ -37,19 +37,19 @@ export function NavBar({ scroll = false }: NavBarProps) {
   const mainNavLinks = [
     {
       title: "Nutzung",
-      href: "/#how-to-use",
+      href: "#how-to-use",
     },
     {
       title: "Warum CraCha?",
-      href: "/#why-cracha",
+      href: "#why-cracha",
     },
     {
       title: "Features",
-      href: "/#features",
+      href: "#features",
     },
     {
       title: "Jetzt loslegen",
-      href: "/#canvas-section",
+      href: "#canvas-section",
     },
   ];
 
@@ -72,8 +72,9 @@ export function NavBar({ scroll = false }: NavBarProps) {
       </svg>
 
       <header
-        className={`sticky top-0 z-40 hidden md:flex w-full justify-center bg-background/60 backdrop-blur-xl transition-all ${scroll ? (scrolled ? "border-b" : "bg-transparent") : "border-b"
-          }`}
+        className={`sticky top-0 z-50 w-full hidden md:flex justify-center backdrop-blur-xl transition-all ${
+          scrolled ? "bg-background/60" : "bg-transparent"
+        }`}
       >
         <MaxWidthWrapper className="flex h-12 md:h-14 items-center justify-between py-0">
           <div className="flex gap-6 md:gap-10">

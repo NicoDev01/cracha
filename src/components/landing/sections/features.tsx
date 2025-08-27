@@ -43,7 +43,7 @@ export const features: FeatureLdg[] = [
 
 export default function Features() {
   return (
-    <section className="py-16 md:py-24">
+    <section id="features" className="py-16 md:py-24">
         <MaxWidthWrapper>
              <div className="mx-auto mb-12 max-w-3xl text-center">
                 <h2 className="font-heading text-3xl leading-tight md:text-5xl text-foreground">

@@ -14,7 +14,7 @@ export default function ProductShowcase() {
     }
 
     return (
-        <section className="py-16 md:py-24">
+        <section id="why-cracha" className="py-16 md:py-24">
             <MaxWidthWrapper>
                 <div className="grid gap-10 px-2.5 lg:grid-cols-2 lg:items-center lg:px-7">
                     <div className={cn(reverse ? "lg:order-2" : "lg:order-1")}>
