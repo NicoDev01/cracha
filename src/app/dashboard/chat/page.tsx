@@ -1,26 +1,35 @@
-import PageBreadcrumb from "@/components/dashboard/common/PageBreadCrumb";
-import { ClientOnly } from "@/components/client-only";
-import { Metadata } from "next";
-import { ChatInterface } from "@/components/dashboard/chat/chat-interface";
+"use client";
 
-export const metadata: Metadata = {
-  title: "Chat - CraCha RAG-Agent Dashboard",
-  description: "Intelligente Unterhaltungen mit Ihren gecrawlten Daten durch RAG-Technologie",
-};
+import PageBreadcrumb from "@/components/dashboard/common/PageBreadCrumb";
+import dynamic from "next/dynamic";
+import Head from "next/head";
+
+// Dynamic import to reduce bundle size
+const ChatInterface = dynamic(
+  () => import("@/components/dashboard/chat/chat-interface").then(mod => ({ default: mod.ChatInterface })),
+  {
+    loading: () => (
+      <div className="flex items-center justify-center py-20">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+      </div>
+    ),
+    ssr: false // Chat doesn't need SSR
+  }
+);
 
 export default function ChatPage() {
   return (
-    <div>
-      <PageBreadcrumb pageTitle="Chat" />
-      <div className="min-h-screen rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] flex flex-col">
-        <ClientOnly fallback={
-          <div className="flex items-center justify-center py-20">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-500"></div>
-          </div>
-        }>
+    <>
+      <Head>
+        <title>Chat - CraCha RAG-Agent Dashboard</title>
+        <meta name="description" content="Intelligente Unterhaltungen mit Ihren gecrawlten Daten durch RAG-Technologie" />
+      </Head>
+      <div>
+        <PageBreadcrumb pageTitle="Chat" />
+        <div className="min-h-screen rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] flex flex-col">
           <ChatInterface />
-        </ClientOnly>
+        </div>
       </div>
-    </div>
+    </>
   );
 }

@@ -26,7 +26,7 @@ const mockDatabases = [
   }
 ]
 
-export async function GET(_request: NextRequest) {
+export async function GET() {
   try {
     // In production, this would:
     // 1. Get user from authentication
