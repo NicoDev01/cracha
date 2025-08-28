@@ -10,9 +10,33 @@ binding = "ASSETS"
 
 # Environment Variables
 [vars]
+# Application Config
 NEXT_PUBLIC_APP_ENV = "development"
-NEXT_PUBLIC_CRACHA_WORKER_URL = "https://cracha-worker-rag.aimpact-agency.workers.dev"
+NEXT_PUBLIC_USE_REAL_API = "true"
+NEXT_PUBLIC_APP_URL = "http://localhost:8787"
+
+# Supabase Authentication
 NEXT_PUBLIC_SUPABASE_URL = "https://ncfrgsqfnccjfyezxjsj.supabase.co"
 NEXT_PUBLIC_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5jZnJnc3FmbmNjamZ5ZXp4anNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ4NTg0NDAsImV4cCI6MjA3MDQzNDQ0MH0.Q3OaTFVoPtcC1VLYI1hZAJrDtXLNaMnfjCPx9bvogmk"
-NEXT_PUBLIC_USE_REAL_API = "true"
+SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5jZnJnc3FmbmNjamZ5ZXp4anNqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NDg1ODQ0MCwiZXhwIjoyMDcwNDM0NDQwfQ.jn9_u3HcwVnFqYVM_pPzSmrQvEWU14jU213xUs1p3VA"
+
+# Worker URLs
+NEXT_PUBLIC_CRACHA_WORKER_URL = "https://cracha-worker-rag.aimpact-agency.workers.dev"
 NEXT_PUBLIC_ADMIN_WORKER_URL = "https://cracha-admin-worker.aimpact-agency.workers.dev"
+
+# AI Provider Keys
+OPENAI_API_KEY = "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"
+GEMINI_API_KEY = "AIzaSyDhBaHG4dbHrHb-7MRC_-6aLk7_AA6rzWw"
+VERTEX_KEY = "AIzaSyDhBaHG4dbHrHb-7MRC_-6aLk7_AA6rzWw"
+GOOGLE_API_KEY = "AIzaSyDhBaHG4dbHrHb-7MRC_-6aLk7_AA6rzWw"
+
+# Cloudflare Configuration
+CLOUDFLARE_API_TOKEN = "QTmd_TTQ-8sCCslgqA9W6JHK74Yl0SXKYkTt7MLm"
+CLOUDFLARE_ACCOUNT_ID = "8c010bb7d3f4ebde9f695e61441511cb"
+VECTORIZE_API_TOKEN = "QTmd_TTQ-8sCCslgqA9W6JHK74Yl0SXKYkTt7MLm"
+VECTORIZE_ACCOUNT_ID = "8c010bb7d3f4ebde9f695e61441511cb"
+
+# Development Environment
+ENVIRONMENT = "development"
+LOG_LEVEL = "debug"
+
