@@ -124,66 +124,41 @@ async function handleGetDatabases(request: AuthenticatedRequest): Promise<NextRe
 
     // Check if required environment variables are set
     if (!process.env.CLOUDFLARE_ACCOUNT_ID || !process.env.CLOUDFLARE_KV_NAMESPACE_ID || !process.env.CLOUDFLARE_API_TOKEN) {
-      console.warn('⚠️ Cloudflare KV environment variables not set, returning mock data')
-      console.log('Debug - Environment check:')
+      const isProduction = process.env.ENVIRONMENT === 'production' || process.env.NODE_ENV === 'production'
+      const envType = isProduction ? 'PRODUCTION' : 'DEVELOPMENT'
+      
+      console.warn(`⚠️ [${envType}] Cloudflare KV environment variables not set, returning mock data`)
+      console.log(`Debug - Environment check (${envType}):`);
       console.log('  CLOUDFLARE_ACCOUNT_ID:', process.env.CLOUDFLARE_ACCOUNT_ID ? 'SET' : 'MISSING')
       console.log('  CLOUDFLARE_KV_NAMESPACE_ID:', process.env.CLOUDFLARE_KV_NAMESPACE_ID ? 'SET' : 'MISSING')
       console.log('  CLOUDFLARE_API_TOKEN:', process.env.CLOUDFLARE_API_TOKEN ? `SET (${process.env.CLOUDFLARE_API_TOKEN.substring(0, 8)}...)` : 'MISSING')
+      
+      if (isProduction) {
+        console.error('🚨 PRODUCTION DEPLOYMENT ISSUE: Environment variables not configured!')
+        console.error('🔧 SOLUTION: Set secrets via Cloudflare Dashboard or run: wrangler secret put CLOUDFLARE_API_TOKEN')
+      }
+      
       return NextResponse.json({
         success: true,
         databases: [
           {
-            id: 'lotrichtung',
-            name: 'Lotrichtung',
-            description: 'Lotrichtung database',
-            document_count: 42,
+            id: 'config-missing',
+            name: `${envType} - Configuration Missing`,
+            description: isProduction 
+              ? 'Production environment variables not configured. Please set secrets in Cloudflare Dashboard.' 
+              : 'Development environment variables not configured in wrangler.toml.',
+            document_count: 0,
             created_at: new Date().toISOString(),
-            last_crawl: new Date().toISOString(),
-            source_url: 'https://example.com',
-            status: 'active'
-          },
-          {
-            id: 'geo',
-            name: 'Geo',
-            description: 'Geographic database',
-            document_count: 128,
-            created_at: new Date().toISOString(),
-            last_crawl: new Date().toISOString(),
-            source_url: 'https://example.com',
-            status: 'active'
-          },
-          {
-            id: 'test',
-            name: 'Test',
-            description: 'Test database',
-            document_count: 15,
-            created_at: new Date().toISOString(),
-            last_crawl: new Date().toISOString(),
-            source_url: 'https://example.com',
-            status: 'active'
-          },
-          {
-            id: 'normal',
-            name: 'Normal',
-            description: 'Normal database',
-            document_count: 67,
-            created_at: new Date().toISOString(),
-            last_crawl: new Date().toISOString(),
-            source_url: 'https://example.com',
-            status: 'active'
-          },
-          {
-            id: 'Weltraum',
-            name: 'Weltraum',
-            description: 'Space database',
-            document_count: 234,
-            created_at: new Date().toISOString(),
-            last_crawl: new Date().toISOString(),
-            source_url: 'https://example.com',
-            status: 'active'
+            last_crawl: null,
+            source_url: '',
+            status: isProduction ? 'error' : 'development'
           }
         ],
-        count: 5
+        count: 1,
+        environment: envType,
+        note: isProduction 
+          ? 'PRODUCTION: Set environment variables in Cloudflare Dashboard' 
+          : 'DEVELOPMENT: Check wrangler.toml configuration'
       })
     }
 

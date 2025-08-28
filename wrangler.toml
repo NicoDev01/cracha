@@ -42,3 +42,29 @@ VECTORIZE_ACCOUNT_ID = "8c010bb7d3f4ebde9f695e61441511cb"
 ENVIRONMENT = "development"
 LOG_LEVEL = "debug"
 
+# Observability (enable logs for debugging)
+[observability.logs]
+enabled = true
+
+# Production Environment
+[env.production]
+[env.production.vars]
+# Application Config
+NEXT_PUBLIC_APP_ENV = "production"
+NEXT_PUBLIC_USE_REAL_API = "true"
+NEXT_PUBLIC_APP_URL = "https://cracha.aimpact-agency.workers.dev"
+
+# Supabase Authentication (use secrets for production)
+# These will be set via wrangler secret put commands
+# NEXT_PUBLIC_SUPABASE_URL = "https://ncfrgsqfnccjfyezxjsj.supabase.co"
+# NEXT_PUBLIC_SUPABASE_ANON_KEY = "..."
+# SUPABASE_SERVICE_ROLE_KEY = "..."
+
+# Worker URLs
+NEXT_PUBLIC_CRACHA_WORKER_URL = "https://cracha-worker-rag.aimpact-agency.workers.dev"
+NEXT_PUBLIC_ADMIN_WORKER_URL = "https://cracha-admin-worker.aimpact-agency.workers.dev"
+
+# Production Environment
+ENVIRONMENT = "production"
+LOG_LEVEL = "info"
+
