@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+// Note: Edge runtime temporarily disabled for OpenNext compatibility
+// export const runtime = 'edge'
+
 export async function POST(request: NextRequest) {
   // Only allow in development
   if (process.env.NODE_ENV !== 'development') {
@@ -16,7 +19,7 @@ export async function POST(request: NextRequest) {
       }, { status: 500 })
     }
 
-    const { email } = await request.json()
+    const { email } = await request.json() as { email: string }
 
     if (!email) {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 })

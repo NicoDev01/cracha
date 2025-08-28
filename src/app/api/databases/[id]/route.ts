@@ -98,7 +98,7 @@ export async function PUT(
 ) {
   try {
     const { id } = await params
-    const body = await request.json()
+    const body = await request.json() as Record<string, unknown>
 
     if (!id) {
       return NextResponse.json(
@@ -110,8 +110,8 @@ export async function PUT(
     // In production, this would update the database registry
     const updatedDatabase = {
       id: id,
-      name: body.name || id,
-      description: body.description || `Database for ${id}`,
+      name: (body.name as string) || id,
+      description: (body.description as string) || `Database for ${id}`,
       updated_at: new Date().toISOString()
     }
 

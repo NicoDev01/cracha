@@ -337,7 +337,9 @@ const ParticleCard: React.FC<{
           opacity: 0,
           duration: 0.8,
           ease: "power2.out",
-          onComplete: () => ripple.remove(),
+          onComplete: () => {
+            ripple.remove();
+          },
         }
       );
     };
@@ -718,7 +720,9 @@ const MagicBento: React.FC<BentoProps> = ({
                       opacity: 0,
                       duration: 0.8,
                       ease: "power2.out",
-                      onComplete: () => ripple.remove(),
+                      onComplete: () => {
+                        ripple.remove();
+                      },
                     }
                   );
                 };

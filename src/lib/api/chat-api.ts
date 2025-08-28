@@ -2,6 +2,24 @@
 
 import type { QueryRequest, ChatResponse } from '@/types/chat'
 
+// Interface definitions for RAG Worker response
+interface RawSource {
+  chunk_index?: string;
+  title?: string;
+  url: string;
+  snippet?: string;
+  score?: number;
+}
+
+interface RAGWorkerResponse {
+  answer?: string;
+  sources?: RawSource[];
+  usage?: {
+    latency_ms?: number;
+    llm_tokens?: number;
+  };
+}
+
 class ChatAPIClient {
   private baseUrl = process.env.NEXT_PUBLIC_CRACHA_WORKER_URL || 'https://cracha-worker-rag.aimpact-agency.workers.dev'
 
@@ -38,17 +56,8 @@ class ChatAPIClient {
         throw new Error(`RAG Worker error: ${errorText}`)
       }
 
-      const data = await response.json()
+      const data = await response.json() as RAGWorkerResponse
       console.log('RAG Worker response data:', data)
-      
-      // Transform RAG Worker response to our ChatResponse format
-      interface RawSource {
-        chunk_index?: string;
-        title?: string;
-        url: string;
-        snippet?: string;
-        score?: number;
-      }
       
       const transformedResponse = {
         message: data.answer || 'No answer received',

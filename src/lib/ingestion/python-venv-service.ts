@@ -47,7 +47,13 @@ export class PythonVenvService {
         throw new Error(`Python API error: ${response.status} - ${errorText}`)
       }
 
-      const result = await response.json()
+      const result = await response.json() as {
+        success: boolean;
+        job_id: string;
+        message: string;
+        output: string;
+        duration: string;
+      }
       
       console.log('✅ Python crawl completed:', result)
       

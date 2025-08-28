@@ -3,7 +3,7 @@ import { ServerCrawlServiceFactory } from '@/lib/ingestion/server-crawl-service-
 
 export async function POST(request: NextRequest) {
   try {
-    const config = await request.json()
+    const config = await request.json() as Record<string, unknown>
     
     // Validate required fields
     if (!config.url || !config.tenant_id || !config.user_id) {
@@ -17,11 +17,11 @@ export async function POST(request: NextRequest) {
     const processedConfig = {
       ...config,
       include_patterns: config.include_patterns ? 
-        config.include_patterns.split('\n').filter((p: string) => p.trim()) : undefined,
+        String(config.include_patterns).split('\n').filter((p: string) => p.trim()) : undefined,
       exclude_domains: config.exclude_domains ? 
-        config.exclude_domains.split('\n').filter((d: string) => d.trim()) : undefined,
+        String(config.exclude_domains).split('\n').filter((d: string) => d.trim()) : undefined,
       include_domains: config.include_domains ? 
-        config.include_domains.split(' ').filter((d: string) => d.trim()) : undefined,
+        String(config.include_domains).split(' ').filter((d: string) => d.trim()) : undefined,
       
       // Set defaults
       type: config.type || 'single',
@@ -38,11 +38,12 @@ export async function POST(request: NextRequest) {
     const crawlServiceFactory = ServerCrawlServiceFactory.getInstance()
     console.log(`🔧 Using service: ${crawlServiceFactory.getServiceType()}`)
     
-    const result = await crawlServiceFactory.executeCrawl(processedConfig)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await crawlServiceFactory.executeCrawl(processedConfig as any)
 
     if (result.success) {
       // Check if this is an async job (Cloudflare Worker)
-      const asyncResult = await handleAsyncJob(result, config)
+      const asyncResult = await handleAsyncJob(result, config as { tenant_id: string; url: string })
       if (asyncResult) {
         return NextResponse.json(asyncResult)
       }

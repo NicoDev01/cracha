@@ -130,7 +130,7 @@ export function DatabaseDetailsModal({
         throw new Error('Fehler beim Laden der Datenbankdetails')
       }
 
-      const data = await response.json()
+      const data = await response.json() as DatabaseDetails
       setDetails(data)
     } catch (error) {
       console.error('Failed to load database details:', error)

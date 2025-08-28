@@ -51,7 +51,12 @@ export class CloudflareWorkerService {
         throw new Error(`Cloudflare Worker API error: ${response.status} - ${errorText}`)
       }
 
-      const result = await response.json()
+      const result = await response.json() as {
+        success: boolean;
+        job_id: string;
+        message?: string;
+        status?: string;
+      }
       
       console.log('✅ Crawl job queued successfully:', result)
       
@@ -89,7 +94,16 @@ export class CloudflareWorkerService {
         throw new Error(`Status API error: ${response.status} - ${errorText}`)
       }
 
-      const result = await response.json()
+      const result = await response.json() as {
+        success: boolean;
+        job_id: string;
+        status: 'pending' | 'running' | 'completed' | 'failed';
+        created_at?: string;
+        updated_at?: string;
+        completed_at?: string;
+        error?: string;
+        result?: unknown;
+      }
       
       return {
         success: result.success,
@@ -127,7 +141,7 @@ export class CloudflareWorkerService {
         throw new Error(`Health check failed: ${response.status}`)
       }
 
-      return await response.json()
+      return await response.json() as { status: string; service: string; timestamp: string }
 
     } catch (error) {
       console.error('❌ Health check failed:', error)

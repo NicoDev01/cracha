@@ -4,7 +4,7 @@ import path from 'path'
 
 export async function POST(request: NextRequest) {
   try {
-    const config: any = await request.json()
+    const config = await request.json() as CrawlConfig
     
     // Validate required fields
     if (!config.url || !config.tenant_id || !config.user_id) {

@@ -6,7 +6,7 @@ import { persist } from 'zustand/middleware'
 export interface CrawlJob {
   id: string
   tenant_id: string
-  status: 'pending' | 'running' | 'completed' | 'failed'
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'queued' | 'processing'
   url: string
   type: 'single' | 'recursive' | 'sitemap' | 'batch'
   progress?: {
@@ -128,11 +128,15 @@ export const useCrawlStore = create<CrawlState>()(
             throw new Error(`Crawl API error: ${response.status}`)
           }
 
-          const result = await response.json()
+          const result = await response.json() as {
+            success: boolean;
+            job_id?: string;
+            error?: string;
+          }
 
           if (result.success) {
             // Start polling for job status
-            get().pollJobStatus(jobId, result.job_id)
+            get().pollJobStatus(jobId, result.job_id || jobId)
           } else {
             throw new Error(result.error || 'Crawl failed')
           }
@@ -189,8 +193,49 @@ export const useCrawlStore = create<CrawlState>()(
               throw new Error(`Status API error: ${response.status}`)
             }
 
-            const statusData = await response.json()
-            const jobStatus = statusData.job || statusData // Handle both formats
+            const statusData = await response.json() as {
+              success?: boolean;
+              job?: {
+                config?: {
+                  tenant_id?: string;
+                  url?: string;
+                };
+                status: 'pending' | 'running' | 'completed' | 'failed' | 'queued' | 'processing';
+                progress?: number;
+                result?: {
+                  chunks?: number;
+                  duration?: string;
+                };
+                error?: string;
+                total_chunks?: number;
+                processed_chunks?: number;
+              };
+              // Handle both formats - when job data is at root level
+              config?: {
+                tenant_id?: string;
+                url?: string;
+              };
+              status?: 'pending' | 'running' | 'completed' | 'failed' | 'queued' | 'processing';
+              progress?: number;
+              result?: {
+                chunks?: number;
+                duration?: string;
+              };
+              error?: string;
+              total_chunks?: number;
+              processed_chunks?: number;
+            }
+            
+            // Normalize job status data - prefer nested job structure, fallback to root
+            const jobStatus = statusData.job || {
+              config: statusData.config,
+              status: statusData.status || 'pending',
+              progress: statusData.progress,
+              result: statusData.result,
+              error: statusData.error,
+              total_chunks: statusData.total_chunks,
+              processed_chunks: statusData.processed_chunks
+            }
 
             // Update current job
             const updatedJob: CrawlJob = {
@@ -235,11 +280,13 @@ export const useCrawlStore = create<CrawlState>()(
             } else if (jobStatus.status === 'queued') {
               get().addLog('⏳ Job queued, waiting to start...')
             } else if (jobStatus.status === 'processing') {
-              const progress = jobStatus.total_chunks > 0
-                ? (jobStatus.processed_chunks / jobStatus.total_chunks) * 100
+              const totalChunks = jobStatus.total_chunks || 0
+              const processedChunks = jobStatus.processed_chunks || 0
+              const progress = totalChunks > 0
+                ? (processedChunks / totalChunks) * 100
                 : 0
               set({ progress })
-              get().addLog(`📊 Processing: ${jobStatus.processed_chunks}/${jobStatus.total_chunks} chunks`)
+              get().addLog(`📊 Processing: ${processedChunks}/${totalChunks} chunks`)
             }
 
             set({ currentJob: updatedJob })

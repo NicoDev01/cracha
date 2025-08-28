@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { jobQueue } from '@/lib/queue/simple-job-queue'
+import { jobQueue, type JobConfig } from '@/lib/queue/simple-job-queue'
 
 export async function POST(request: NextRequest) {
   try {
-    const config: any = await request.json()
+    const config = await request.json() as JobConfig
     
     // Validate required fields
     if (!config.url || !config.tenant_id || !config.user_id) {

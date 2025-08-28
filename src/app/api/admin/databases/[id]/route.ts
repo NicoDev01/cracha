@@ -1,4 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getRequestContext } from '@cloudflare/next-on-pages'
+
+// Helper function for cross-runtime environment variable access
+function getEnvVariable(key: string, env?: Record<string, unknown>): string | undefined {
+  // Try Cloudflare Workers context first (production)
+  if (env && env[key]) {
+    return env[key] as string
+  }
+  
+  // Fallback to process.env (local development)
+  if (typeof process !== 'undefined' && process.env && process.env[key]) {
+    return process.env[key]
+  }
+  
+  return undefined
+}
+
+// Vector match interface for TypeScript
+interface VectorMatch {
+  id: string;
+  metadata?: { tenant_id?: string };
+}
+
+// Note: Edge runtime temporarily disabled for OpenNext compatibility
+// export const runtime = 'edge'
 
 export async function GET(
   request: NextRequest,
@@ -9,12 +34,21 @@ export async function GET(
 
     console.log(`📊 Loading database details for: ${databaseId}`)
 
+    // Get Cloudflare Workers environment context
+    let env: Record<string, unknown> = {}
+    try {
+      const context = getRequestContext()
+      env = (context.env as Record<string, unknown>) || {}
+    } catch (error) {
+      console.log('🖥️ Running in local development mode')
+    }
+
     // Get database details from Cloudflare KV
     const kvResponse = await fetch(
-      `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/storage/kv/namespaces/${process.env.CLOUDFLARE_KV_NAMESPACE_ID}/values/${databaseId}`,
+      `https://api.cloudflare.com/client/v4/accounts/${getEnvVariable('CLOUDFLARE_ACCOUNT_ID', env)}/storage/kv/namespaces/${getEnvVariable('CLOUDFLARE_KV_NAMESPACE_ID', env)}/values/${databaseId}`,
       {
         headers: {
-          'Authorization': `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`,
+          'Authorization': `Bearer ${getEnvVariable('CLOUDFLARE_API_TOKEN', env)}`,
           'Content-Type': 'application/json'
         }
       }
@@ -30,30 +64,30 @@ export async function GET(
       throw new Error(`KV API error: ${kvResponse.status}`)
     }
 
-    const dbData = await kvResponse.json()
+    const dbData = await kvResponse.json() as Record<string, unknown>
 
     return NextResponse.json({
       success: true,
       database: {
-        id: dbData.id || databaseId,
-        name: dbData.name || databaseId,
-        description: dbData.description || `Database: ${dbData.name || databaseId}`,
-        status: dbData.status || 'active',
-        document_count: parseInt(dbData.document_count) || 0,
-        chunk_count: parseInt(dbData.chunk_count) || 0,
-        vector_count: parseInt(dbData.vector_count) || 0,
-        created_at: dbData.created_at || new Date().toISOString(),
-        updated_at: dbData.last_updated || dbData.created_at || new Date().toISOString(),
-        last_crawl: dbData.last_crawl || null,
-        source_url: dbData.source_url || '',
-        crawl_config: dbData.crawl_config || {
+        id: (dbData.id as string) || databaseId,
+        name: (dbData.name as string) || databaseId,
+        description: (dbData.description as string) || `Database: ${(dbData.name as string) || databaseId}`,
+        status: (dbData.status as string) || 'active',
+        document_count: parseInt(String(dbData.document_count)) || 0,
+        chunk_count: parseInt(String(dbData.chunk_count)) || 0,
+        vector_count: parseInt(String(dbData.vector_count)) || 0,
+        created_at: (dbData.created_at as string) || new Date().toISOString(),
+        updated_at: (dbData.last_updated as string) || (dbData.created_at as string) || new Date().toISOString(),
+        last_crawl: (dbData.last_crawl as string) || null,
+        source_url: (dbData.source_url as string) || '',
+        crawl_config: (dbData.crawl_config as Record<string, unknown>) || {
           type: 'single',
           embedding_model: 'gemini-768'
         },
-        urls: dbData.urls || (dbData.source_url ? [dbData.source_url] : []),
-        recent_activity: dbData.recent_activity || [
+        urls: (dbData.urls as string[]) || ((dbData.source_url as string) ? [dbData.source_url as string] : []),
+        recent_activity: (dbData.recent_activity as unknown[]) || [
           {
-            timestamp: dbData.created_at || new Date().toISOString(),
+            timestamp: (dbData.created_at as string) || new Date().toISOString(),
             action: 'Datenbank erstellt',
             details: 'Datenbank wurde erfolgreich erstellt',
             status: 'success'
@@ -82,26 +116,35 @@ export async function DELETE(
 
     console.log(`🗑️ Deleting database: ${databaseId}`)
 
+    // Get Cloudflare Workers environment context
+    let env: Record<string, unknown> = {}
+    try {
+      const context = getRequestContext()
+      env = (context.env as Record<string, unknown>) || {}
+    } catch (error) {
+      console.log('🖥️ Running in local development mode')
+    }
+
     // Check if Cloudflare environment variables are available
-    if (!process.env.CLOUDFLARE_ACCOUNT_ID || !process.env.CLOUDFLARE_API_TOKEN || !process.env.CLOUDFLARE_KV_NAMESPACE_ID) {
+    if (!getEnvVariable('CLOUDFLARE_ACCOUNT_ID', env) || !getEnvVariable('CLOUDFLARE_API_TOKEN', env) || !getEnvVariable('CLOUDFLARE_KV_NAMESPACE_ID', env)) {
       throw new Error('Cloudflare API credentials not configured')
     }
 
     // 1. Get database data first to extract user_id
-    let dbData = null
+    let dbData: Record<string, unknown> | null = null
     try {
       const getDbResponse = await fetch(
-        `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/storage/kv/namespaces/${process.env.CLOUDFLARE_KV_NAMESPACE_ID}/values/${databaseId}`,
+        `https://api.cloudflare.com/client/v4/accounts/${getEnvVariable('CLOUDFLARE_ACCOUNT_ID', env)}/storage/kv/namespaces/${getEnvVariable('CLOUDFLARE_KV_NAMESPACE_ID', env)}/values/${databaseId}`,
         {
           headers: {
-            'Authorization': `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`,
+            'Authorization': `Bearer ${getEnvVariable('CLOUDFLARE_API_TOKEN', env)}`,
             'Content-Type': 'application/json'
           }
         }
       )
 
       if (getDbResponse.ok) {
-        dbData = await getDbResponse.json()
+        dbData = await getDbResponse.json() as Record<string, unknown>
       }
     } catch (error) {
       console.warn('⚠️ Could not get database data for user index update:', error)
@@ -109,11 +152,11 @@ export async function DELETE(
 
     // 2. Delete from Cloudflare KV
     const kvDeleteResponse = await fetch(
-      `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/storage/kv/namespaces/${process.env.CLOUDFLARE_KV_NAMESPACE_ID}/values/${databaseId}`,
+      `https://api.cloudflare.com/client/v4/accounts/${getEnvVariable('CLOUDFLARE_ACCOUNT_ID', env)}/storage/kv/namespaces/${getEnvVariable('CLOUDFLARE_KV_NAMESPACE_ID', env)}/values/${databaseId}`,
       {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`,
+          'Authorization': `Bearer ${getEnvVariable('CLOUDFLARE_API_TOKEN', env)}`,
         }
       }
     )
@@ -128,11 +171,11 @@ export async function DELETE(
     try {
       // First, try to query existing vectors to see what we're working with (using v2 API)
       const queryResponse = await fetch(
-        `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/vectorize/v2/indexes/cracha-768/query`,
+        `https://api.cloudflare.com/client/v4/accounts/${getEnvVariable('CLOUDFLARE_ACCOUNT_ID', env)}/vectorize/v2/indexes/cracha-768/query`,
         {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`,
+            'Authorization': `Bearer ${getEnvVariable('CLOUDFLARE_API_TOKEN', env)}`,
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
@@ -143,15 +186,10 @@ export async function DELETE(
       )
 
       if (queryResponse.ok) {
-        const queryResult = await queryResponse.json()
+        const queryResult = await queryResponse.json() as { result?: { matches?: VectorMatch[] } }
         const allMatches = queryResult.result?.matches || []
 
         // Filter matches by tenant_id in metadata (if available)
-        interface VectorMatch {
-          id: string;
-          metadata?: { tenant_id?: string };
-        }
-        
         const matches = allMatches.filter((match: VectorMatch) =>
           match.metadata?.tenant_id === databaseId ||
           match.id?.includes(databaseId) // Fallback: check if ID contains tenant_id
@@ -166,11 +204,11 @@ export async function DELETE(
 
           // Delete vectors by IDs (using v2 API)
           const deleteResponse = await fetch(
-            `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/vectorize/v2/indexes/cracha-768/delete-by-ids`,
+            `https://api.cloudflare.com/client/v4/accounts/${getEnvVariable('CLOUDFLARE_ACCOUNT_ID', env)}/vectorize/v2/indexes/cracha-768/delete-by-ids`,
             {
               method: 'POST',
               headers: {
-                'Authorization': `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`,
+                'Authorization': `Bearer ${getEnvVariable('CLOUDFLARE_API_TOKEN', env)}`,
                 'Content-Type': 'application/json'
               },
               body: JSON.stringify({
@@ -202,29 +240,25 @@ export async function DELETE(
       console.log(`ℹ️ Continuing with database deletion despite vector deletion failure`)
     }
 
-
-
-
-
     // 4. Update user index to remove database
     if (dbData?.user_id) {
       try {
-        const userIndexKey = `user_index:${dbData.user_id}`
+        const userIndexKey = `user_index:${dbData.user_id as string}`
 
         // Get current user index
         const userIndexResponse = await fetch(
-          `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/storage/kv/namespaces/${process.env.CLOUDFLARE_KV_NAMESPACE_ID}/values/${userIndexKey}`,
+          `https://api.cloudflare.com/client/v4/accounts/${getEnvVariable('CLOUDFLARE_ACCOUNT_ID', env)}/storage/kv/namespaces/${getEnvVariable('CLOUDFLARE_KV_NAMESPACE_ID', env)}/values/${userIndexKey}`,
           {
             headers: {
-              'Authorization': `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`,
+              'Authorization': `Bearer ${getEnvVariable('CLOUDFLARE_API_TOKEN', env)}`,
               'Content-Type': 'application/json'
             }
           }
         )
 
         if (userIndexResponse.ok) {
-          const userIndex = await userIndexResponse.json()
-          const updatedDatabases = (userIndex.databases || []).filter((id: string) => id !== databaseId)
+          const userIndex = await userIndexResponse.json() as Record<string, unknown>
+          const updatedDatabases = ((userIndex.databases as string[]) || []).filter((id: string) => id !== databaseId)
 
           const updatedUserIndex = {
             ...userIndex,
@@ -234,18 +268,18 @@ export async function DELETE(
 
           // Update user index
           await fetch(
-            `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/storage/kv/namespaces/${process.env.CLOUDFLARE_KV_NAMESPACE_ID}/values/${userIndexKey}`,
+            `https://api.cloudflare.com/client/v4/accounts/${getEnvVariable('CLOUDFLARE_ACCOUNT_ID', env)}/storage/kv/namespaces/${getEnvVariable('CLOUDFLARE_KV_NAMESPACE_ID', env)}/values/${userIndexKey}`,
             {
               method: 'PUT',
               headers: {
-                'Authorization': `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`,
+                'Authorization': `Bearer ${getEnvVariable('CLOUDFLARE_API_TOKEN', env)}`,
                 'Content-Type': 'application/json'
               },
               body: JSON.stringify(updatedUserIndex)
             }
           )
 
-          console.log(`✅ Removed database ${databaseId} from user index for user ${dbData.user_id}`)
+          console.log(`✅ Removed database ${databaseId} from user index for user ${dbData.user_id as string}`)
         }
       } catch (userIndexError) {
         console.warn('⚠️ User index update failed:', userIndexError)

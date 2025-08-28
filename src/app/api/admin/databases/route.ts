@@ -1,12 +1,58 @@
-import { NextResponse } from 'next/server'
-import { authenticated, getUserId, type AuthenticatedRequest } from '@/lib/auth/middleware'
+import { NextRequest, NextResponse } from 'next/server'
+import { getAuthenticatedUser } from '@/lib/supabase/server'
 import { getRequestContext } from '@cloudflare/next-on-pages'
 
-// Helper function to get environment variables with fallback for different runtimes
-function getEnvVariable(key: string, env?: any): string | undefined {
+/**
+ * Create a fallback user for development when Supabase is not configured
+ */
+function createFallbackUser() {
+  return {
+    id: 'dev-user-' + Math.random().toString(36).substr(2, 9),
+    email: 'dev@example.com'
+  }
+}
+
+/**
+ * Get authenticated user with fallback for development
+ */
+async function getAuthenticatedUserWithFallback() {
+  try {
+    const user = await getAuthenticatedUser()
+    
+    if (user) {
+      return {
+        id: user.id,
+        email: user.email || ''
+      }
+    }
+    
+    // Check if Supabase is configured
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const isSupabaseConfigured = supabaseUrl && !supabaseUrl.includes('placeholder')
+    
+    // In development mode with no Supabase config, provide fallback
+    if (process.env.NODE_ENV === 'development' && !isSupabaseConfigured) {
+      console.warn('🔧 Development mode: Using fallback authentication')
+      return createFallbackUser()
+    }
+    
+    return null
+  } catch (error) {
+    console.error('Authentication error:', error)
+    
+    // In development mode, provide fallback even on errors
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('🔧 Development mode: Using fallback authentication due to error')
+      return createFallbackUser()
+    }
+    
+    return null
+  }
+}
+function getEnvVariable(key: string, env?: Record<string, unknown>): string | undefined {
   // Try Cloudflare Workers context first (production)
   if (env && env[key]) {
-    return env[key]
+    return env[key] as string
   }
   
   // Fallback to process.env (local development)
@@ -27,7 +73,7 @@ const cache = new Map<string, CacheEntry>()
 const CACHE_TTL = 30000 // 30 seconds cache
 
 // Helper function to test API token validity
-async function testCloudflareToken(env?: any): Promise<{ valid: boolean; error?: string; method?: string }> {
+async function testCloudflareToken(env?: Record<string, unknown>): Promise<{ valid: boolean; error?: string; method?: string }> {
   try {
     const accountId = getEnvVariable('CLOUDFLARE_ACCOUNT_ID', env)
     const testUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces`
@@ -61,7 +107,7 @@ async function testCloudflareToken(env?: any): Promise<{ valid: boolean; error?:
     console.log('🔐 Token validation response:', response.status, response.statusText)
     
     if (response.ok) {
-      const data: any = await response.json()
+      const data: { result?: unknown[] } = await response.json()
       console.log('✅ Token is valid, found namespaces:', data.result?.length || 0)
       return { valid: true, method: authMethod }
     } else {
@@ -126,20 +172,29 @@ async function makeKVRequest(url: string, options: RequestInit, retries = 3): Pr
   throw new Error('Max retries exceeded')
 }
 
-async function handleGetDatabases(request: AuthenticatedRequest): Promise<NextResponse> {
+async function handleGetDatabases(request: NextRequest): Promise<NextResponse> {
+  // 🔐 SECURITY: Authenticate user first
+  const user = await getAuthenticatedUserWithFallback()
+  
+  if (!user) {
+    return NextResponse.json({
+      success: false,
+      error: 'Authentication required. Please log in to access this resource.'
+    }, { status: 401 })
+  }
+  
+  const userId = user.id
+  console.log(`📊 Loading databases for authenticated user: ${userId}`)
+
   try {
     // Get Cloudflare Workers environment context
-    let env: any = {}
+    let env: Record<string, unknown> = {}
     try {
       const context = getRequestContext()
-      env = context.env || {}
+      env = (context.env as Record<string, unknown>) || {}
     } catch (error) {
       console.log('📝 Running in local development mode (no Cloudflare context available)')
     }
-    
-    // 🔐 SECURITY: Get authenticated user ID from middleware
-    const userId = getUserId(request)
-    console.log(`📊 Loading databases for authenticated user: ${userId}`)
 
     // Check cache first to reduce KV API calls
     const cacheKey = `databases:${userId}`
@@ -381,7 +436,7 @@ async function handleGetDatabases(request: AuthenticatedRequest): Promise<NextRe
       })
     }
 
-    const userIndex: any = await kvResponse.json()
+    const userIndex: { databases?: string[] } = await kvResponse.json()
     const databaseIds = Array.isArray(userIndex.databases) ? userIndex.databases : []
 
     console.log(`📊 Found ${databaseIds.length} databases for user ${userId}:`, databaseIds)
@@ -397,12 +452,21 @@ async function handleGetDatabases(request: AuthenticatedRequest): Promise<NextRe
         })
 
         if (dbResponse.ok) {
-          const dbData: any = await dbResponse.json()
+          const dbData: {
+            id?: string;
+            name?: string;
+            description?: string;
+            document_count?: string | number;
+            created_at?: string;
+            last_crawl?: string | null;
+            source_url?: string;
+            status?: string;
+          } = await dbResponse.json()
           databases.push({
             id: dbData.id || dbId,
             name: dbData.name || dbId,
             description: dbData.description || `Crawled from ${dbData.source_url || 'unknown source'}`,
-            document_count: parseInt(dbData.document_count) || 0,
+            document_count: parseInt(String(dbData.document_count)) || 0,
             created_at: dbData.created_at || new Date().toISOString(),
             last_crawl: dbData.last_crawl || null,
             source_url: dbData.source_url || '',
@@ -493,8 +557,9 @@ async function handleGetDatabases(request: AuthenticatedRequest): Promise<NextRe
   }
 }
 
-// Export authenticated handler
-export const GET = authenticated(handleGetDatabases)
+export async function GET(request: NextRequest) {
+  return await handleGetDatabases(request)
+}
 
-// Ensure this API route runs on the Edge Runtime for Cloudflare compatibility
-export const runtime = 'edge'
+// Note: Edge runtime temporarily disabled for OpenNext compatibility
+// export const runtime = 'edge'

@@ -59,10 +59,10 @@ export const POST = authenticated(handlePostDatabase)
 
 async function handlePostDatabase(request: AuthenticatedRequest): Promise<NextResponse> {
   try {
-    const body = await request.json()
+    const body = await request.json() as Record<string, unknown>
     
     // Validate required fields
-    if (!body.name || !body.url) {
+    if (!(body.name as string) || !(body.url as string)) {
       return NextResponse.json(
         { success: false, error: 'Missing required fields: name, url' },
         { status: 400 }
@@ -71,10 +71,10 @@ async function handlePostDatabase(request: AuthenticatedRequest): Promise<NextRe
 
     // In production, this would create a new database entry
     const newDatabase = {
-      id: body.name.toLowerCase().replace(/\s+/g, '-'),
-      name: body.name,
-      description: body.description || `Database for ${body.url}`,
-      url: body.url,
+      id: (body.name as string).toLowerCase().replace(/\s+/g, '-'),
+      name: body.name as string,
+      description: (body.description as string) || `Database for ${body.url as string}`,
+      url: body.url as string,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       chunks_count: 0,

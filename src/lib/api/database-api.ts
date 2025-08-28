@@ -7,6 +7,7 @@
 
 import { Database } from '@/types/chat'
 
+// API Response interfaces
 export interface DatabaseListResponse {
   success: boolean
   user_id: string
@@ -18,6 +19,10 @@ export interface DatabaseListResponse {
 export interface DatabaseInfoResponse {
   success: boolean
   database: Database
+  error?: string
+}
+
+interface ErrorResponse {
   error?: string
 }
 
@@ -51,14 +56,14 @@ class DatabaseAPIClient {
         
         // Handle rate limiting specifically
         if (response.status === 429) {
-          const errorData = await response.json().catch(() => ({ error: 'Rate limit exceeded' }))
+          const errorData = await response.json().catch(() => ({ error: 'Rate limit exceeded' })) as ErrorResponse
           throw new Error(`Rate limit exceeded: ${errorData.error || 'Please wait a moment and try again'}`)
         }
         
         // Try to get error details from response
         let errorMessage = `HTTP ${response.status}: ${response.statusText}`
         try {
-          const errorData = await response.json()
+          const errorData = await response.json() as ErrorResponse
           if (errorData.error) {
             errorMessage = errorData.error
           }
@@ -68,7 +73,7 @@ class DatabaseAPIClient {
         throw new Error(errorMessage)
       }
 
-      const data = await response.json()
+      const data = await response.json() as DatabaseListResponse
 
       if (!data.success) {
         throw new Error(data.error || 'Failed to load databases')
@@ -90,14 +95,14 @@ class DatabaseAPIClient {
         status?: string;
       }
 
-      return databases.map((db: RawDatabase) => ({
+      return (databases as unknown as RawDatabase[]).map((db: RawDatabase): Database => ({
         id: db.id,
         name: db.name,
         description: db.description || '',
         document_count: db.document_count || 0,
         created_at: new Date(db.created_at),
         updated_at: new Date(db.last_updated || db.updated_at || db.created_at),
-        last_crawl: db.last_crawl ? new Date(db.last_crawl) : null,
+        last_crawl: db.last_crawl ? new Date(db.last_crawl) : undefined,
         source_url: db.source_url || '',
         status: db.status || 'active'
       }))
@@ -187,7 +192,7 @@ class DatabaseAPIClient {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
 
-      const data = await response.json()
+      const data = await response.json() as { success: boolean }
       return data.success
 
     } catch (error) {

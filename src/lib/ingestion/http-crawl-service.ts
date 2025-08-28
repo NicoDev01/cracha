@@ -38,7 +38,12 @@ export class HttpCrawlService {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
 
-      const result = await response.json()
+      const result = await response.json() as {
+        success?: boolean;
+        job_id?: string;
+        message?: string;
+        output?: string;
+      }
       const duration = Date.now() - startTime
 
       return {

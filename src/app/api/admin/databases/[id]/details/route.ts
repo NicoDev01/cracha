@@ -1,4 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getRequestContext } from '@cloudflare/next-on-pages'
+
+// Helper function for cross-runtime environment variable access
+function getEnvVariable(key: string, env?: Record<string, unknown>): string | undefined {
+  // Try Cloudflare Workers context first (production)
+  if (env && env[key]) {
+    return env[key] as string
+  }
+  
+  // Fallback to process.env (local development)
+  if (typeof process !== 'undefined' && process.env && process.env[key]) {
+    return process.env[key]
+  }
+  
+  return undefined
+}
+
+// Note: Edge runtime temporarily disabled for OpenNext compatibility
+// export const runtime = 'edge'
 
 export async function GET(
   request: NextRequest,
@@ -9,12 +28,21 @@ export async function GET(
 
     console.log(`📊 Loading detailed database info for: ${databaseId}`)
 
+    // Get Cloudflare Workers environment context
+    let env: Record<string, unknown> = {}
+    try {
+      const context = getRequestContext()
+      env = (context.env as Record<string, unknown>) || {}
+    } catch (error) {
+      console.log('🖥️ Running in local development mode')
+    }
+
     // Get database details from Cloudflare KV
     const kvResponse = await fetch(
-      `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/storage/kv/namespaces/${process.env.CLOUDFLARE_KV_NAMESPACE_ID}/values/${databaseId}`,
+      `https://api.cloudflare.com/client/v4/accounts/${getEnvVariable('CLOUDFLARE_ACCOUNT_ID', env)}/storage/kv/namespaces/${getEnvVariable('CLOUDFLARE_KV_NAMESPACE_ID', env)}/values/${databaseId}`,
       {
         headers: {
-          'Authorization': `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`,
+          'Authorization': `Bearer ${getEnvVariable('CLOUDFLARE_API_TOKEN', env)}`,
           'Content-Type': 'application/json'
         }
       }
@@ -30,17 +58,17 @@ export async function GET(
       throw new Error(`KV API error: ${kvResponse.status}`)
     }
 
-    const dbData = await kvResponse.json()
+    const dbData = await kvResponse.json() as Record<string, unknown>
 
     // Get vector count from Vectorize (optional - might be slow)
     let vectorCount = 0
     try {
       const vectorizeResponse = await fetch(
-        `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/vectorize/indexes/cracha-768/query`,
+        `https://api.cloudflare.com/client/v4/accounts/${getEnvVariable('CLOUDFLARE_ACCOUNT_ID', env)}/vectorize/indexes/cracha-768/query`,
         {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`,
+            'Authorization': `Bearer ${getEnvVariable('CLOUDFLARE_API_TOKEN', env)}`,
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
@@ -53,7 +81,7 @@ export async function GET(
       )
 
       if (vectorizeResponse.ok) {
-        const vectorData = await vectorizeResponse.json()
+        const vectorData: { result?: { matches?: unknown[] } } = await vectorizeResponse.json()
         vectorCount = vectorData.result?.matches?.length || 0
       }
     } catch (vectorError) {
@@ -62,18 +90,18 @@ export async function GET(
 
     // Prepare detailed response
     const detailedInfo = {
-      id: dbData.id || databaseId,
-      name: dbData.name || databaseId,
-      description: dbData.description || `Database: ${dbData.name || databaseId}`,
-      status: dbData.status || 'active',
-      document_count: parseInt(dbData.document_count) || 0,
-      chunk_count: parseInt(dbData.chunk_count) || 0,
-      vector_count: vectorCount || parseInt(dbData.vector_count) || 0,
-      created_at: dbData.created_at || new Date().toISOString(),
-      updated_at: dbData.last_updated || dbData.created_at || new Date().toISOString(),
-      last_crawl: dbData.last_crawl || null,
-      source_url: dbData.source_url || '',
-      crawl_config: dbData.crawl_config || {
+      id: (dbData.id as string) || databaseId,
+      name: (dbData.name as string) || databaseId,
+      description: (dbData.description as string) || `Database: ${(dbData.name as string) || databaseId}`,
+      status: (dbData.status as string) || 'active',
+      document_count: parseInt(String(dbData.document_count)) || 0,
+      chunk_count: parseInt(String(dbData.chunk_count)) || 0,
+      vector_count: vectorCount || parseInt(String(dbData.vector_count)) || 0,
+      created_at: (dbData.created_at as string) || new Date().toISOString(),
+      updated_at: (dbData.last_updated as string) || (dbData.created_at as string) || new Date().toISOString(),
+      last_crawl: (dbData.last_crawl as string) || null,
+      source_url: (dbData.source_url as string) || '',
+      crawl_config: (dbData.crawl_config as Record<string, unknown>) || {
         type: 'single',
         embedding_model: 'gemini-768',
         max_depth: null,
@@ -81,10 +109,10 @@ export async function GET(
         include_patterns: [],
         exclude_patterns: []
       },
-      urls: dbData.urls || (dbData.source_url ? [dbData.source_url] : []),
-      recent_activity: dbData.recent_activity || [
+      urls: (dbData.urls as string[]) || ((dbData.source_url as string) ? [dbData.source_url as string] : []),
+      recent_activity: (dbData.recent_activity as unknown[]) || [
         {
-          timestamp: dbData.created_at || new Date().toISOString(),
+          timestamp: (dbData.created_at as string) || new Date().toISOString(),
           action: 'Datenbank erstellt',
           details: 'Datenbank wurde erfolgreich erstellt',
           status: 'success'
@@ -92,13 +120,13 @@ export async function GET(
       ],
       // Additional metadata
       metadata: {
-        user_id: dbData.user_id || 'unknown',
-        embedding_model: dbData.crawl_config?.embedding_model || 'gemini-768',
-        total_tokens: dbData.total_tokens || 0,
-        estimated_cost: dbData.estimated_cost || 0,
-        crawl_duration: dbData.crawl_duration || null,
-        error_count: dbData.error_count || 0,
-        success_rate: dbData.success_rate || 100
+        user_id: (dbData.user_id as string) || 'unknown',
+        embedding_model: ((dbData.crawl_config as Record<string, unknown>)?.embedding_model as string) || 'gemini-768',
+        total_tokens: parseInt(String(dbData.total_tokens)) || 0,
+        estimated_cost: parseFloat(String(dbData.estimated_cost)) || 0,
+        crawl_duration: (dbData.crawl_duration as string) || null,
+        error_count: parseInt(String(dbData.error_count)) || 0,
+        success_rate: parseFloat(String(dbData.success_rate)) || 100
       }
     }
 

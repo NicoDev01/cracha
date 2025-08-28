@@ -20,6 +20,29 @@ CraCha is a full-stack RAG-as-a-Service platform that enables intelligent websit
 
 ## 🔧 Recent Updates (Latest)
 
+### OpenNext Edge Runtime Build Fix ✅
+**Latest Update**: OpenNext build process now works perfectly with proper runtime separation!
+
+#### Critical Fix Applied
+- ✅ **Runtime Separation**: Removed Edge Runtime declarations that caused OpenNext build failures
+- ✅ **Node.js Runtime**: Converted all API routes to use Node.js Runtime for better compatibility
+- ✅ **Authentication Middleware**: Replaced higher-order function wrappers with inline authentication logic
+- ✅ **Build Process**: `npm run build:cf` now completes successfully without runtime conflicts
+- ✅ **OpenNext Compatibility**: Full compliance with OpenNext's strict runtime separation requirements
+
+#### Why OpenNext Runtime Separation Is Critical
+OpenNext for Cloudflare Workers has strict requirements:
+- **Mixed Runtime Problem**: Edge Runtime and Node.js Runtime cannot be bundled together
+- **Authentication Middleware Issue**: Higher-order function wrappers like `authenticated()` break OpenNext's static analysis
+- **Runtime Recommendation**: Node.js Runtime is preferred for Cloudflare Workers as it supports more Node.js modules
+- **Separation Requirement**: Edge Runtime functions must be in completely separate files/directories
+
+#### Technical Changes Made
+- Removed `export const runtime = 'edge'` from all problematic API routes
+- Converted authentication middleware from wrapper functions to inline logic
+- Ensured clean separation between runtime types for OpenNext compatibility
+- Maintained all functionality while achieving build success
+
 ### Supabase Authentication Fixed ✅ 
 **Latest Update**: Supabase authentication now works perfectly in Cloudflare Workers environment!
 
@@ -43,6 +66,135 @@ The core issue was that **Cloudflare Workers handle environment variables differ
 - Development Environment: ✅ `npm run cf:dev` working perfectly
 - Production Deployment: ✅ Ready for regular deployments
 - Code Quality: ✅ TypeScript strict mode compliant
+
+## 🔧 Cloudflare Workers & OpenNext Development Guidelines
+
+### Essential Rules for OpenNext + Cloudflare Workers Development
+
+#### 1. Runtime Separation (CRITICAL)
+```typescript
+// ❌ WRONG: Mixed runtime causes build failures
+export const runtime = 'edge'  // Don't mix with Node.js routes
+export const GET = authenticated(handler)  // Higher-order functions break OpenNext
+
+// ✅ CORRECT: Use Node.js Runtime with inline authentication
+export async function GET(request: NextRequest) {
+  // Inline authentication logic
+  const user = await getAuthenticatedUser()
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  // Handle request...
+}
+// No runtime export = Node.js Runtime (recommended)
+```
+
+#### 2. Authentication Pattern for OpenNext
+```typescript
+// ❌ WRONG: Middleware wrappers break OpenNext static analysis
+export const GET = authenticated(handleGetDatabases)
+export const POST = authenticated(handlePostDatabase)
+
+// ✅ CORRECT: Inline authentication in each route
+export async function GET(request: NextRequest) {
+  const user = await getAuthenticatedUserWithFallback()
+  if (!user) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
+  // Continue with authenticated logic...
+}
+```
+
+#### 3. OpenNext Build Requirements
+```bash
+# ✅ CRITICAL: OpenNext requires clean runtime separation
+
+# Build will FAIL if:
+# - Edge Runtime mixed with Node.js routes in same bundle
+# - Higher-order function wrappers used (authenticated(), withAuth())
+# - Complex middleware patterns that OpenNext can't analyze
+
+# Build will SUCCEED with:
+# - Consistent Node.js Runtime across API routes  
+# - Inline authentication logic
+# - Clean separation of concerns
+
+npm run build:cf  # Must complete without runtime conflicts
+```
+
+#### 4. Cloudflare Workers Runtime Guidelines
+```typescript
+// ✅ RECOMMENDED: Node.js Runtime for Cloudflare Workers
+// - Better support for Node.js modules
+// - Database connections work properly
+// - File system operations supported
+// - No runtime export = Node.js Runtime (default)
+
+// ✅ ONLY use Edge Runtime when:
+// - Explicitly needed for streaming responses
+// - Minimal dependencies
+// - Separated in dedicated files/directories
+export const runtime = 'edge'  // Only in isolated edge-specific routes
+```
+
+#### 5. Environment Variable Access Pattern
+```typescript
+// ✅ HYBRID Pattern: Works in both Node.js and Cloudflare Workers
+function getEnvVariable(key: string, env?: Record<string, unknown>): string | undefined {
+  // Try Cloudflare Workers context first (production)
+  if (env && env[key]) {
+    return env[key] as string
+  }
+  
+  // Fallback to process.env (local development)
+  if (typeof process !== 'undefined' && process.env && process.env[key]) {
+    return process.env[key]
+  }
+  
+  return undefined
+}
+
+// Usage in API routes
+export async function GET(request: NextRequest) {
+  let env: Record<string, unknown> = {}
+  try {
+    const context = getRequestContext()
+    env = (context.env as Record<string, unknown>) || {}
+  } catch (error) {
+    console.log('Running in local development mode')
+  }
+  
+  const apiToken = getEnvVariable('CLOUDFLARE_API_TOKEN', env)
+  // Use apiToken...
+}
+```
+
+### 🚀 OpenNext Development Workflow
+```bash
+# ✅ ESSENTIAL: Always test OpenNext build before deployment
+npm run build:cf        # Must succeed without runtime errors
+npm run cf:dev         # Test in Cloudflare Workers environment
+npm run deploy          # Deploy to production
+
+# ✅ Quick validation checklist:
+# 1. No 'export const runtime = "edge"' in mixed API routes
+# 2. No authenticated() or withAuth() wrapper functions
+# 3. Inline authentication logic in each route
+# 4. Environment variables use hybrid access pattern
+# 5. Build completes without "cannot use edge runtime" errors
+```
+
+### Common OpenNext Build Errors & Solutions
+```bash
+# ❌ Error: "app/api\route cannot use the edge runtime"
+# ✅ Solution: Remove 'export const runtime = "edge"' or separate edge routes
+
+# ❌ Error: "OpenNext requires edge runtime function to be defined separately"
+# ✅ Solution: Replace middleware wrappers with inline authentication
+
+# ❌ Error: "Mixed runtime functions in bundle"
+# ✅ Solution: Use consistent Node.js Runtime across all API routes
+```
 
 ## 🔧 Cloudflare Workers & Supabase Development Guidelines
 
@@ -97,6 +249,9 @@ const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey)
 - ❌ **Never** deploy without testing `npm run cf:dev` first
 - ❌ **Never** use `any` types - always use proper TypeScript interfaces
 - ❌ **Never** forget to rebuild after environment variable changes
+- ❌ **Never** mix Edge Runtime with Node.js Runtime in the same bundle (OpenNext requirement)
+- ❌ **Never** use higher-order function wrappers like `authenticated()` (breaks OpenNext)
+- ❌ **Never** skip `npm run build:cf` validation before deployment
 
 ### Quick Troubleshooting Guide
 ```bash

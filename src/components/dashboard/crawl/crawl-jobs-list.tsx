@@ -35,24 +35,10 @@ import {
   Loader2,
   AlertCircle
 } from "lucide-react"
-import { useCrawlStore } from "@/stores/crawl-store"
+import { useCrawlStore, type CrawlJob } from "@/stores/crawl-store"
 import { cn } from "@/lib/utils"
 
-interface CrawlJob {
-  id: string
-  tenant_id: string
-  status: 'pending' | 'running' | 'completed' | 'failed'
-  url: string
-  type: 'single' | 'recursive' | 'sitemap' | 'batch'
-  progress?: {
-    pages_crawled: number
-    chunks_created: number
-    estimated_cost: number
-  }
-  created_at: string
-  completed_at?: string
-  error?: string
-}
+// Remove duplicate interface - using the one from store
 
 export function CrawlJobsList() {
   const { jobs, loadJobs, deleteJob } = useCrawlStore()
@@ -94,12 +80,16 @@ export function CrawlJobsList() {
     setFilteredJobs(filtered)
   }, [jobs, searchTerm, statusFilter, typeFilter])
 
-  const getStatusIcon = (status: string) => {
+  const getStatusIcon = (status: CrawlJob['status']) => {
     switch (status) {
       case 'pending':
         return <Clock className="w-4 h-4 text-yellow-500" />
+      case 'queued':
+        return <Clock className="w-4 h-4 text-orange-500" />
       case 'running':
         return <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+      case 'processing':
+        return <Loader2 className="w-4 h-4 text-purple-500 animate-spin" />
       case 'completed':
         return <CheckCircle className="w-4 h-4 text-green-500" />
       case 'failed':
@@ -109,12 +99,16 @@ export function CrawlJobsList() {
     }
   }
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: CrawlJob['status']) => {
     switch (status) {
       case 'pending':
         return 'bg-yellow-100 text-yellow-800 border-yellow-200'
+      case 'queued':
+        return 'bg-orange-100 text-orange-800 border-orange-200'
       case 'running':
         return 'bg-blue-100 text-blue-800 border-blue-200'
+      case 'processing':
+        return 'bg-purple-100 text-purple-800 border-purple-200'
       case 'completed':
         return 'bg-green-100 text-green-800 border-green-200'
       case 'failed':
@@ -183,7 +177,9 @@ export function CrawlJobsList() {
               <SelectContent>
                 <SelectItem value="all">Alle Status</SelectItem>
                 <SelectItem value="pending">Wartend</SelectItem>
+                <SelectItem value="queued">In Warteschlange</SelectItem>
                 <SelectItem value="running">Läuft</SelectItem>
+                <SelectItem value="processing">Verarbeitung</SelectItem>
                 <SelectItem value="completed">Abgeschlossen</SelectItem>
                 <SelectItem value="failed">Fehlgeschlagen</SelectItem>
               </SelectContent>

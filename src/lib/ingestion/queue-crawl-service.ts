@@ -35,7 +35,12 @@ export class QueueCrawlService {
         throw new Error(`Queue API error: ${response.status} - ${errorText}`)
       }
 
-      const result = await response.json()
+      const result = await response.json() as {
+        success: boolean;
+        job_id: string;
+        message: string;
+        status: string;
+      }
       
       console.log('✅ Crawl job queued successfully:', result)
       
@@ -74,7 +79,19 @@ export class QueueCrawlService {
         throw new Error(`Status API error: ${response.status} - ${errorText}`)
       }
 
-      const result = await response.json()
+      const result = await response.json() as {
+        success: boolean;
+        job: {
+          job_id: string;
+          status: 'pending' | 'running' | 'completed' | 'failed';
+          progress?: number;
+          created_at?: string;
+          updated_at?: string;
+          completed_at?: string;
+          error?: string;
+          result?: unknown;
+        };
+      }
       
       return {
         success: result.success,

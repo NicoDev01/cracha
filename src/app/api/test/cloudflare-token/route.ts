@@ -1,34 +1,68 @@
 import { NextResponse } from 'next/server'
+import { getRequestContext } from '@cloudflare/next-on-pages'
+
+// Helper function for cross-runtime environment variable access
+function getEnvVariable(key: string, env?: Record<string, unknown>): string | undefined {
+  // Try Cloudflare Workers context first (production)
+  if (env && env[key]) {
+    return env[key] as string
+  }
+  
+  // Fallback to process.env (local development)
+  if (typeof process !== 'undefined' && process.env && process.env[key]) {
+    return process.env[key]
+  }
+  
+  return undefined
+}
+
+// Note: Edge runtime temporarily disabled for OpenNext compatibility
+// export const runtime = 'edge'
 
 export async function GET() {
   try {
     console.log('🔍 Testing Cloudflare API Token...')
     
-    // Log environment variables (safely)
-    console.log('Environment variables:')
-    console.log('  CLOUDFLARE_ACCOUNT_ID:', process.env.CLOUDFLARE_ACCOUNT_ID ? 'SET' : 'MISSING')
-    console.log('  CLOUDFLARE_API_TOKEN:', process.env.CLOUDFLARE_API_TOKEN ? `SET (${process.env.CLOUDFLARE_API_TOKEN.substring(0, 8)}...)` : 'MISSING')
-    console.log('  CLOUDFLARE_KV_NAMESPACE_ID:', process.env.CLOUDFLARE_KV_NAMESPACE_ID ? 'SET' : 'MISSING')
-    console.log('  GLOBAL_API_KEY:', process.env.GLOBAL_API_KEY ? `SET (${process.env.GLOBAL_API_KEY.substring(0, 8)}...)` : 'MISSING')
-    console.log('  CLOUDFLARE_API_KEY:', process.env.CLOUDFLARE_API_KEY ? `SET (${process.env.CLOUDFLARE_API_KEY.substring(0, 8)}...)` : 'MISSING')
+    // Get Cloudflare Workers environment context
+    let env: Record<string, unknown> = {}
+    try {
+      const context = getRequestContext()
+      env = (context.env as Record<string, unknown>) || {}
+    } catch (error) {
+      console.log('🖥️ Running in local development mode')
+    }
     
-    if (!process.env.CLOUDFLARE_ACCOUNT_ID || !process.env.CLOUDFLARE_API_TOKEN) {
+    // Log environment variables (safely)
+    const accountId = getEnvVariable('CLOUDFLARE_ACCOUNT_ID', env)
+    const apiToken = getEnvVariable('CLOUDFLARE_API_TOKEN', env)
+    const namespaceId = getEnvVariable('CLOUDFLARE_KV_NAMESPACE_ID', env)
+    const globalApiKey = getEnvVariable('GLOBAL_API_KEY', env)
+    const cloudflareApiKey = getEnvVariable('CLOUDFLARE_API_KEY', env)
+    
+    console.log('Environment variables:')
+    console.log('  CLOUDFLARE_ACCOUNT_ID:', accountId ? 'SET' : 'MISSING')
+    console.log('  CLOUDFLARE_API_TOKEN:', apiToken ? `SET (${apiToken.substring(0, 8)}...)` : 'MISSING')
+    console.log('  CLOUDFLARE_KV_NAMESPACE_ID:', namespaceId ? 'SET' : 'MISSING')
+    console.log('  GLOBAL_API_KEY:', globalApiKey ? `SET (${globalApiKey.substring(0, 8)}...)` : 'MISSING')
+    console.log('  CLOUDFLARE_API_KEY:', cloudflareApiKey ? `SET (${cloudflareApiKey.substring(0, 8)}...)` : 'MISSING')
+    
+    if (!accountId || !apiToken) {
       return NextResponse.json({
         success: false,
         error: 'Missing required environment variables',
         details: {
-          accountId: !!process.env.CLOUDFLARE_ACCOUNT_ID,
-          apiToken: !!process.env.CLOUDFLARE_API_TOKEN
+          accountId: !!accountId,
+          apiToken: !!apiToken
         }
       })
     }
 
     // Test 1: Verify account access
     console.log('🧪 Test 1: Checking account access...')
-    const accountUrl = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}`
+    const accountUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}`
     const accountResponse = await fetch(accountUrl, {
       headers: {
-        'Authorization': `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`,
+        'Authorization': `Bearer ${apiToken}`,
         'Content-Type': 'application/json'
       }
     })
@@ -48,10 +82,10 @@ export async function GET() {
     
     // Test 2: List KV namespaces
     console.log('🧪 Test 2: Listing KV namespaces...')
-    const namespacesUrl = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/storage/kv/namespaces`
+    const namespacesUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces`
     const namespacesResponse = await fetch(namespacesUrl, {
       headers: {
-        'Authorization': `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`,
+        'Authorization': `Bearer ${apiToken}`,
         'Content-Type': 'application/json'
       }
     })
@@ -69,26 +103,31 @@ export async function GET() {
       })
     }
     
-    const namespacesData = await namespacesResponse.json()
-    console.log('Available namespaces:', namespacesData.result?.length || 0)
-    
-    // Check if our target namespace exists
     interface CloudflareNamespace {
       id: string
       title?: string
     }
-    const targetNamespace = namespacesData.result?.find((ns: CloudflareNamespace) => ns.id === process.env.CLOUDFLARE_KV_NAMESPACE_ID)
+    
+    interface CloudflareNamespacesResponse {
+      result?: CloudflareNamespace[]
+    }
+    
+    const namespacesData = await namespacesResponse.json() as CloudflareNamespacesResponse
+    console.log('Available namespaces:', namespacesData.result?.length || 0)
+    
+    // Check if our target namespace exists
+    const targetNamespace = namespacesData.result?.find((ns: CloudflareNamespace) => ns.id === namespaceId)
     console.log('Target namespace found:', !!targetNamespace)
     
     // Test 3: Test specific namespace access
-    if (process.env.CLOUDFLARE_KV_NAMESPACE_ID) {
+    if (namespaceId) {
       console.log('🧪 Test 3: Testing specific namespace access...')
       const testKey = 'test_connection'
-      const testUrl = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/storage/kv/namespaces/${process.env.CLOUDFLARE_KV_NAMESPACE_ID}/values/${testKey}`
+      const testUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${namespaceId}/values/${testKey}`
       
       const testResponse = await fetch(testUrl, {
         headers: {
-          'Authorization': `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`,
+          'Authorization': `Bearer ${apiToken}`,
           'Content-Type': 'application/json'
         }
       })
