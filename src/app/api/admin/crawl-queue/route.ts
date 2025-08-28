@@ -3,7 +3,7 @@ import { jobQueue } from '@/lib/queue/simple-job-queue'
 
 export async function POST(request: NextRequest) {
   try {
-    const config = await request.json()
+    const config: any = await request.json()
     
     // Validate required fields
     if (!config.url || !config.tenant_id || !config.user_id) {

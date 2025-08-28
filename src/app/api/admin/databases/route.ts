@@ -1,5 +1,21 @@
 import { NextResponse } from 'next/server'
 import { authenticated, getUserId, type AuthenticatedRequest } from '@/lib/auth/middleware'
+import { getRequestContext } from '@cloudflare/next-on-pages'
+
+// Helper function to get environment variables with fallback for different runtimes
+function getEnvVariable(key: string, env?: any): string | undefined {
+  // Try Cloudflare Workers context first (production)
+  if (env && env[key]) {
+    return env[key]
+  }
+  
+  // Fallback to process.env (local development)
+  if (typeof process !== 'undefined' && process.env && process.env[key]) {
+    return process.env[key]
+  }
+  
+  return undefined
+}
 
 // Simple in-memory cache to reduce KV API calls
 interface CacheEntry {
@@ -11,24 +27,29 @@ const cache = new Map<string, CacheEntry>()
 const CACHE_TTL = 30000 // 30 seconds cache
 
 // Helper function to test API token validity
-async function testCloudflareToken(): Promise<{ valid: boolean; error?: string; method?: string }> {
+async function testCloudflareToken(env?: any): Promise<{ valid: boolean; error?: string; method?: string }> {
   try {
-    const testUrl = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/storage/kv/namespaces`
+    const accountId = getEnvVariable('CLOUDFLARE_ACCOUNT_ID', env)
+    const testUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces`
     
     // Determine authentication method
-    const useGlobalKey = !process.env.CLOUDFLARE_API_TOKEN || process.env.CLOUDFLARE_API_TOKEN === process.env.CLOUDFLARE_API_KEY
+    const apiToken = getEnvVariable('CLOUDFLARE_API_TOKEN', env)
+    const apiKey = getEnvVariable('CLOUDFLARE_API_KEY', env)
+    const email = getEnvVariable('CLOUDFLARE_EMAIL', env)
+    
+    const useGlobalKey = !apiToken || apiToken === apiKey
     const authHeaders: Record<string, string> = {
       'Content-Type': 'application/json'
     }
     
     let authMethod = 'unknown'
-    if (useGlobalKey && process.env.CLOUDFLARE_EMAIL && process.env.CLOUDFLARE_API_KEY) {
+    if (useGlobalKey && email && apiKey) {
       authMethod = 'global_key'
-      authHeaders['X-Auth-Email'] = process.env.CLOUDFLARE_EMAIL
-      authHeaders['X-Auth-Key'] = process.env.CLOUDFLARE_API_KEY
-    } else if (process.env.CLOUDFLARE_API_TOKEN) {
+      authHeaders['X-Auth-Email'] = email
+      authHeaders['X-Auth-Key'] = apiKey
+    } else if (apiToken) {
       authMethod = 'api_token'
-      authHeaders['Authorization'] = `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`
+      authHeaders['Authorization'] = `Bearer ${apiToken}`
     } else {
       return { valid: false, error: 'No authentication method configured', method: 'none' }
     }
@@ -40,7 +61,7 @@ async function testCloudflareToken(): Promise<{ valid: boolean; error?: string; 
     console.log('🔐 Token validation response:', response.status, response.statusText)
     
     if (response.ok) {
-      const data = await response.json()
+      const data: any = await response.json()
       console.log('✅ Token is valid, found namespaces:', data.result?.length || 0)
       return { valid: true, method: authMethod }
     } else {
@@ -107,6 +128,15 @@ async function makeKVRequest(url: string, options: RequestInit, retries = 3): Pr
 
 async function handleGetDatabases(request: AuthenticatedRequest): Promise<NextResponse> {
   try {
+    // Get Cloudflare Workers environment context
+    let env: any = {}
+    try {
+      const context = getRequestContext()
+      env = context.env || {}
+    } catch (error) {
+      console.log('📝 Running in local development mode (no Cloudflare context available)')
+    }
+    
     // 🔐 SECURITY: Get authenticated user ID from middleware
     const userId = getUserId(request)
     console.log(`📊 Loading databases for authenticated user: ${userId}`)
@@ -123,15 +153,19 @@ async function handleGetDatabases(request: AuthenticatedRequest): Promise<NextRe
     }
 
     // Check if required environment variables are set
-    if (!process.env.CLOUDFLARE_ACCOUNT_ID || !process.env.CLOUDFLARE_KV_NAMESPACE_ID || !process.env.CLOUDFLARE_API_TOKEN) {
-      const isProduction = process.env.ENVIRONMENT === 'production' || process.env.NODE_ENV === 'production'
+    const accountId = getEnvVariable('CLOUDFLARE_ACCOUNT_ID', env)
+    const namespaceId = getEnvVariable('CLOUDFLARE_KV_NAMESPACE_ID', env) 
+    const apiToken = getEnvVariable('CLOUDFLARE_API_TOKEN', env)
+    
+    if (!accountId || !namespaceId || !apiToken) {
+      const isProduction = getEnvVariable('ENVIRONMENT', env) === 'production' || getEnvVariable('NODE_ENV', env) === 'production'
       const envType = isProduction ? 'PRODUCTION' : 'DEVELOPMENT'
       
       console.warn(`⚠️ [${envType}] Cloudflare KV environment variables not set, returning mock data`)
       console.log(`Debug - Environment check (${envType}):`);
-      console.log('  CLOUDFLARE_ACCOUNT_ID:', process.env.CLOUDFLARE_ACCOUNT_ID ? 'SET' : 'MISSING')
-      console.log('  CLOUDFLARE_KV_NAMESPACE_ID:', process.env.CLOUDFLARE_KV_NAMESPACE_ID ? 'SET' : 'MISSING')
-      console.log('  CLOUDFLARE_API_TOKEN:', process.env.CLOUDFLARE_API_TOKEN ? `SET (${process.env.CLOUDFLARE_API_TOKEN.substring(0, 8)}...)` : 'MISSING')
+      console.log('  CLOUDFLARE_ACCOUNT_ID:', accountId ? 'SET' : 'MISSING')
+      console.log('  CLOUDFLARE_KV_NAMESPACE_ID:', namespaceId ? 'SET' : 'MISSING')
+      console.log('  CLOUDFLARE_API_TOKEN:', apiToken ? `SET (${apiToken.substring(0, 8)}...)` : 'MISSING')
       
       if (isProduction) {
         console.error('🚨 PRODUCTION DEPLOYMENT ISSUE: Environment variables not configured!')
@@ -164,17 +198,17 @@ async function handleGetDatabases(request: AuthenticatedRequest): Promise<NextRe
 
     // Get user's database index from Cloudflare KV with retry logic
     const userIndexKey = `user_index:${userId}`
-    const kvUrl = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/storage/kv/namespaces/${process.env.CLOUDFLARE_KV_NAMESPACE_ID}/values/${userIndexKey}`
+    const kvUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${namespaceId}/values/${userIndexKey}`
     
     console.log('🔧 KV API Debug Info:')
-    console.log('  Account ID:', process.env.CLOUDFLARE_ACCOUNT_ID)
-    console.log('  Namespace ID:', process.env.CLOUDFLARE_KV_NAMESPACE_ID)
-    console.log('  API Token (first 8 chars):', process.env.CLOUDFLARE_API_TOKEN?.substring(0, 8))
+    console.log('  Account ID:', accountId)
+    console.log('  Namespace ID:', namespaceId)
+    console.log('  API Token (first 8 chars):', apiToken?.substring(0, 8))
     console.log('  Full URL:', kvUrl)
     console.log('  User Index Key:', userIndexKey)
     
     // Test token validity first
-    const tokenTest = await testCloudflareToken()
+    const tokenTest = await testCloudflareToken(env)
     if (!tokenTest.valid) {
       console.error('🚫 Token validation failed:', tokenTest.error)
       console.log('🛠️ Falling back to mock data due to invalid token')
@@ -199,18 +233,22 @@ async function handleGetDatabases(request: AuthenticatedRequest): Promise<NextRe
     }
     
     // Determine authentication method
-    const useGlobalKey = !process.env.CLOUDFLARE_API_TOKEN || process.env.CLOUDFLARE_API_TOKEN === process.env.CLOUDFLARE_API_KEY
+    const cloudflareApiToken = getEnvVariable('CLOUDFLARE_API_TOKEN', env)
+    const apiKey = getEnvVariable('CLOUDFLARE_API_KEY', env)
+    const email = getEnvVariable('CLOUDFLARE_EMAIL', env)
+    const useGlobalKey = !cloudflareApiToken || cloudflareApiToken === apiKey
+    
     const authHeaders: Record<string, string> = {
       'Content-Type': 'application/json'
     }
     
-    if (useGlobalKey && process.env.CLOUDFLARE_EMAIL && process.env.CLOUDFLARE_API_KEY) {
+    if (useGlobalKey && email && apiKey) {
       console.log('🔑 Using Global API Key authentication')
-      authHeaders['X-Auth-Email'] = process.env.CLOUDFLARE_EMAIL
-      authHeaders['X-Auth-Key'] = process.env.CLOUDFLARE_API_KEY
-    } else if (process.env.CLOUDFLARE_API_TOKEN) {
+      authHeaders['X-Auth-Email'] = email
+      authHeaders['X-Auth-Key'] = apiKey
+    } else if (cloudflareApiToken) {
       console.log('🔐 Using API Token authentication')
-      authHeaders['Authorization'] = `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`
+      authHeaders['Authorization'] = `Bearer ${cloudflareApiToken}`
     } else {
       console.error('❌ No valid authentication method found')
       return NextResponse.json({
@@ -295,9 +333,9 @@ async function handleGetDatabases(request: AuthenticatedRequest): Promise<NextRe
       
       if (kvResponse.status === 401) {
         console.error('🔐 Authentication failed for Cloudflare KV API - check API token')
-        console.error('Token exists:', !!process.env.CLOUDFLARE_API_TOKEN)
-        console.error('Account ID exists:', !!process.env.CLOUDFLARE_ACCOUNT_ID)
-        console.error('Namespace ID exists:', !!process.env.CLOUDFLARE_KV_NAMESPACE_ID)
+        console.error('Token exists:', !!cloudflareApiToken)
+        console.error('Account ID exists:', !!accountId)
+        console.error('Namespace ID exists:', !!namespaceId)
         
         // Return fallback data instead of throwing error
         return NextResponse.json({
@@ -343,7 +381,7 @@ async function handleGetDatabases(request: AuthenticatedRequest): Promise<NextRe
       })
     }
 
-    const userIndex = await kvResponse.json()
+    const userIndex: any = await kvResponse.json()
     const databaseIds = Array.isArray(userIndex.databases) ? userIndex.databases : []
 
     console.log(`📊 Found ${databaseIds.length} databases for user ${userId}:`, databaseIds)
@@ -352,14 +390,14 @@ async function handleGetDatabases(request: AuthenticatedRequest): Promise<NextRe
     const databases = []
     for (const dbId of databaseIds) {
       try {
-        const dbUrl = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/storage/kv/namespaces/${process.env.CLOUDFLARE_KV_NAMESPACE_ID}/values/${dbId}`
+        const dbUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${namespaceId}/values/${dbId}`
         
         const dbResponse = await makeKVRequest(dbUrl, {
           headers: authHeaders
         })
 
         if (dbResponse.ok) {
-          const dbData = await dbResponse.json()
+          const dbData: any = await dbResponse.json()
           databases.push({
             id: dbData.id || dbId,
             name: dbData.name || dbId,
@@ -457,3 +495,6 @@ async function handleGetDatabases(request: AuthenticatedRequest): Promise<NextRe
 
 // Export authenticated handler
 export const GET = authenticated(handleGetDatabases)
+
+// Ensure this API route runs on the Edge Runtime for Cloudflare compatibility
+export const runtime = 'edge'
