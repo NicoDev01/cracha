@@ -7,19 +7,23 @@ export function createClient() {
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
   if (!supabaseUrl || !supabaseAnonKey) {
-    console.error('❌ Missing Supabase environment variables:', {
+    const environment = process.env.NODE_ENV || 'unknown'
+    const isBuildTime = typeof window === 'undefined' && environment === 'production'
+    
+    console.warn('⚠️ Missing Supabase environment variables:', {
       hasUrl: !!supabaseUrl,
       hasKey: !!supabaseAnonKey,
-      environment: process.env.NODE_ENV || 'unknown'
+      environment,
+      isBuildTime
     })
     
-    // Throw error in production to avoid silent failures
-    if (process.env.NODE_ENV === 'production') {
+    // Only throw error at runtime in production, not during build time
+    if (environment === 'production' && !isBuildTime && typeof window !== 'undefined') {
       throw new Error('Supabase configuration is required in production')
     }
     
-    console.warn('⚠️ Using placeholder Supabase client for development')
-    // Return a mock client for development when Supabase is not configured
+    console.warn('⚠️ Using placeholder Supabase client for build/development')
+    // Return a mock client when Supabase is not configured
     return createBrowserClient(
       'https://placeholder.supabase.co', 
       'placeholder-anon-key',
