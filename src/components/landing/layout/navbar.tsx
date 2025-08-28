@@ -125,7 +125,7 @@ export function NavBar({ scroll = false }: NavBarProps) {
             id="gooey-btn"
             className="relative flex items-center group gooey-filter"
           >
-            <Link href="/dashboard" className="hidden md:block">
+            <Link href="/login" className="hidden md:block">
               <Button
                 className="gap-2 px-5 z-20 relative"
                   variant="default"

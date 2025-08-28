@@ -62,27 +62,14 @@ export function RegisterForm() {
     try {
       await register(formData.email, formData.password, formData.name)
       
-      // If no error, try to auto-confirm in development
-      if (!error) {
-        // In development, auto-confirm the user
-        if (process.env.NODE_ENV === 'development') {
-          try {
-            await fetch('/api/confirm-user', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email: formData.email })
-            })
-          } catch {
-            console.log('Auto-confirm failed, but registration succeeded')
-          }
-        }
-        
-        // Show success message instead of redirecting
-        alert('Registrierung erfolgreich! Du kannst dich jetzt anmelden.')
+      // Registration successful - redirect to login after showing message
+      setTimeout(() => {
         router.push('/login')
-      }
-    } catch {
-      // Error is handled by the store
+      }, 2500) // Give user time to read the success message
+      
+    } catch (registrationError) {
+      // Only actual errors (not success messages) will reach here
+      console.error('Registration error:', registrationError)
     }
   }
 
@@ -125,10 +112,18 @@ export function RegisterForm() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Error Message */}
+          {/* Error/Success Message */}
           {error && (
-            <div className="flex items-center space-x-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700">
-              <AlertCircle className="h-4 w-4 flex-shrink-0" />
+            <div className={`flex items-center space-x-2 p-3 border rounded-lg ${
+              error.includes('erfolgreich') 
+                ? 'bg-green-50 border-green-200 text-green-700' 
+                : 'bg-red-50 border-red-200 text-red-700'
+            }`}>
+              {error.includes('erfolgreich') ? (
+                <CheckCircle className="h-4 w-4 flex-shrink-0" />
+              ) : (
+                <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              )}
               <span className="text-sm">{error}</span>
             </div>
           )}

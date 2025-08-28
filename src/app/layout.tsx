@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import "./home/globals.css";
 
 export const metadata: Metadata = {
   title: "CraCha - Intelligente Wissensspeicher durch RAG-Technologie",

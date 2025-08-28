@@ -23,7 +23,7 @@ export type SourcesTriggerProps = ComponentProps<typeof CollapsibleTrigger> & {
 };
 
 export const SourcesTrigger = ({
-  className,
+  className: _className, // Intentionally unused in current implementation
   count,
   children,
   ...props

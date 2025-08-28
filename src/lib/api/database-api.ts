@@ -30,12 +30,12 @@ class DatabaseAPIClient {
   }
 
   /**
-   * Lädt alle Datenbanken eines Users
+   * Lädt alle Datenbanken des aktuell authentifizierten Users
    */
-  async getUserDatabases(userId: string): Promise<Database[]> {
+  async getUserDatabases(): Promise<Database[]> {
     try {
-      // Use our internal API route instead of external service
-      const response = await fetch(`/api/admin/databases?user_id=${encodeURIComponent(userId)}`, {
+      // 🔐 SECURITY: No user_id parameter needed - server validates authentication
+      const response = await fetch(`/api/admin/databases`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -45,12 +45,8 @@ class DatabaseAPIClient {
       if (!response.ok) {
         // Handle authentication errors specifically
         if (response.status === 401) {
-          console.warn('🔐 Authentication failed with Cloudflare KV API - using fallback data')
-          // Don't throw error for auth issues, use fallback instead
-          if (process.env.NODE_ENV === 'development') {
-            console.log('🔧 Using mock data due to authentication issues')
-            return this.getMockDatabases(userId)
-          }
+          console.warn('🔐 Authentication failed - user not authorized to access databases')
+          throw new Error('Authentication required. Please log in to access your databases.')
         }
         
         // Handle rate limiting specifically
@@ -109,16 +105,17 @@ class DatabaseAPIClient {
     } catch (error) {
       console.error('Failed to load user databases:', error)
       
-      // Handle authentication errors gracefully
-      if (error instanceof Error && (error.message.includes('401') || error.message.includes('Authentication'))) {
-        console.warn('🔐 Authentication issue detected - using fallback data')
-        return this.getMockDatabases(userId)
+      // Only provide fallback data in development mode and for authenticated API errors
+      // NEVER provide fallback data for authentication failures
+      if (error instanceof Error && (error.message.includes('Authentication required') || error.message.includes('401'))) {
+        // Re-throw authentication errors - no fallback for auth issues
+        throw error
       }
       
-      // Fallback: Return mock data for development or other errors
+      // Fallback: Return mock data ONLY for development and ONLY for non-auth errors
       if (process.env.NODE_ENV === 'development') {
-        console.log('🔧 Using mock data for development')
-        return this.getMockDatabases(userId)
+        console.log('🔧 Using mock data for development (non-auth error)')
+        return this.getMockDatabases()
       }
       
       throw error
@@ -202,7 +199,7 @@ class DatabaseAPIClient {
   /**
    * Mock-Daten für Development
    */
-  private getMockDatabases(_userId: string): Database[] {
+  private getMockDatabases(): Database[] {
     return [
       {
         id: 'test-pythondata',
@@ -244,8 +241,8 @@ class DatabaseAPIClient {
 export const databaseAPI = new DatabaseAPIClient()
 
 // Convenience functions
-export async function getUserDatabases(userId: string): Promise<Database[]> {
-  return databaseAPI.getUserDatabases(userId)
+export async function getUserDatabases(): Promise<Database[]> {
+  return databaseAPI.getUserDatabases()
 }
 
 export async function getDatabaseInfo(tenantId: string): Promise<Database> {

@@ -19,11 +19,12 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
 import { ChevronDown, Settings, LogOut, Building2, BarChart3 } from "lucide-react"
+import { useAuthStore } from "@/stores/auth-store"
+import { useRouter } from "next/navigation"
 
 export function DashboardHeader() {
-  // Temporarily disable auth store for debugging
-  const user = { name: "Test User", email: "test@example.com" }
-  const logout = () => {}
+  const { user, logout } = useAuthStore()
+  const router = useRouter()
 
   // Mock data - will be replaced with real data later
   const currentUsage = 1247
@@ -156,7 +157,14 @@ export function DashboardHeader() {
 
               <DropdownMenuItem
                 className="rounded-xl mx-2 cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50/80 hover:backdrop-blur-sm focus:text-red-700 focus:bg-red-50/80 transition-all duration-200"
-                onClick={() => logout()}
+                onClick={async () => {
+                  try {
+                    await logout()
+                    router.push('/login')
+                  } catch (error) {
+                    console.error('Logout failed:', error)
+                  }
+                }}
               >
                 <LogOut className="mr-3 h-4 w-4" />
                 <span className="font-medium">Sign out</span>

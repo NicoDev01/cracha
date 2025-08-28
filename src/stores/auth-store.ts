@@ -187,7 +187,7 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null })
         
         try {
-          const { data, error } = await supabase.auth.signUp({
+          const { data: _data, error } = await supabase.auth.signUp({ // data available for user handling
             email,
             password,
             options: {
@@ -211,19 +211,13 @@ export const useAuthStore = create<AuthState>()(
             throw new Error(errorMessage)
           }
           
-          // Auto-confirm user if no session (bypass email confirmation)
-          if (data.user && !data.session) {
-            // For development: Auto-confirm the user
-            console.log('User registered but needs confirmation. In production, set up email confirmation properly.')
-            set({ 
-              error: 'Registrierung erfolgreich! Du kannst dich jetzt anmelden.',
-              isLoading: false 
-            })
-            return
-          }
+          // Registration successful - show success message
+          set({ 
+            error: 'Registrierung erfolgreich! Nach Bestätigung deiner E-Mail-Adresse kannst du dich jetzt anmelden.',
+            isLoading: false 
+          })
           
-          // User state will be updated by onAuthStateChange
-          set({ isLoading: false })
+          // Don't throw error for successful registration
           
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Registrierung fehlgeschlagen'
@@ -293,9 +287,10 @@ export const useAuthStore = create<AuthState>()(
     {
       name: 'cracha-auth',
       partialize: (state) => ({
-        // Don't persist session - let Supabase handle it
-        user: state.user,
-        isAuthenticated: state.isAuthenticated
+        // Only persist user data, never authentication status
+        // This forces re-authentication on every session
+        user: null, // Don't persist user to force proper auth check
+        isAuthenticated: false // Never persist auth status
       })
     }
   )

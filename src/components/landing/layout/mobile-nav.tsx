@@ -91,7 +91,7 @@ export function NavMobile() {
                     {/* Right side: Theme toggle + Login */}
                     <div className="flex items-center gap-2">
                         <ThemeToggleButton className="h-10 w-10" />
-                        <Link href="/dashboard">
+                        <Link href="/login">
                             <Button
                                 className="h-10 gap-2 px-4"
                                 variant="default"

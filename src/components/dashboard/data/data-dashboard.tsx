@@ -21,7 +21,7 @@ export function DataDashboard() {
 
     // Load databases
     const loadDatabases = useCallback(async () => {
-        if (!user?.id) {
+        if (!user) {
             setDatabases([])
             setIsLoading(false)
             return
@@ -30,7 +30,8 @@ export function DataDashboard() {
         try {
             setIsLoading(true)
             setError(null)
-            const dbs = await getDatabases(user.id)
+            // 🔐 SECURITY: getDatabases now uses authentication from server
+            const dbs = await getDatabases()
             setDatabases(dbs)
         } catch (error) {
             console.error('Failed to load databases:', error)
@@ -40,7 +41,7 @@ export function DataDashboard() {
         } finally {
             setIsLoading(false)
         }
-    }, [user?.id])
+    }, [user])
 
     useEffect(() => {
         loadDatabases()

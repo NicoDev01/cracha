@@ -10,7 +10,7 @@ import {
   Settings,
   Zap,
   Home,
-  BarChart3,
+  BarChart3, // May be used for analytics dashboard
   Sparkles,
 } from "lucide-react"
 

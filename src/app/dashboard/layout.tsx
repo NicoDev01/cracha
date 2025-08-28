@@ -3,6 +3,7 @@
 import { useSidebar } from "@/components/dashboard/context/SidebarContext";
 import { SidebarProvider } from '@/components/dashboard/context/SidebarContext';
 import { ThemeProvider } from '@/components/dashboard/context/ThemeContext';
+import { AuthGuard } from '@/components/auth/AuthGuard';
 import AppHeader from "@/components/dashboard/layout/AppHeader";
 import AppSidebar from "@/components/dashboard/layout/AppSidebar";
 import Backdrop from "@/components/dashboard/layout/Backdrop";
@@ -70,11 +71,13 @@ export default function DashboardLayout({
 }>) {
   return (
     <div className={`${inter.variable} ${urbanist.variable} ${calSans.variable} ${geist.variable} font-sans antialiased`}>
-      <ThemeProvider>
-        <SidebarProvider>
-          <DashboardContent>{children}</DashboardContent>
-        </SidebarProvider>
-      </ThemeProvider>
+      <AuthGuard>
+        <ThemeProvider>
+          <SidebarProvider>
+            <DashboardContent>{children}</DashboardContent>
+          </SidebarProvider>
+        </ThemeProvider>
+      </AuthGuard>
     </div>
   );
 }

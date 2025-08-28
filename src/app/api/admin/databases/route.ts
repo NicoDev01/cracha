@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
+import { authenticated, getUserId, type AuthenticatedRequest } from '@/lib/auth/middleware'
 
 // Simple in-memory cache to reduce KV API calls
 interface CacheEntry {
@@ -104,19 +105,11 @@ async function makeKVRequest(url: string, options: RequestInit, retries = 3): Pr
   throw new Error('Max retries exceeded')
 }
 
-export async function GET(request: NextRequest) {
+async function handleGetDatabases(request: AuthenticatedRequest): Promise<NextResponse> {
   try {
-    const { searchParams } = new URL(request.url)
-    const userId = searchParams.get('user_id')
-
-    if (!userId) {
-      return NextResponse.json({
-        success: false,
-        error: 'Missing user_id parameter'
-      }, { status: 400 })
-    }
-
-    console.log(`📊 Loading databases for user: ${userId}`)
+    // 🔐 SECURITY: Get authenticated user ID from middleware
+    const userId = getUserId(request)
+    console.log(`📊 Loading databases for authenticated user: ${userId}`)
 
     // Check cache first to reduce KV API calls
     const cacheKey = `databases:${userId}`
@@ -486,3 +479,6 @@ export async function GET(request: NextRequest) {
     }, { status: 500 })
   }
 }
+
+// Export authenticated handler
+export const GET = authenticated(handleGetDatabases)

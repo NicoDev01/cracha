@@ -27,7 +27,7 @@ export function DatabaseSelector() {
 
   // Load databases function
   const loadDatabases = useCallback(async (showRefreshIndicator = false) => {
-    if (!user?.id) {
+    if (!user) {
       setDatabases([])
       setIsLoading(false)
       return
@@ -41,7 +41,8 @@ export function DatabaseSelector() {
       }
       setError(null)
 
-      const dbs = await getDatabases(user.id)
+      // 🔐 SECURITY: getDatabases now uses authentication from server
+      const dbs = await getDatabases()
       setDatabases(dbs)
     } catch (error) {
       console.error('Failed to load databases:', error)
@@ -52,7 +53,7 @@ export function DatabaseSelector() {
       setIsLoading(false)
       setIsRefreshing(false)
     }
-  }, [user?.id])
+  }, [user])
 
   // Load databases only on component mount and when user changes
   useEffect(() => {

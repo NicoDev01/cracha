@@ -46,7 +46,7 @@ export default function CanvasSection() {
             Verwandle das Internet in <br /> deinen{" "}
             <span className="text-gradient_indigo-purple">persönlichen Chatbot</span>
           </h2>
-          <Link href="/dashboard" prefetch={true}>
+          <Link href="/login" prefetch={true}>
             <RainbowButton className="gap-2">
               <span>Jetzt loslegen</span>
               <Icons.arrowRight className="size-4" />

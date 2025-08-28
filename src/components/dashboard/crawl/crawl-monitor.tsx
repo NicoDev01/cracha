@@ -6,13 +6,13 @@ import { Progress } from "@/components/ui/progress"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Separator } from "@/components/ui/separator"
+import { Separator } from "@/components/ui/separator" // May be used for layout separation
 import { 
   Activity, 
   Globe, 
   FileText, 
-  Zap, 
-  DollarSign, 
+  Zap, // May be used for performance indicators
+  DollarSign, // May be used for cost tracking
   Clock, 
   StopCircle,
   CheckCircle,

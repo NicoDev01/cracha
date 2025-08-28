@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
+import { authenticated, type AuthenticatedRequest } from '@/lib/auth/middleware'
 
 // Mock database data - in production this would come from the database registry
 const mockDatabases = [
@@ -26,7 +27,7 @@ const mockDatabases = [
   }
 ]
 
-export async function GET() {
+async function handleGetDatabases(_request: AuthenticatedRequest): Promise<NextResponse> {
   try {
     // In production, this would:
     // 1. Get user from authentication
@@ -52,9 +53,13 @@ export async function GET() {
   }
 }
 
-export async function POST(_request: NextRequest) {
+// Export authenticated handlers
+export const GET = authenticated(handleGetDatabases)
+export const POST = authenticated(handlePostDatabase)
+
+async function handlePostDatabase(request: AuthenticatedRequest): Promise<NextResponse> {
   try {
-    const body = await _request.json()
+    const body = await request.json()
     
     // Validate required fields
     if (!body.name || !body.url) {

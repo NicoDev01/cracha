@@ -40,7 +40,7 @@ const [isLoaded, setIsLoaded] = useState<boolean>(false);
         </p>
 
         <div className="flex justify-center">
-          <Link href="/dashboard" prefetch={true}>
+          <Link href="/login" prefetch={true}>
             <RainbowButton
               className={cn(
                 "gap-2 transition-all duration-1500 ease-out delay-1000",
