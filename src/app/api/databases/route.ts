@@ -247,7 +247,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       const accountId = getEnvVariable('CLOUDFLARE_ACCOUNT_ID', env as unknown as Record<string, unknown>) || process.env.CLOUDFLARE_ACCOUNT_ID
       const namespaceId = getEnvVariable('CLOUDFLARE_KV_NAMESPACE_ID', env as unknown as Record<string, unknown>) || process.env.CLOUDFLARE_KV_NAMESPACE_ID
       const apiToken = getEnvVariable('CLOUDFLARE_API_TOKEN', env as unknown as Record<string, unknown>) || process.env.CLOUDFLARE_API_TOKEN
-      const apiKey = getEnvVariable('CLOUDFLARE_API_KEY', env as unknown as Record<string, unknown>) || process.env.CLOUDFLARE_API_KEY
+      const apiKey = getEnvVariable('GLOBAL_API_KEY', env as unknown as Record<string, unknown>) || getEnvVariable('CLOUDFLARE_API_KEY', env as unknown as Record<string, unknown>) || process.env.GLOBAL_API_KEY || process.env.CLOUDFLARE_API_KEY
       const email = getEnvVariable('CLOUDFLARE_EMAIL', env as unknown as Record<string, unknown>) || process.env.CLOUDFLARE_EMAIL
       
       console.log('🔧 HTTP API Fallback - Environment check:')

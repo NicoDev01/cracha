@@ -3,12 +3,12 @@
 
 Write-Host "Setting Cloudflare Workers Secrets..." -ForegroundColor Green
 
-# Global API Key (funktioniert nachweislich lokal)
-wrangler secret put CLOUDFLARE_API_KEY
-# Wert: 77gSlb7YkPC-Cs9xOvrf6O9qW76tGnnaM38-NXIA
-
-# Optional: Falls die Route nach GLOBAL_API_KEY sucht
+# Global API Key (der funktioniert nachweislich lokal)
 wrangler secret put GLOBAL_API_KEY  
+# Wert: 29bd2f55dbea6d4937d4f234dbc7bee582d4b
+
+# Auch als CLOUDFLARE_API_KEY setzen für Kompatibilität
+wrangler secret put CLOUDFLARE_API_KEY
 # Wert: 29bd2f55dbea6d4937d4f234dbc7bee582d4b
 
 # Email für Global API Key
