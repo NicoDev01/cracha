@@ -79,6 +79,24 @@ function setCachedData(key: string, data: unknown): void {
   cache.set(key, { data, timestamp: Date.now() })
 }
 
+// Helper function to get environment variables
+function getEnvVariable(key: string, env?: CloudflareEnv): string | undefined {
+  // Try Cloudflare Workers context first (production)
+  if (env && key in env) {
+    const value = env[key as keyof CloudflareEnv]
+    if (typeof value === 'string') {
+      return value
+    }
+  }
+  
+  // Fallback to process.env (local development)
+  if (typeof process !== 'undefined' && process.env && process.env[key]) {
+    return process.env[key]
+  }
+  
+  return undefined
+}
+
 export async function GET(request: NextRequest): Promise<NextResponse> {
   // 🔐 SECURITY: Authenticate user first
   const user = await getAuthenticatedUserWithFallback()
@@ -218,16 +236,157 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       }
     }
 
-    // Fallback: If no KV binding available, return empty list
-    console.log('⚠️ No KV binding available - returning empty database list')
-    return NextResponse.json({
-      success: true,
-      databases: [],
-      count: 0,
-      user_id: userId,
-      method: 'fallback',
-      note: 'No KV binding available - check wrangler.toml configuration'
-    })
+    // Fallback: If no KV binding available, use HTTP API
+    console.log('⚠️ No KV binding available - falling back to HTTP API')
+    
+    try {
+      // Use the same HTTP API logic as the admin route
+      const accountId = getEnvVariable('CLOUDFLARE_ACCOUNT_ID', env) || process.env.CLOUDFLARE_ACCOUNT_ID
+      const namespaceId = getEnvVariable('CLOUDFLARE_KV_NAMESPACE_ID', env) || process.env.CLOUDFLARE_KV_NAMESPACE_ID
+      const apiToken = getEnvVariable('CLOUDFLARE_API_TOKEN', env) || process.env.CLOUDFLARE_API_TOKEN
+      
+      if (!accountId || !namespaceId || !apiToken) {
+        console.log('⚠️ Missing environment variables for HTTP API fallback')
+        return NextResponse.json({
+          success: true,
+          databases: [],
+          count: 0,
+          user_id: userId,
+          method: 'fallback',
+          note: 'No KV binding and missing environment variables'
+        })
+      }
+      
+      // Get user's database index from KV via HTTP API
+      const userIndexKey = `user_index:${userId}`
+      const kvUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${namespaceId}/values/${userIndexKey}`
+      
+      console.log('🔧 Using HTTP API fallback for KV access')
+      console.log('🔧 User Index Key:', userIndexKey)
+      
+      const authHeaders: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiToken}`
+      }
+      
+      const kvResponse = await fetch(kvUrl, { headers: authHeaders })
+      
+      if (!kvResponse.ok) {
+        if (kvResponse.status === 404) {
+          // User has no databases yet
+          console.log(`📊 No databases found for user ${userId} (HTTP API)`)
+          return NextResponse.json({
+            success: true,
+            databases: [],
+            count: 0,
+            user_id: userId,
+            method: 'http_api_fallback'
+          })
+        }
+        
+        console.error(`🚫 HTTP API error: ${kvResponse.status} ${kvResponse.statusText}`)
+        return NextResponse.json({
+          success: true,
+          databases: [],
+          count: 0,
+          user_id: userId,
+          method: 'http_api_fallback',
+          note: `HTTP API error: ${kvResponse.status}`
+        })
+      }
+
+      const userIndex: { databases?: string[] } = await kvResponse.json()
+      const databaseIds = Array.isArray(userIndex.databases) ? userIndex.databases : []
+      
+      console.log(`📊 Found ${databaseIds.length} databases for user ${userId} (HTTP API):`, databaseIds)
+
+      if (databaseIds.length === 0) {
+        return NextResponse.json({
+          success: true,
+          databases: [],
+          count: 0,
+          user_id: userId,
+          method: 'http_api_fallback',
+          note: 'No databases found for user'
+        })
+      }
+
+      // Load each database's details via HTTP API
+      const databases = []
+      for (const dbId of databaseIds) {
+        try {
+          const dbUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${namespaceId}/values/${dbId}`
+          const dbResponse = await fetch(dbUrl, { headers: authHeaders })
+
+          if (dbResponse.ok) {
+            const dbData: {
+              id?: string;
+              name?: string;
+              description?: string;
+              document_count?: string | number;
+              created_at?: string;
+              last_crawl?: string | null;
+              source_url?: string;
+              status?: string;
+              chunks_count?: string | number;
+              pages_count?: string | number;
+            } = await dbResponse.json()
+            
+            databases.push({
+              id: dbData.id || dbId,
+              name: dbData.name || dbId,
+              description: dbData.description || `Crawled from ${dbData.source_url || 'unknown source'}`,
+              document_count: parseInt(String(dbData.document_count)) || 0,
+              chunks_count: parseInt(String(dbData.chunks_count)) || 0,
+              pages_count: parseInt(String(dbData.pages_count)) || 0,
+              created_at: dbData.created_at || new Date().toISOString(),
+              updated_at: dbData.created_at || new Date().toISOString(),
+              last_crawl: dbData.last_crawl || null,
+              source_url: dbData.source_url || '',
+              url: dbData.source_url || '',
+              status: dbData.status || 'active'
+            })
+          } else {
+            console.warn(`Failed to load database ${dbId} via HTTP API: ${dbResponse.status}`)
+          }
+        } catch (error) {
+          console.warn(`Error loading database ${dbId} via HTTP API:`, error)
+        }
+      }
+
+      // Sort by creation date (newest first)
+      databases.sort((a, b) => {
+        const dateA = new Date(a.created_at).getTime()
+        const dateB = new Date(b.created_at).getTime()
+        return dateB - dateA
+      })
+
+      console.log(`📊 Returning ${databases.length} databases for user ${userId} (HTTP API fallback)`)
+
+      const responseData = {
+        success: true,
+        databases,
+        count: databases.length,
+        user_id: userId,
+        method: 'http_api_fallback'
+      }
+
+      // Cache the successful response
+      setCachedData(cacheKey, responseData)
+
+      return NextResponse.json(responseData)
+      
+    } catch (httpError) {
+      console.error('❌ HTTP API fallback failed:', httpError)
+      return NextResponse.json({
+        success: true,
+        databases: [],
+        count: 0,
+        user_id: userId,
+        method: 'fallback_failed',
+        note: 'Both KV binding and HTTP API fallback failed'
+      })
+    }
 
   } catch (error) {
     console.error('❌ Database API Error:', error)
