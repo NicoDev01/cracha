@@ -1,186 +1,102 @@
-# Cloudflare API Token Testing Script
-# This script tests your Cloudflare API token permissions
+# Load environment variables from .env.local
+Write-Host "🔍 Testing Cloudflare API Token Configuration..." -ForegroundColor Cyan
+Write-Host
 
-param(
-    [string]$Token,
-    [string]$AccountId = "8c010bb7d3f4ebde9f695e61441511cb"
-)
-
-Write-Host "🔐 Cloudflare API Token Permission Test" -ForegroundColor Green
-Write-Host "=======================================" -ForegroundColor Green
-
-# Get token from parameter or prompt
-if (-not $Token) {
-    $Token = Read-Host "Enter your Cloudflare API Token"
-}
-
-if (-not $Token) {
-    Write-Host "❌ No token provided. Exiting." -ForegroundColor Red
-    exit 1
-}
-
-Write-Host "🔍 Testing token: $($Token.Substring(0, [Math]::Min(8, $Token.Length)))..." -ForegroundColor Cyan
-Write-Host "📋 Account ID: $AccountId" -ForegroundColor Cyan
-
-# Function to test API endpoint
-function Test-CloudflareEndpoint {
-    param(
-        [string]$Url,
-        [string]$Description,
-        [hashtable]$Headers
-    )
-    
-    Write-Host ""
-    Write-Host "🧪 Testing: $Description" -ForegroundColor Yellow
-    Write-Host "   URL: $Url" -ForegroundColor Gray
-    
-    try {
-        $response = Invoke-RestMethod -Uri $Url -Headers $Headers -Method Get -ErrorAction Stop
-        
-        if ($response.success) {
-            Write-Host "   ✅ SUCCESS: $Description" -ForegroundColor Green
-            
-            if ($response.result -and $response.result.Count -ge 0) {
-                Write-Host "   📊 Results: $($response.result.Count) items found" -ForegroundColor Blue
-            }
-            
-            return $true
-        } else {
-            Write-Host "   ❌ FAILED: $Description" -ForegroundColor Red
-            Write-Host "   Error: $($response.errors | ConvertTo-Json -Compress)" -ForegroundColor Red
-            return $false
+$envFile = ".\.env.local"
+if (Test-Path $envFile) {
+    Get-Content $envFile | ForEach-Object {
+        if ($_ -match "^([^#][^=]*?)=(.*)$") {
+            [Environment]::SetEnvironmentVariable($matches[1], $matches[2], "Process")
         }
     }
-    catch {
-        Write-Host "   ❌ FAILED: $Description" -ForegroundColor Red
-        Write-Host "   Error: $($_.Exception.Message)" -ForegroundColor Red
-        
-        if ($_.Exception.Response) {
-            $statusCode = $_.Exception.Response.StatusCode
-            Write-Host "   Status Code: $statusCode" -ForegroundColor Red
-            
-            if ($statusCode -eq 401) {
-                Write-Host "   🔑 This indicates insufficient permissions or invalid token" -ForegroundColor Yellow
-            }
-        }
-        
-        return $false
-    }
 }
 
-# Set up headers for API token authentication
-$headers = @{
-    "Authorization" = "Bearer $Token"
-    "Content-Type" = "application/json"
+$accountId = $env:CLOUDFLARE_ACCOUNT_ID
+$apiToken = $env:CLOUDFLARE_API_TOKEN
+$namespaceId = $env:CLOUDFLARE_KV_NAMESPACE_ID
+
+Write-Host "Environment Variables:"
+Write-Host "  CLOUDFLARE_ACCOUNT_ID: $($accountId.Substring(0, [Math]::Min(8, $accountId.Length)))..."
+Write-Host "  CLOUDFLARE_API_TOKEN: $($apiToken.Substring(0, [Math]::Min(8, $apiToken.Length)))..."
+Write-Host "  CLOUDFLARE_KV_NAMESPACE_ID: $namespaceId"
+Write-Host
+
+# Test 1: Account access
+Write-Host "🧪 Test 1: Account Access" -ForegroundColor Yellow
+try {
+    $response = Invoke-RestMethod -Uri "https://api.cloudflare.com/client/v4/accounts/$accountId" `
+        -Headers @{
+            "Authorization" = "Bearer $apiToken"
+            "Content-Type" = "application/json"
+        } -ErrorAction Stop
+    
+    Write-Host "✅ Account access: SUCCESS" -ForegroundColor Green
+    Write-Host "Account name: $($response.result.name)"
+} catch {
+    Write-Host "❌ Account access: FAILED" -ForegroundColor Red
+    Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
+    if ($_.Exception.Response) {
+        Write-Host "Status: $($_.Exception.Response.StatusCode)" -ForegroundColor Red
+    }
 }
+Write-Host
 
-Write-Host ""
-Write-Host "🔬 Running Permission Tests..." -ForegroundColor Cyan
-
-# Test 1: Basic token verification
-$test1 = Test-CloudflareEndpoint `
-    -Url "https://api.cloudflare.com/client/v4/user/tokens/verify" `
-    -Description "Token Verification" `
-    -Headers $headers
-
-# Test 2: Account access
-$test2 = Test-CloudflareEndpoint `
-    -Url "https://api.cloudflare.com/client/v4/accounts/$AccountId" `
-    -Description "Account Access" `
-    -Headers $headers
-
-# Test 3: KV Namespaces
-$test3 = Test-CloudflareEndpoint `
-    -Url "https://api.cloudflare.com/client/v4/accounts/$AccountId/storage/kv/namespaces" `
-    -Description "KV Namespaces Access" `
-    -Headers $headers
-
-# Test 4: Workers Scripts
-$test4 = Test-CloudflareEndpoint `
-    -Url "https://api.cloudflare.com/client/v4/accounts/$AccountId/workers/scripts" `
-    -Description "Workers Scripts Access" `
-    -Headers $headers
-
-# Test 5: Vectorize Indexes (if available)
-$test5 = Test-CloudflareEndpoint `
-    -Url "https://api.cloudflare.com/client/v4/accounts/$AccountId/vectorize/indexes" `
-    -Description "Vectorize Indexes Access" `
-    -Headers $headers
-
-# Summary
-Write-Host ""
-Write-Host "📊 TEST SUMMARY" -ForegroundColor Green
-Write-Host "===============" -ForegroundColor Green
-
-$tests = @(
-    @{ Name = "Token Verification"; Result = $test1 }
-    @{ Name = "Account Access"; Result = $test2 }
-    @{ Name = "KV Namespaces"; Result = $test3 }
-    @{ Name = "Workers Scripts"; Result = $test4 }
-    @{ Name = "Vectorize Indexes"; Result = $test5 }
-)
-
-$passedTests = 0
-foreach ($test in $tests) {
-    $status = if ($test.Result) { "✅ PASS" } else { "❌ FAIL" }
-    $color = if ($test.Result) { "Green" } else { "Red" }
-    Write-Host "$status $($test.Name)" -ForegroundColor $color
-    if ($test.Result) { $passedTests++ }
+# Test 2: List KV namespaces
+Write-Host "🧪 Test 2: KV Namespaces List" -ForegroundColor Yellow
+try {
+    $response = Invoke-RestMethod -Uri "https://api.cloudflare.com/client/v4/accounts/$accountId/storage/kv/namespaces" `
+        -Headers @{
+            "Authorization" = "Bearer $apiToken"
+            "Content-Type" = "application/json"
+        } -ErrorAction Stop
+    
+    Write-Host "✅ Namespaces access: SUCCESS" -ForegroundColor Green
+    Write-Host "Total namespaces: $($response.result.Count)"
+    
+    # Check if our target namespace exists
+    $targetNamespace = $response.result | Where-Object { $_.id -eq $namespaceId }
+    if ($targetNamespace) {
+        Write-Host "✅ Target namespace found: $($targetNamespace.title)" -ForegroundColor Green
+    } else {
+        Write-Host "❌ Target namespace NOT found in account" -ForegroundColor Red
+        Write-Host "Available namespaces:"
+        $response.result | ForEach-Object { Write-Host "  - $($_.id): $($_.title)" }
+    }
+} catch {
+    Write-Host "❌ Namespaces access: FAILED" -ForegroundColor Red
+    Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
+    if ($_.Exception.Response) {
+        Write-Host "Status: $($_.Exception.Response.StatusCode)" -ForegroundColor Red
+    }
 }
+Write-Host
 
-Write-Host ""
-Write-Host "📈 Results: $passedTests/$($tests.Count) tests passed" -ForegroundColor $(if ($passedTests -eq $tests.Count) { "Green" } else { "Yellow" })
-
-if ($passedTests -lt $tests.Count) {
-    Write-Host ""
-    Write-Host "🔧 RECOMMENDATIONS:" -ForegroundColor Yellow
-    Write-Host ""
+# Test 3: Specific namespace access
+Write-Host "🧪 Test 3: Specific Namespace Access" -ForegroundColor Yellow
+try {
+    $response = Invoke-RestMethod -Uri "https://api.cloudflare.com/client/v4/accounts/$accountId/storage/kv/namespaces/$namespaceId/values/test_key" `
+        -Headers @{
+            "Authorization" = "Bearer $apiToken"
+            "Content-Type" = "application/json"
+        } -ErrorAction Stop
     
-    if (-not $test1) {
-        Write-Host "❌ Token verification failed - Your token is invalid or expired" -ForegroundColor Red
-        Write-Host "   → Create a new API token at: https://dash.cloudflare.com/profile/api-tokens" -ForegroundColor Yellow
+    Write-Host "✅ Namespace access: SUCCESS (key exists)" -ForegroundColor Green
+} catch {
+    if ($_.Exception.Response.StatusCode -eq 404) {
+        Write-Host "✅ Namespace access: SUCCESS (key doesn't exist - this is normal)" -ForegroundColor Green
+    } else {
+        Write-Host "❌ Namespace access: FAILED" -ForegroundColor Red
+        Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "Status: $($_.Exception.Response.StatusCode)" -ForegroundColor Red
     }
-    
-    if (-not $test2) {
-        Write-Host "❌ Account access failed - Token lacks account permissions" -ForegroundColor Red
-        Write-Host "   → Add 'Account:Account Memberships:Read' permission" -ForegroundColor Yellow
-    }
-    
-    if (-not $test3) {
-        Write-Host "❌ KV access failed - Token lacks KV permissions" -ForegroundColor Red
-        Write-Host "   → Add 'Account:Cloudflare KV Storage:Edit' permission" -ForegroundColor Yellow
-    }
-    
-    if (-not $test4) {
-        Write-Host "❌ Workers access failed - Token lacks Workers permissions" -ForegroundColor Red
-        Write-Host "   → Add 'Account:Cloudflare Workers:Edit' permission" -ForegroundColor Yellow
-    }
-    
-    if (-not $test5) {
-        Write-Host "⚠️  Vectorize access failed - This might be expected if Vectorize isn't enabled" -ForegroundColor Yellow
-        Write-Host "   → Add 'Account:Cloudflare Vectorize:Edit' permission if you use Vectorize" -ForegroundColor Yellow
-    }
-    
-    Write-Host ""
-    Write-Host "🎯 Required Permissions for Full Functionality:" -ForegroundColor Cyan
-    Write-Host "   • Zone:Zone:Read" -ForegroundColor White
-    Write-Host "   • Account:Account Memberships:Read" -ForegroundColor White
-    Write-Host "   • Account:Cloudflare Workers:Edit" -ForegroundColor White
-    Write-Host "   • Account:Cloudflare KV Storage:Edit" -ForegroundColor White
-    Write-Host "   • Account:Cloudflare Vectorize:Edit" -ForegroundColor White
-    Write-Host "   • Account:Workers Scripts:Edit" -ForegroundColor White
-    
-} else {
-    Write-Host ""
-    Write-Host "🎉 All tests passed! Your token has the correct permissions." -ForegroundColor Green
-    Write-Host ""
-    Write-Host "📝 Next Steps:" -ForegroundColor Cyan
-    Write-Host "1. Update your .env.local file with this token" -ForegroundColor White
-    Write-Host "2. Update your wrangler.toml file with this token" -ForegroundColor White
-    Write-Host "3. Set the token in Cloudflare Dashboard for production" -ForegroundColor White
-    Write-Host "4. Rebuild and deploy: npm run build:cf && npm run deploy" -ForegroundColor White
 }
+Write-Host
 
-Write-Host ""
-Write-Host "🔗 Create new token: https://dash.cloudflare.com/profile/api-tokens" -ForegroundColor Blue
-Write-Host "📚 API Documentation: https://developers.cloudflare.com/api/" -ForegroundColor Blue
+Write-Host "🎯 Diagnosis:" -ForegroundColor Cyan
+Write-Host "Expected results:"
+Write-Host "  ✅ Test 1: SUCCESS (account access)"
+Write-Host "  ✅ Test 2: SUCCESS (can list namespaces)"
+Write-Host "  ✅ Test 3: SUCCESS with 404 (namespace exists but key doesn't)"
+Write-Host
+Write-Host "If any test shows 401 Unauthorized, the API token doesn't have the required permissions." -ForegroundColor Yellow
+Write-Host "If Test 2 shows namespace NOT found, the CLOUDFLARE_KV_NAMESPACE_ID is incorrect." -ForegroundColor Yellow

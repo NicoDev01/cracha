@@ -42,12 +42,21 @@ VECTORIZE_ACCOUNT_ID = "8c010bb7d3f4ebde9f695e61441511cb"
 ENVIRONMENT = "development"
 LOG_LEVEL = "debug"
 
+# KV Bindings for database registry
+[[kv_namespaces]]
+binding = "DATABASE_REGISTRY"
+id = "417ae907fb8547758b969c5eeaa635dd"
+
 # Observability (enable logs for debugging)
 [observability.logs]
 enabled = true
 
 # Production Environment
 [env.production]
+# KV Bindings for production
+[[env.production.kv_namespaces]]
+binding = "DATABASE_REGISTRY"
+id = "417ae907fb8547758b969c5eeaa635dd"
 [env.production.vars]
 # Application Config
 NEXT_PUBLIC_APP_ENV = "production"

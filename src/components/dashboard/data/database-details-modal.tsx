@@ -141,9 +141,9 @@ export function DatabaseDetailsModal({
         description: database.description,
         status: database.status || 'active',
         document_count: database.document_count || 0,
-        created_at: database.created_at.toISOString(),
-        updated_at: database.updated_at.toISOString(),
-        last_crawl: database.last_crawl?.toISOString(),
+        created_at: typeof database.created_at === 'string' ? database.created_at : database.created_at.toISOString(),
+        updated_at: typeof database.updated_at === 'string' ? database.updated_at : database.updated_at.toISOString(),
+        last_crawl: database.last_crawl ? (typeof database.last_crawl === 'string' ? database.last_crawl : database.last_crawl.toISOString()) : undefined,
         source_url: database.source_url,
         crawl_config: {
           type: 'single',
@@ -152,7 +152,7 @@ export function DatabaseDetailsModal({
         urls: database.source_url ? [database.source_url] : [],
         recent_activity: [
           {
-            timestamp: database.created_at.toISOString(),
+            timestamp: typeof database.created_at === 'string' ? database.created_at : database.created_at.toISOString(),
             action: 'Datenbank erstellt',
             details: 'Datenbank wurde erfolgreich erstellt',
             status: 'success'

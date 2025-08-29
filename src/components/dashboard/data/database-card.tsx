@@ -45,15 +45,25 @@ export function DatabaseCard({ database, onDelete, onUpdate, onViewDetails }: Da
   const [isRecrawling, setIsRecrawling] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
 
-  const formatDate = (date: Date | undefined) => {
+  const formatDate = (date: Date | string | undefined) => {
     if (!date) return 'Nie'
+    
+    // Handle both Date objects and ISO strings
+    const dateObj = typeof date === 'string' ? new Date(date) : date
+    
+    // Check if the date is valid
+    if (isNaN(dateObj.getTime())) {
+      console.warn('Invalid date provided to formatDate:', date)
+      return 'Ungültiges Datum'
+    }
+    
     return new Intl.DateTimeFormat('de-DE', {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit'
-    }).format(date)
+    }).format(dateObj)
   }
 
   const formatNumber = (num: number) => {
@@ -125,8 +135,14 @@ export function DatabaseCard({ database, onDelete, onUpdate, onViewDetails }: Da
     }
   }
 
-  const isRecentlyUpdated = database.last_crawl &&
-    new Date(database.last_crawl).getTime() > Date.now() - 24 * 60 * 60 * 1000
+  const isRecentlyUpdated = database.last_crawl && (() => {
+    const lastCrawlDate = typeof database.last_crawl === 'string' 
+      ? new Date(database.last_crawl) 
+      : database.last_crawl
+    
+    return !isNaN(lastCrawlDate.getTime()) && 
+           lastCrawlDate.getTime() > Date.now() - 24 * 60 * 60 * 1000
+  })()
 
   return (
     <>

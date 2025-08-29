@@ -56,10 +56,13 @@ export interface Database {
   id: string
   name: string
   description?: string
-  created_at: Date
-  updated_at: Date
-  document_count: number
-  last_crawl?: Date
+  created_at: string | Date
+  updated_at: string | Date
+  document_count?: number
+  last_crawl?: string | Date
   source_url?: string
-  status?: string
+  status?: 'active' | 'pending' | 'error' | 'crawling' | 'inactive'
+  chunks_count?: number
+  pages_count?: number
+  url?: string
 }

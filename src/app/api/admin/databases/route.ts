@@ -287,37 +287,25 @@ async function handleGetDatabases(request: NextRequest): Promise<NextResponse> {
       })
     }
     
-    // Determine authentication method - PREFER Global API Key for reliability
+    // Determine authentication method
     const cloudflareApiToken = getEnvVariable('CLOUDFLARE_API_TOKEN', env)
     const apiKey = getEnvVariable('CLOUDFLARE_API_KEY', env)
     const email = getEnvVariable('CLOUDFLARE_EMAIL', env)
-    
-    // Debug: Log what authentication options are available
-    console.log('🔍 Authentication Debug:')
-    console.log('  API Token available:', !!cloudflareApiToken, cloudflareApiToken?.substring(0, 8) + '...')
-    console.log('  Global API Key available:', !!apiKey, apiKey?.substring(0, 8) + '...')
-    console.log('  Email available:', !!email, email)
-    
-    // Prefer Global API Key if available (more reliable for KV operations)
-    const useGlobalKey = (email && apiKey) || !cloudflareApiToken || cloudflareApiToken === apiKey
+    const useGlobalKey = !cloudflareApiToken || cloudflareApiToken === apiKey
     
     const authHeaders: Record<string, string> = {
       'Content-Type': 'application/json'
     }
     
     if (useGlobalKey && email && apiKey) {
-      console.log('🔑 Using Global API Key authentication (recommended for KV)')
-      console.log('  Email:', email)
-      console.log('  API Key (first 8 chars):', apiKey.substring(0, 8) + '...')
+      console.log('🔑 Using Global API Key authentication')
       authHeaders['X-Auth-Email'] = email
       authHeaders['X-Auth-Key'] = apiKey
     } else if (cloudflareApiToken) {
       console.log('🔐 Using API Token authentication')
-      console.log('  Token (first 8 chars):', cloudflareApiToken.substring(0, 8) + '...')
       authHeaders['Authorization'] = `Bearer ${cloudflareApiToken}`
     } else {
       console.error('❌ No valid authentication method found')
-      console.error('  Missing: API Token AND (Global API Key OR Email)')
       return NextResponse.json({
         success: true,
         databases: [],

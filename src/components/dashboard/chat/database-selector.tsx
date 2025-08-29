@@ -67,15 +67,27 @@ export function DatabaseSelector() {
 
   const selectedDb = databases.find(db => db.id === selectedDatabase)
 
-  const formatDate = (date: Date) => {
+  const formatDate = (date: Date | string | undefined) => {
+    if (!date) return 'Nie'
+    
+    // Handle both Date objects and ISO strings
+    const dateObj = typeof date === 'string' ? new Date(date) : date
+    
+    // Check if the date is valid
+    if (isNaN(dateObj.getTime())) {
+      console.warn('Invalid date provided to formatDate:', date)
+      return 'Ungültiges Datum'
+    }
+    
     return new Intl.DateTimeFormat('de-DE', {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric'
-    }).format(date)
+    }).format(dateObj)
   }
 
-  const formatNumber = (num: number) => {
+  const formatNumber = (num: number | undefined) => {
+    if (num === undefined || num === null) return '0'
     return new Intl.NumberFormat('de-DE').format(num)
   }
 
@@ -174,7 +186,7 @@ export function DatabaseSelector() {
                   <div className="flex items-center gap-3 text-xs text-gray-400 dark:text-gray-400">
                     <div className="flex items-center gap-1">
                       <FileText className="w-3 h-3" />
-                      <span>{formatNumber(database.document_count)} Docs</span>
+                      <span>{formatNumber(database.document_count || 0)} Docs</span>
                     </div>
 
                     {database.last_crawl && (
