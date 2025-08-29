@@ -80,13 +80,10 @@ function setCachedData(key: string, data: unknown): void {
 }
 
 // Helper function to get environment variables
-function getEnvVariable(key: string, env?: CloudflareEnv): string | undefined {
+function getEnvVariable(key: string, env?: Record<string, unknown>): string | undefined {
   // Try Cloudflare Workers context first (production)
-  if (env && key in env) {
-    const value = env[key as keyof CloudflareEnv]
-    if (typeof value === 'string') {
-      return value
-    }
+  if (env && env[key]) {
+    return env[key] as string
   }
   
   // Fallback to process.env (local development)
@@ -123,8 +120,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       console.log('🔧 Cloudflare Workers context available:', !!env)
       console.log('🔧 KV binding available:', !!kv)
       console.log('🔧 KV binding type:', typeof kv)
+      console.log('🔧 Environment keys:', env ? Object.keys(env) : 'no env')
+      console.log('🔧 DATABASE_REGISTRY in env:', 'DATABASE_REGISTRY' in (env || {}))
     } catch (error) {
       console.log('📝 Error getting Cloudflare context:', error)
+      console.log('📝 Error type:', error instanceof Error ? error.constructor.name : typeof error)
+      console.log('📝 Error message:', error instanceof Error ? error.message : String(error))
     }
 
     // Check cache first to reduce KV operations
@@ -146,10 +147,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         // Get user's database index from KV
         const userIndexKey = `user_index:${userId}`
         console.log('🔧 Looking up user index:', userIndexKey)
+        console.log('🔧 KV methods available:', kv ? Object.getOwnPropertyNames(Object.getPrototypeOf(kv)) : 'no kv')
         
         const userIndexData = await kv.get(userIndexKey, 'json') as { databases?: string[] } | null
-        const databaseIds = userIndexData?.databases || []
+        console.log('🔧 Raw user index data:', userIndexData)
         
+        const databaseIds = userIndexData?.databases || []
         console.log(`📊 Found ${databaseIds.length} databases for user ${userId}:`, databaseIds)
 
         if (databaseIds.length === 0) {
@@ -241,11 +244,20 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     
     try {
       // Use the same HTTP API logic as the admin route
-      const accountId = getEnvVariable('CLOUDFLARE_ACCOUNT_ID', env) || process.env.CLOUDFLARE_ACCOUNT_ID
-      const namespaceId = getEnvVariable('CLOUDFLARE_KV_NAMESPACE_ID', env) || process.env.CLOUDFLARE_KV_NAMESPACE_ID
-      const apiToken = getEnvVariable('CLOUDFLARE_API_TOKEN', env) || process.env.CLOUDFLARE_API_TOKEN
+      const accountId = getEnvVariable('CLOUDFLARE_ACCOUNT_ID', env as unknown as Record<string, unknown>) || process.env.CLOUDFLARE_ACCOUNT_ID
+      const namespaceId = getEnvVariable('CLOUDFLARE_KV_NAMESPACE_ID', env as unknown as Record<string, unknown>) || process.env.CLOUDFLARE_KV_NAMESPACE_ID
+      const apiToken = getEnvVariable('CLOUDFLARE_API_TOKEN', env as unknown as Record<string, unknown>) || process.env.CLOUDFLARE_API_TOKEN
+      const apiKey = getEnvVariable('CLOUDFLARE_API_KEY', env as unknown as Record<string, unknown>) || process.env.CLOUDFLARE_API_KEY
+      const email = getEnvVariable('CLOUDFLARE_EMAIL', env as unknown as Record<string, unknown>) || process.env.CLOUDFLARE_EMAIL
       
-      if (!accountId || !namespaceId || !apiToken) {
+      console.log('🔧 HTTP API Fallback - Environment check:')
+      console.log('  Account ID:', accountId ? 'SET' : 'MISSING')
+      console.log('  Namespace ID:', namespaceId ? 'SET' : 'MISSING')
+      console.log('  API Token:', apiToken ? `SET (${apiToken.substring(0, 8)}...)` : 'MISSING')
+      console.log('  API Key:', apiKey ? `SET (${apiKey.substring(0, 8)}...)` : 'MISSING')
+      console.log('  Email:', email ? 'SET' : 'MISSING')
+      
+      if (!accountId || !namespaceId || (!apiToken && (!apiKey || !email))) {
         console.log('⚠️ Missing environment variables for HTTP API fallback')
         return NextResponse.json({
           success: true,
@@ -264,9 +276,29 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       console.log('🔧 Using HTTP API fallback for KV access')
       console.log('🔧 User Index Key:', userIndexKey)
       
+      // Determine authentication method (same logic as admin route)
+      const useGlobalKey = !apiToken || apiToken === apiKey
       const authHeaders: Record<string, string> = {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiToken}`
+        'Content-Type': 'application/json'
+      }
+      
+      if (useGlobalKey && email && apiKey) {
+        console.log('🔑 HTTP API Fallback: Using Global API Key authentication')
+        authHeaders['X-Auth-Email'] = email
+        authHeaders['X-Auth-Key'] = apiKey
+      } else if (apiToken) {
+        console.log('🔐 HTTP API Fallback: Using API Token authentication')
+        authHeaders['Authorization'] = `Bearer ${apiToken}`
+      } else {
+        console.error('❌ No valid authentication method found for HTTP API fallback')
+        return NextResponse.json({
+          success: true,
+          databases: [],
+          count: 0,
+          user_id: userId,
+          method: 'fallback',
+          note: 'No valid authentication method'
+        })
       }
       
       const kvResponse = await fetch(kvUrl, { headers: authHeaders })
