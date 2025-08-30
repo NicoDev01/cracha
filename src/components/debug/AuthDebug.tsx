@@ -48,6 +48,75 @@ export function AuthDebug() {
 
   const testGoogleAuth = async () => {
     setIsLoading(true)
+    addLog('🔄 Testing Google OAuth flow...')
+    
+    try {
+      const supabase = createClient()
+      
+      // Check current environment
+      const currentUrl = window.location.origin
+      const isProduction = currentUrl.includes('workers.dev') || currentUrl.includes('aimpact-agency')
+      const redirectUrl = isProduction 
+        ? 'https://cracha.aimpact-agency.workers.dev/auth/callback'
+        : `${currentUrl}/auth/callback`
+      
+      addLog(`🌍 Current environment: ${isProduction ? 'Production' : 'Development'}`)
+      addLog(`🔗 Redirect URL: ${redirectUrl}`)
+      
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUrl,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          }
+        }
+      })
+      
+      if (error) {
+        addLog(`❌ Google OAuth error: ${error.message}`)
+      } else {
+        addLog(`✅ Google OAuth initiated: ${data.url}`)
+        addLog(`🔄 Redirecting to Google...`)
+      }
+      
+    } catch (error) {
+      addLog(`❌ Google Auth test failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+    
+    setIsLoading(false)
+  }
+
+  const testCallbackRoute = async () => {
+    setIsLoading(true)
+    addLog('🔄 Testing callback route...')
+    
+    try {
+      const currentUrl = window.location.origin
+      const callbackUrl = `${currentUrl}/auth/callback?test=true`
+      
+      addLog(`📡 Testing: ${callbackUrl}`)
+      
+      const response = await fetch(callbackUrl, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        }
+      })
+      
+      addLog(`📊 Response status: ${response.status} ${response.statusText}`)
+      addLog(`📊 Response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`)
+      
+      if (response.redirected) {
+        addLog(`🔄 Redirected to: ${response.url}`)
+      }
+      
+    } catch (error) {
+      addLog(`❌ Callback test failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+    
+    setIsLoading(false)
     addLog('🔄 Testing Google OAuth...')
     
     try {

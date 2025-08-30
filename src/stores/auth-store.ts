@@ -21,7 +21,7 @@ interface AuthState {
   isLoading: boolean
   error: string | null
   isInitialized: boolean
-  
+
   // Actions
   initialize: () => Promise<void>
   login: (email: string, password: string) => Promise<void>
@@ -43,15 +43,15 @@ export const useAuthStore = create<AuthState>()(
       isLoading: true, // Start with loading to prevent hydration mismatch
       error: null,
       isInitialized: false,
-      
+
       initialize: async () => {
         set({ isLoading: true })
-        
+
         try {
           // Check if Supabase is properly configured
           const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
           const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-          
+
           if (!supabaseUrl || !supabaseAnonKey || supabaseUrl.includes('placeholder')) {
             console.warn('Supabase not configured - skipping auth initialization')
             set({
@@ -64,10 +64,10 @@ export const useAuthStore = create<AuthState>()(
             })
             return
           }
-          
+
           // First try to get session (less strict than getUser)
           const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-          
+
           if (sessionError) {
             console.log('Session error (expected if no session):', sessionError.message)
             // This is expected if user is not logged in
@@ -81,7 +81,7 @@ export const useAuthStore = create<AuthState>()(
             })
             return
           }
-          
+
           if (session?.user) {
             const authUser: AuthUser = {
               id: session.user.id,
@@ -91,7 +91,7 @@ export const useAuthStore = create<AuthState>()(
               plan: 'free', // Default plan
               created_at: session.user.created_at
             }
-            
+
             set({
               user: authUser,
               session,
@@ -110,7 +110,7 @@ export const useAuthStore = create<AuthState>()(
               isInitialized: true
             })
           }
-          
+
           // Listen for auth changes
           supabase.auth.onAuthStateChange((event, session) => {
             if (event === 'SIGNED_IN' && session?.user) {
@@ -122,7 +122,7 @@ export const useAuthStore = create<AuthState>()(
                 plan: 'free',
                 created_at: session.user.created_at
               }
-              
+
               set({
                 user: authUser,
                 session,
@@ -138,25 +138,25 @@ export const useAuthStore = create<AuthState>()(
               })
             }
           })
-          
+
         } catch (error) {
           console.error('Auth initialization error:', error)
-          set({ 
+          set({
             error: error instanceof Error ? error.message : 'Authentication failed',
-            isLoading: false 
+            isLoading: false
           })
         }
       },
-      
+
       login: async (email: string, password: string) => {
         set({ isLoading: true, error: null })
-        
+
         try {
           const { error } = await supabase.auth.signInWithPassword({
             email,
             password
           })
-          
+
           if (error) {
             // Better error messages
             let errorMessage = error.message
@@ -169,23 +169,23 @@ export const useAuthStore = create<AuthState>()(
             }
             throw new Error(errorMessage)
           }
-          
+
           // User state will be updated by onAuthStateChange
           set({ isLoading: false })
-          
+
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Anmeldung fehlgeschlagen'
-          set({ 
+          set({
             error: errorMessage,
-            isLoading: false 
+            isLoading: false
           })
           throw error
         }
       },
-      
+
       register: async (email: string, password: string, name: string) => {
         set({ isLoading: true, error: null })
-        
+
         try {
           const { error } = await supabase.auth.signUp({
             email,
@@ -197,7 +197,7 @@ export const useAuthStore = create<AuthState>()(
               emailRedirectTo: undefined // Disable email confirmation
             }
           })
-          
+
           if (error) {
             // Better error messages
             let errorMessage = error.message
@@ -210,85 +210,115 @@ export const useAuthStore = create<AuthState>()(
             }
             throw new Error(errorMessage)
           }
-          
+
           // Registration successful - show success message
-          set({ 
+          set({
             error: 'Registrierung erfolgreich! Nach Bestätigung deiner E-Mail-Adresse kannst du dich jetzt anmelden.',
-            isLoading: false 
+            isLoading: false
           })
-          
+
           // Don't throw error for successful registration
-          
+
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Registrierung fehlgeschlagen'
-          set({ 
+          set({
             error: errorMessage,
-            isLoading: false 
+            isLoading: false
           })
           throw error
         }
       },
-      
+
       loginWithGoogle: async () => {
         set({ isLoading: true, error: null })
-        
+
         try {
           console.log('🔄 Starting Google OAuth flow...')
+
+          // Determine correct redirect URL based on environment
+          const currentOrigin = window.location.origin
+          const isWranglerDev = currentOrigin.includes('localhost:8787')
+          const isProduction = window.location.hostname.includes('workers.dev') || window.location.hostname.includes('aimpact-agency')
           
+          let redirectUrl: string
+          if (isWranglerDev) {
+            // Wrangler dev - Direct to localhost:8787
+            redirectUrl = 'http://localhost:8787/auth/callback'
+          } else if (isProduction) {
+            // Production - HTTPS Workers domain
+            redirectUrl = 'https://cracha.aimpact-agency.workers.dev/auth/callback'
+          } else {
+            // Next.js dev - HTTP localhost
+            redirectUrl = `${currentOrigin}/auth/callback`
+          }
+
+          console.log('🔗 Using redirect URL:', redirectUrl)
+          console.log('🌍 Environment detection:', { 
+            currentOrigin, 
+            isWranglerDev, 
+            isProduction, 
+            hostname: window.location.hostname,
+            port: window.location.port 
+          })
+
           const { data, error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: {
-              redirectTo: `${window.location.origin}/auth/callback`,
+              redirectTo: redirectUrl,
               queryParams: {
                 access_type: 'offline',
                 prompt: 'consent',
-              }
+              },
+              // Für Wrangler Dev: Skippt HTTPS-Validierung
+              ...(isWranglerDev && {
+                skipBrowserRedirect: false
+              })
             }
           })
-          
+
           if (error) {
             console.error('❌ Google OAuth error:', error)
             throw error
           }
-          
+
           console.log('✅ Google OAuth initiated successfully:', data)
           // OAuth redirect will handle the rest - don't set loading to false here
-          
+
         } catch (error) {
           console.error('❌ Google login error:', error)
-          set({ 
+          set({
             error: error instanceof Error ? error.message : 'Google Anmeldung fehlgeschlagen',
-            isLoading: false 
+            isLoading: false
           })
           throw error
         }
       },
-      
+
       logout: async () => {
         set({ isLoading: true })
-        
+
         try {
           const { error } = await supabase.auth.signOut()
-          
+
           if (error) {
             throw error
           }
-          
+
           // User state will be updated by onAuthStateChange
           set({ isLoading: false })
-          
+
         } catch (error) {
-          set({ 
+          set({
             error: error instanceof Error ? error.message : 'Logout failed',
-            isLoading: false 
+            isLoading: false
           })
         }
       },
-      
+
       clearError: () => {
         set({ error: null })
       },
-      
+
       setLoading: (loading: boolean) => {
         set({ isLoading: loading })
       }

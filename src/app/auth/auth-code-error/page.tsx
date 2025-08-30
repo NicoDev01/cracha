@@ -1,12 +1,36 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { AlertCircle } from 'lucide-react'
+import { Suspense } from 'react'
 
-export default function AuthCodeErrorPage() {
+function AuthCodeErrorContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const error = searchParams.get('error')
+
+  const getErrorMessage = (errorCode: string | null) => {
+    switch (errorCode) {
+      case 'flow_state_not_found':
+        return 'OAuth Flow-Status nicht gefunden. Möglicherweise ist die Sitzung abgelaufen.'
+      case 'server_error':
+        return 'Server-Fehler bei der Authentifizierung.'
+      case 'exchange_failed':
+        return 'Code-Austausch fehlgeschlagen. Bitte versuche es erneut.'
+      case 'no_code':
+        return 'Kein Authentifizierungscode erhalten.'
+      case 'no_auth_params':
+        return 'Keine gültigen Authentifizierungsparameter erhalten.'
+      case 'auth_failed':
+        return 'Authentifizierung fehlgeschlagen. Token möglicherweise abgelaufen.'
+      case 'no_session':
+        return 'Keine Sitzung erstellt. Bitte versuche es erneut.'
+      default:
+        return 'Ein unbekannter Fehler ist aufgetreten.'
+    }
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 to-rose-100">
@@ -25,13 +49,15 @@ export default function AuthCodeErrorPage() {
 
         <CardContent className="space-y-6">
           <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <h3 className="font-semibold text-red-800 mb-2">Mögliche Ursachen:</h3>
-            <ul className="text-sm text-red-700 space-y-1">
-              <li>• Die Anmeldung wurde abgebrochen</li>
-              <li>• Ungültiger Authentifizierungscode</li>
-              <li>• Sitzung ist abgelaufen</li>
-              <li>• Konfigurationsproblem</li>
-            </ul>
+            <h3 className="font-semibold text-red-800 mb-2">Fehlerdetails:</h3>
+            <p className="text-sm text-red-700 mb-3">
+              {getErrorMessage(error)}
+            </p>
+            {error && (
+              <p className="text-xs text-red-600 font-mono bg-red-100 p-2 rounded">
+                Error Code: {error}
+              </p>
+            )}
           </div>
 
           <div className="space-y-3">
@@ -65,5 +91,20 @@ export default function AuthCodeErrorPage() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+export default function AuthCodeErrorPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 to-rose-100">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    }>
+      <AuthCodeErrorContent />
+    </Suspense>
   )
 }
