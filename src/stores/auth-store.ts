@@ -187,7 +187,7 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null })
         
         try {
-          const { data: _data, error } = await supabase.auth.signUp({ // _data available for user handling if needed
+          const { error } = await supabase.auth.signUp({
             email,
             password,
             options: {
@@ -233,22 +233,31 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null })
         
         try {
-          const { error } = await supabase.auth.signInWithOAuth({
+          console.log('🔄 Starting Google OAuth flow...')
+          
+          const { data, error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: {
-              redirectTo: `${window.location.origin}/auth/callback`
+              redirectTo: `${window.location.origin}/auth/callback`,
+              queryParams: {
+                access_type: 'offline',
+                prompt: 'consent',
+              }
             }
           })
           
           if (error) {
+            console.error('❌ Google OAuth error:', error)
             throw error
           }
           
-          // OAuth redirect will handle the rest
+          console.log('✅ Google OAuth initiated successfully:', data)
+          // OAuth redirect will handle the rest - don't set loading to false here
           
         } catch (error) {
+          console.error('❌ Google login error:', error)
           set({ 
-            error: error instanceof Error ? error.message : 'Google login failed',
+            error: error instanceof Error ? error.message : 'Google Anmeldung fehlgeschlagen',
             isLoading: false 
           })
           throw error
@@ -286,7 +295,7 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'cracha-auth',
-      partialize: (state) => ({
+      partialize: () => ({
         // Only persist user data, never authentication status
         // This forces re-authentication on every session
         user: null, // Don't persist user to force proper auth check

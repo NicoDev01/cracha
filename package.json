@@ -8,6 +8,8 @@
     "build:cf": "next build && opennextjs-cloudflare build",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "deploy:secrets": "node -e \"console.log('Use deploy-secrets.bat on Windows or deploy-secrets.sh on Linux/Mac')\"",
+    "deploy:full": "npm run deploy:secrets && npm run deploy",
     "cf:dev": "wrangler dev",
     "type-check": "tsc --noEmit",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"

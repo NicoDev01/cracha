@@ -13,8 +13,10 @@ export function GoogleAuthButton({ isRegister = false }: GoogleAuthButtonProps) 
 
   const handleGoogleAuth = async () => {
     try {
+      console.log('🔄 Google Auth button clicked')
       await loginWithGoogle()
-    } catch {
+    } catch (error) {
+      console.error('❌ Google Auth button error:', error)
       // Error is handled by the store
     }
   }
