@@ -12,6 +12,14 @@
 
 # testing
 /coverage
+test_*.py
+*_test.py
+*.test.ts
+*.test.js
+*.spec.ts
+*.spec.js
+/tests/
+__tests__/
 
 # next.js
 /.next/
@@ -64,6 +72,11 @@ env/
 .venv/
 .env/
 python/
+
+# CraCha Ingestion Pipeline (Modal.com Service)
+# This is a separate Python service that doesn't need to be in the frontend repo
+src/ingestion/
+!src/ingestion/README.md
 
 # IDE
 .vscode/

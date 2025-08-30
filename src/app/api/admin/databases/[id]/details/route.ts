@@ -20,7 +20,7 @@ function getEnvVariable(key: string, env?: Record<string, unknown>): string | un
 // export const runtime = 'edge'
 
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -33,7 +33,7 @@ export async function GET(
     try {
       const context = getRequestContext()
       env = (context.env as Record<string, unknown>) || {}
-    } catch (error) {
+    } catch (_error) {
       console.log('🖥️ Running in local development mode')
     }
 

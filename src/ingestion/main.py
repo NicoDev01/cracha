@@ -82,7 +82,7 @@ class CraChaIngestionCLI:
         job = IngestionJob(
             tenant_id=args.tenant_id,
             source_url=args.url or args.input,
-            source_type="crawl4ai"
+            source_type="markdown"  # Fixed: use valid source_type
         )
         
         try:

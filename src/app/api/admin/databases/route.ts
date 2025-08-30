@@ -7,7 +7,7 @@ import { getRequestContext } from '@cloudflare/next-on-pages'
  */
 function createFallbackUser() {
   return {
-    id: 'dev-user-' + Math.random().toString(36).substr(2, 9),
+    id: 'dev-user-' + Math.random().toString(36).substring(2, 11),
     email: 'dev@example.com'
   }
 }
@@ -37,8 +37,8 @@ async function getAuthenticatedUserWithFallback() {
     }
     
     return null
-  } catch (error) {
-    console.error('Authentication error:', error)
+  } catch (_error) {
+    console.error('Authentication error:', _error)
     
     // In development mode, provide fallback even on errors
     if (process.env.NODE_ENV === 'development') {
@@ -172,7 +172,7 @@ async function makeKVRequest(url: string, options: RequestInit, retries = 3): Pr
   throw new Error('Max retries exceeded')
 }
 
-async function handleGetDatabases(request: NextRequest): Promise<NextResponse> {
+async function handleGetDatabases(_request: NextRequest): Promise<NextResponse> {
   // 🔐 SECURITY: Authenticate user first
   const user = await getAuthenticatedUserWithFallback()
   
@@ -192,7 +192,7 @@ async function handleGetDatabases(request: NextRequest): Promise<NextResponse> {
     try {
       const context = getRequestContext()
       env = (context.env as Record<string, unknown>) || {}
-    } catch (error) {
+    } catch (_error) {
       console.log('📝 Running in local development mode (no Cloudflare context available)')
     }
 
@@ -557,8 +557,8 @@ async function handleGetDatabases(request: NextRequest): Promise<NextResponse> {
   }
 }
 
-export async function GET(request: NextRequest) {
-  return await handleGetDatabases(request)
+export async function GET(_request: NextRequest) {
+  return await handleGetDatabases(_request)
 }
 
 // Note: Edge runtime temporarily disabled for OpenNext compatibility

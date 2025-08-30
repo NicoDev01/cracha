@@ -2,100 +2,72 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUser } from '@/lib/supabase/server'
 import { getRequestContext } from '@cloudflare/next-on-pages'
 
-// Cloudflare Workers environment interface
+// CRITICAL: Enable Edge Runtime for Cloudflare Workers compatibility
+// Temporarily disabled for OpenNext build compatibility
+// TODO: Re-enable after OpenNext fixes edge runtime bundling
+// export const runtime = 'edge'
+export const dynamic = 'force-dynamic'
+
+// NOTE: Even without explicit edge runtime, this will run on Cloudflare Workers
+// because OpenNext automatically optimizes for the target platform
+
 interface CloudflareEnv {
   DATABASE_REGISTRY: KVNamespace
 }
 
-/**
- * Create a fallback user for development when Supabase is not configured
- */
-function createFallbackUser() {
-  return {
-    id: 'dev-user-' + Math.random().toString(36).substr(2, 9),
-    email: 'dev@example.com'
-  }
+interface DatabaseItem {
+  id: string
+  name: string
+  description: string
+  document_count: number
+  chunks_count: number
+  pages_count: number
+  created_at: string
+  updated_at: string
+  last_crawl: string | null
+  source_url: string
+  url: string
+  status: string
 }
 
-/**
- * Get authenticated user with fallback for development
- */
+interface DatabaseResponse {
+  success: boolean
+  databases: DatabaseItem[]
+  count: number
+  user_id: string
+  method: string
+  note?: string
+}
+
 async function getAuthenticatedUserWithFallback() {
   try {
     const user = await getAuthenticatedUser()
-    
     if (user) {
-      return {
-        id: user.id,
-        email: user.email || ''
-      }
+      return { id: user.id, email: user.email || '' }
     }
     
-    // Check if Supabase is configured
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const isSupabaseConfigured = supabaseUrl && !supabaseUrl.includes('placeholder')
-    
-    // In development mode with no Supabase config, provide fallback
-    if (process.env.NODE_ENV === 'development' && !isSupabaseConfigured) {
-      console.warn('🔧 Development mode: Using fallback authentication')
-      return createFallbackUser()
+    // Development fallback
+    if (process.env.NODE_ENV === 'development') {
+      return {
+        id: 'dev-user-' + Math.random().toString(36).substring(2, 11),
+        email: 'dev@example.com'
+      }
     }
     
     return null
   } catch (error) {
     console.error('Authentication error:', error)
-    
-    // In development mode, provide fallback even on errors
     if (process.env.NODE_ENV === 'development') {
-      console.warn('🔧 Development mode: Using fallback authentication due to error')
-      return createFallbackUser()
+      return {
+        id: 'dev-user-fallback',
+        email: 'dev@example.com'
+      }
     }
-    
     return null
   }
 }
 
-// Simple in-memory cache to reduce KV operations
-interface CacheEntry {
-  data: unknown
-  timestamp: number
-}
-
-const cache = new Map<string, CacheEntry>()
-const CACHE_TTL = 30000 // 30 seconds cache
-
-// Helper function to get cached data
-function getCachedData(key: string): unknown | null {
-  const entry = cache.get(key)
-  if (entry && Date.now() - entry.timestamp < CACHE_TTL) {
-    return entry.data
-  }
-  cache.delete(key)
-  return null
-}
-
-// Helper function to set cached data
-function setCachedData(key: string, data: unknown): void {
-  cache.set(key, { data, timestamp: Date.now() })
-}
-
-// Helper function to get environment variables
-function getEnvVariable(key: string, env?: Record<string, unknown>): string | undefined {
-  // Try Cloudflare Workers context first (production)
-  if (env && env[key]) {
-    return env[key] as string
-  }
-  
-  // Fallback to process.env (local development)
-  if (typeof process !== 'undefined' && process.env && process.env[key]) {
-    return process.env[key]
-  }
-  
-  return undefined
-}
-
-export async function GET(request: NextRequest): Promise<NextResponse> {
-  // 🔐 SECURITY: Authenticate user first
+export async function GET(_request: NextRequest): Promise<NextResponse> {
   const user = await getAuthenticatedUserWithFallback()
   
   if (!user) {
@@ -106,117 +78,67 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
   
   const userId = user.id
-  console.log(`📊 Loading databases for authenticated user: ${userId}`)
+  console.log(`📊 Loading databases for user: ${userId}`)
 
   try {
     // Get Cloudflare Workers environment context
-    let env: CloudflareEnv | undefined
     let kv: KVNamespace | undefined
     
     try {
       const context = getRequestContext()
-      env = context.env as CloudflareEnv
+      const env = context.env as CloudflareEnv
       kv = env?.DATABASE_REGISTRY
-      console.log('🔧 Cloudflare Workers context available:', !!env)
-      console.log('🔧 KV binding available:', !!kv)
-      console.log('🔧 KV binding type:', typeof kv)
-      console.log('🔧 Environment keys:', env ? Object.keys(env) : 'no env')
-      console.log('🔧 DATABASE_REGISTRY in env:', 'DATABASE_REGISTRY' in (env || {}))
-    } catch (error) {
-      console.log('📝 Error getting Cloudflare context:', error)
-      console.log('📝 Error type:', error instanceof Error ? error.constructor.name : typeof error)
-      console.log('📝 Error message:', error instanceof Error ? error.message : String(error))
+    } catch (_error) {
+      console.log('📝 Local development mode: No KV binding available')
     }
 
-    // Check cache first to reduce KV operations
-    const cacheKey = `databases:${userId}`
-    const cachedData = getCachedData(cacheKey)
-    if (cachedData) {
-      console.log(`⚡ Returning cached data for user: ${userId}`)
-      return NextResponse.json({
-        ...cachedData,
-        note: 'Cached data - refreshes every 30 seconds'
-      })
-    }
-
-    // If we have KV binding, use it directly (Cloudflare Workers)
+    // If we have KV binding, use it directly
     if (kv) {
-      console.log('🔧 Using KV binding for database access')
-      
       try {
-        // Get user's database index from KV
         const userIndexKey = `user_index:${userId}`
-        console.log('🔧 Looking up user index:', userIndexKey)
-        console.log('🔧 KV methods available:', kv ? Object.getOwnPropertyNames(Object.getPrototypeOf(kv)) : 'no kv')
-        
         const userIndexData = await kv.get(userIndexKey, 'json') as { databases?: string[] } | null
-        console.log('🔧 Raw user index data:', userIndexData)
-        
         const databaseIds = userIndexData?.databases || []
-        console.log(`📊 Found ${databaseIds.length} databases for user ${userId}:`, databaseIds)
 
         if (databaseIds.length === 0) {
-          return NextResponse.json({
+          const response: DatabaseResponse = {
             success: true,
             databases: [],
             count: 0,
             user_id: userId,
             method: 'kv_binding',
             note: 'No databases found for user'
-          })
+          }
+          return NextResponse.json(response)
         }
 
-        // Load each database's details from KV
-        const databases = []
+        const databases: DatabaseItem[] = []
         for (const dbId of databaseIds) {
           try {
-            console.log(`🔧 Loading database details for: ${dbId}`)
-            const dbData = await kv.get(dbId, 'json') as {
-              id?: string;
-              name?: string;
-              description?: string;
-              document_count?: string | number;
-              created_at?: string;
-              last_crawl?: string | null;
-              source_url?: string;
-              status?: string;
-              chunks_count?: string | number;
-              pages_count?: string | number;
-            } | null
-            
+            const dbData = await kv.get(dbId, 'json') as Record<string, unknown> | null
             if (dbData) {
               databases.push({
-                id: dbData.id || dbId,
-                name: dbData.name || dbId,
-                description: dbData.description || `Crawled from ${dbData.source_url || 'unknown source'}`,
+                id: String(dbData.id || dbId),
+                name: String(dbData.name || dbId),
+                description: String(dbData.description || `Crawled from ${dbData.source_url || 'unknown source'}`),
                 document_count: parseInt(String(dbData.document_count)) || 0,
                 chunks_count: parseInt(String(dbData.chunks_count)) || 0,
                 pages_count: parseInt(String(dbData.pages_count)) || 0,
-                created_at: dbData.created_at || new Date().toISOString(),
-                updated_at: dbData.created_at || new Date().toISOString(),
-                last_crawl: dbData.last_crawl || null,
-                source_url: dbData.source_url || '',
-                url: dbData.source_url || '',
-                status: dbData.status || 'active'
+                created_at: String(dbData.created_at || new Date().toISOString()),
+                updated_at: String(dbData.created_at || new Date().toISOString()),
+                last_crawl: dbData.last_crawl ? String(dbData.last_crawl) : null,
+                source_url: String(dbData.source_url || ''),
+                url: String(dbData.source_url || ''),
+                status: String(dbData.status || 'active')
               })
-            } else {
-              console.warn(`Database ${dbId} not found in KV`)
             }
           } catch (error) {
             console.warn(`Error loading database ${dbId}:`, error)
           }
         }
 
-        // Sort by creation date (newest first)
-        databases.sort((a, b) => {
-          const dateA = new Date(a.created_at).getTime()
-          const dateB = new Date(b.created_at).getTime()
-          return dateB - dateA
-        })
+        databases.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
-        console.log(`📊 Returning ${databases.length} databases for user ${userId}`)
-
-        const responseData = {
+        const response: DatabaseResponse = {
           success: true,
           databases,
           count: databases.length,
@@ -224,10 +146,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           method: 'kv_binding'
         }
 
-        // Cache the successful response
-        setCachedData(cacheKey, responseData)
-
-        return NextResponse.json(responseData)
+        return NextResponse.json(response)
         
       } catch (kvError) {
         console.error('❌ KV operation failed:', kvError)
@@ -239,34 +158,32 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       }
     }
 
-    // Fallback: If no KV binding available, use HTTP API
-    console.log('⚠️ No KV binding available - falling back to HTTP API')
+    // HTTP API Fallback for local development
+    console.log('🔧 Using HTTP API fallback for local development')
     
     try {
-      // Use the same HTTP API logic as the admin route
-      const accountId = getEnvVariable('CLOUDFLARE_ACCOUNT_ID', env as unknown as Record<string, unknown>) || process.env.CLOUDFLARE_ACCOUNT_ID
-      const namespaceId = getEnvVariable('CLOUDFLARE_KV_NAMESPACE_ID', env as unknown as Record<string, unknown>) || process.env.CLOUDFLARE_KV_NAMESPACE_ID
-      const apiToken = getEnvVariable('CLOUDFLARE_API_TOKEN', env as unknown as Record<string, unknown>) || process.env.CLOUDFLARE_API_TOKEN
-      const apiKey = getEnvVariable('GLOBAL_API_KEY', env as unknown as Record<string, unknown>) || getEnvVariable('CLOUDFLARE_API_KEY', env as unknown as Record<string, unknown>) || process.env.GLOBAL_API_KEY || process.env.CLOUDFLARE_API_KEY
-      const email = getEnvVariable('CLOUDFLARE_EMAIL', env as unknown as Record<string, unknown>) || process.env.CLOUDFLARE_EMAIL
+      const accountId = process.env.CLOUDFLARE_ACCOUNT_ID
+      const namespaceId = process.env.CLOUDFLARE_KV_NAMESPACE_ID || process.env.DATABASE_REGISTRY_KV_ID
+      const apiToken = process.env.CLOUDFLARE_API_TOKEN || process.env.VECTORIZE_API_TOKEN
+      const apiKey = process.env.GLOBAL_API_KEY || process.env.CLOUDFLARE_API_KEY
+      const email = process.env.CLOUDFLARE_EMAIL
       
       console.log('🔧 HTTP API Fallback - Environment check:')
       console.log('  Account ID:', accountId ? 'SET' : 'MISSING')
       console.log('  Namespace ID:', namespaceId ? 'SET' : 'MISSING')
       console.log('  API Token:', apiToken ? `SET (${apiToken.substring(0, 8)}...)` : 'MISSING')
-      console.log('  API Key:', apiKey ? `SET (${apiKey.substring(0, 8)}...)` : 'MISSING')
-      console.log('  Email:', email ? 'SET' : 'MISSING')
       
       if (!accountId || !namespaceId || (!apiToken && (!apiKey || !email))) {
         console.log('⚠️ Missing environment variables for HTTP API fallback')
-        return NextResponse.json({
+        const response: DatabaseResponse = {
           success: true,
           databases: [],
           count: 0,
           user_id: userId,
-          method: 'fallback',
+          method: 'fallback_no_env',
           note: 'No KV binding and missing environment variables'
-        })
+        }
+        return NextResponse.json(response)
       }
       
       // Get user's database index from KV via HTTP API
@@ -276,13 +193,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       console.log('🔧 Using HTTP API fallback for KV access')
       console.log('🔧 User Index Key:', userIndexKey)
       
-      // Determine authentication method (same logic as admin route)
-      const useGlobalKey = !apiToken || apiToken === apiKey
+      // Determine authentication method
       const authHeaders: Record<string, string> = {
         'Content-Type': 'application/json'
       }
       
-      if (useGlobalKey && email && apiKey) {
+      if (email && apiKey) {
         console.log('🔑 HTTP API Fallback: Using Global API Key authentication')
         authHeaders['X-Auth-Email'] = email
         authHeaders['X-Auth-Key'] = apiKey
@@ -291,14 +207,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         authHeaders['Authorization'] = `Bearer ${apiToken}`
       } else {
         console.error('❌ No valid authentication method found for HTTP API fallback')
-        return NextResponse.json({
+        const response: DatabaseResponse = {
           success: true,
           databases: [],
           count: 0,
           user_id: userId,
-          method: 'fallback',
+          method: 'fallback_no_auth',
           note: 'No valid authentication method'
-        })
+        }
+        return NextResponse.json(response)
       }
       
       const kvResponse = await fetch(kvUrl, { headers: authHeaders })
@@ -307,76 +224,68 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         if (kvResponse.status === 404) {
           // User has no databases yet
           console.log(`📊 No databases found for user ${userId} (HTTP API)`)
-          return NextResponse.json({
+          const response: DatabaseResponse = {
             success: true,
             databases: [],
             count: 0,
             user_id: userId,
             method: 'http_api_fallback'
-          })
+          }
+          return NextResponse.json(response)
         }
         
         console.error(`🚫 HTTP API error: ${kvResponse.status} ${kvResponse.statusText}`)
-        return NextResponse.json({
+        const response: DatabaseResponse = {
           success: true,
           databases: [],
           count: 0,
           user_id: userId,
           method: 'http_api_fallback',
           note: `HTTP API error: ${kvResponse.status}`
-        })
+        }
+        return NextResponse.json(response)
       }
 
-      const userIndex: { databases?: string[] } = await kvResponse.json()
+      const userIndex = await kvResponse.json() as { databases?: string[] }
       const databaseIds = Array.isArray(userIndex.databases) ? userIndex.databases : []
       
       console.log(`📊 Found ${databaseIds.length} databases for user ${userId} (HTTP API):`, databaseIds)
 
       if (databaseIds.length === 0) {
-        return NextResponse.json({
+        const response: DatabaseResponse = {
           success: true,
           databases: [],
           count: 0,
           user_id: userId,
           method: 'http_api_fallback',
           note: 'No databases found for user'
-        })
+        }
+        return NextResponse.json(response)
       }
 
       // Load each database's details via HTTP API
-      const databases = []
+      const databases: DatabaseItem[] = []
       for (const dbId of databaseIds) {
         try {
           const dbUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${namespaceId}/values/${dbId}`
           const dbResponse = await fetch(dbUrl, { headers: authHeaders })
 
           if (dbResponse.ok) {
-            const dbData: {
-              id?: string;
-              name?: string;
-              description?: string;
-              document_count?: string | number;
-              created_at?: string;
-              last_crawl?: string | null;
-              source_url?: string;
-              status?: string;
-              chunks_count?: string | number;
-              pages_count?: string | number;
-            } = await dbResponse.json()
+            const dbData = await dbResponse.json() as Record<string, unknown>
             
             databases.push({
-              id: dbData.id || dbId,
-              name: dbData.name || dbId,
-              description: dbData.description || `Crawled from ${dbData.source_url || 'unknown source'}`,
+              id: String(dbData.id || dbId),
+              name: String(dbData.name || dbId),
+              description: String(dbData.description || `Crawled from ${dbData.source_url || 'unknown source'}`),
               document_count: parseInt(String(dbData.document_count)) || 0,
               chunks_count: parseInt(String(dbData.chunks_count)) || 0,
               pages_count: parseInt(String(dbData.pages_count)) || 0,
-              created_at: dbData.created_at || new Date().toISOString(),
-              updated_at: dbData.created_at || new Date().toISOString(),
-              last_crawl: dbData.last_crawl || null,
-              source_url: dbData.source_url || '',
-              url: dbData.source_url || '',
-              status: dbData.status || 'active'
+              created_at: String(dbData.created_at || new Date().toISOString()),
+              updated_at: String(dbData.created_at || new Date().toISOString()),
+              last_crawl: dbData.last_crawl ? String(dbData.last_crawl) : null,
+              source_url: String(dbData.source_url || ''),
+              url: String(dbData.source_url || ''),
+              status: String(dbData.status || 'active')
             })
           } else {
             console.warn(`Failed to load database ${dbId} via HTTP API: ${dbResponse.status}`)
@@ -387,15 +296,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       }
 
       // Sort by creation date (newest first)
-      databases.sort((a, b) => {
-        const dateA = new Date(a.created_at).getTime()
-        const dateB = new Date(b.created_at).getTime()
-        return dateB - dateA
-      })
+      databases.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
       console.log(`📊 Returning ${databases.length} databases for user ${userId} (HTTP API fallback)`)
 
-      const responseData = {
+      const response: DatabaseResponse = {
         success: true,
         databases,
         count: databases.length,
@@ -403,21 +308,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         method: 'http_api_fallback'
       }
 
-      // Cache the successful response
-      setCachedData(cacheKey, responseData)
-
-      return NextResponse.json(responseData)
+      return NextResponse.json(response)
       
     } catch (httpError) {
       console.error('❌ HTTP API fallback failed:', httpError)
-      return NextResponse.json({
+      const response: DatabaseResponse = {
         success: true,
         databases: [],
         count: 0,
         user_id: userId,
         method: 'fallback_failed',
         note: 'Both KV binding and HTTP API fallback failed'
-      })
+      }
+      return NextResponse.json(response)
     }
 
   } catch (error) {
@@ -433,7 +336,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
-    // Inline authentication logic
     const user = await getAuthenticatedUserWithFallback()
     
     if (!user) {
@@ -447,7 +349,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const body = await request.json() as Record<string, unknown>
     
     // Validate required fields
-    if (!(body.name as string) || !(body.url as string)) {
+    if (!body.name || !body.url) {
       return NextResponse.json(
         { success: false, error: 'Missing required fields: name, url' },
         { status: 400 }
@@ -455,25 +357,24 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     // Get Cloudflare Workers environment context
-    let env: CloudflareEnv | undefined
     let kv: KVNamespace | undefined
     
     try {
       const context = getRequestContext()
-      env = context.env as CloudflareEnv
+      const env = context.env as CloudflareEnv
       kv = env?.DATABASE_REGISTRY
-    } catch (error) {
+    } catch (_error) {
       console.log('📝 Running in local development mode (no Cloudflare context available)')
     }
 
     // Create new database entry
-    const dbId = (body.name as string).toLowerCase().replace(/\s+/g, '-') + '-' + Date.now()
+    const dbId = String(body.name).toLowerCase().replace(/\s+/g, '-') + '-' + Date.now()
     const newDatabase = {
       id: dbId,
-      name: body.name as string,
-      description: (body.description as string) || `Database for ${body.url as string}`,
-      source_url: body.url as string,
-      url: body.url as string,
+      name: String(body.name),
+      description: String(body.description || `Database for ${body.url}`),
+      source_url: String(body.url),
+      url: String(body.url),
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       document_count: 0,
@@ -499,9 +400,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
       
       console.log(`✅ Database ${dbId} created successfully for user ${userId}`)
-      
-      // Clear cache for this user
-      cache.delete(`databases:${userId}`)
     } else {
       console.log('⚠️ No KV binding available - database creation skipped')
     }

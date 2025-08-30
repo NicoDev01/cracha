@@ -31,7 +31,7 @@ export async function loginAction(formData: FormData) {
   }
 
   const supabase = await createClient()
-  
+
   const { error } = await supabase.auth.signInWithPassword({
     email: validatedData.data.email,
     password: validatedData.data.password
@@ -62,7 +62,7 @@ export async function signupAction(formData: FormData) {
   }
 
   const supabase = await createClient()
-  
+
   const { error } = await supabase.auth.signUp({
     email: validatedData.data.email,
     password: validatedData.data.password,
@@ -88,9 +88,9 @@ export async function signupAction(formData: FormData) {
 
 export async function signOutAction() {
   const supabase = await createClient()
-  
+
   const { error } = await supabase.auth.signOut()
-  
+
   if (error) {
     return {
       error: error.message

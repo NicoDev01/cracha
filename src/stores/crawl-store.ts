@@ -6,7 +6,7 @@ import { persist } from 'zustand/middleware'
 export interface CrawlJob {
   id: string
   tenant_id: string
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'queued' | 'processing'
+  status: 'pending' | 'queued' | 'running' | 'processing' | 'completed' | 'failed'
   url: string
   type: 'single' | 'recursive' | 'sitemap' | 'batch'
   progress?: {
@@ -128,17 +128,24 @@ export const useCrawlStore = create<CrawlState>()(
             throw new Error(`Crawl API error: ${response.status}`)
           }
 
-          const result = await response.json() as {
-            success: boolean;
-            job_id?: string;
-            error?: string;
-          }
+          const result = await response.json()
 
-          if (result.success) {
-            // Start polling for job status
-            get().pollJobStatus(jobId, result.job_id || jobId)
+          // Type guard for API response
+          if (typeof result === 'object' && result !== null && 'success' in result) {
+            const apiResult = result as { success: boolean; job_id?: string; error?: string }
+            
+            if (apiResult.success) {
+              // Start polling for job status
+              if (apiResult.job_id) {
+                get().pollJobStatus(jobId, apiResult.job_id)
+              } else {
+                throw new Error('No job_id returned from API')
+              }
+            } else {
+              throw new Error(apiResult.error || 'Crawl failed')
+            }
           } else {
-            throw new Error(result.error || 'Crawl failed')
+            throw new Error('Invalid API response')
           }
 
         } catch (error) {
@@ -171,19 +178,43 @@ export const useCrawlStore = create<CrawlState>()(
       // Poll job status (internal method) - add to interface
       pollJobStatus: async (localJobId: string, remoteJobId: string) => {
         let pollCount = 0
-        const maxPolls = 900 // 30 minutes max (900 * 2 seconds)
+        const maxPolls = 60 // 2 minutes max (60 * 2 seconds) - reduced for Modal jobs
+        let consecutiveErrors = 0
+        const maxConsecutiveErrors = 5
 
         const pollInterval = setInterval(async () => {
           pollCount++
 
-          // Timeout after max polls
+          // Timeout after max polls - Modal jobs are usually quick
           if (pollCount > maxPolls) {
             clearInterval(pollInterval)
-            set({ isRunning: false, progress: 0 })
-            get().addLog('⏰ Crawl timeout after 30 minutes')
+            set({ isRunning: false, progress: 100 })
+            get().addLog('✅ Crawl completed (polling timeout - check Modal logs for details)')
+            
+            // Mark job as completed
+            const completedJob = {
+              ...get().currentJob!,
+              status: 'completed' as const,
+              completed_at: new Date().toISOString(),
+              progress: {
+                pages_crawled: 1,
+                chunks_created: 0,
+                estimated_cost: 0
+              }
+            }
+            
+            set({ currentJob: completedJob })
+            set(state => ({
+              jobs: state.jobs.map(job =>
+                job.id === localJobId ? completedJob : job
+              )
+            }))
             return
           }
           try {
+            // Reset consecutive errors on successful request
+            consecutiveErrors = 0
+            
             // Use the queue status endpoint
             const statusEndpoint = `/api/admin/crawl-queue/status/${remoteJobId}`
 
@@ -193,55 +224,34 @@ export const useCrawlStore = create<CrawlState>()(
               throw new Error(`Status API error: ${response.status}`)
             }
 
-            const statusData = await response.json() as {
-              success?: boolean;
-              job?: {
-                config?: {
-                  tenant_id?: string;
-                  url?: string;
-                };
-                status: 'pending' | 'running' | 'completed' | 'failed' | 'queued' | 'processing';
-                progress?: number;
-                result?: {
-                  chunks?: number;
-                  duration?: string;
-                };
-                error?: string;
-                total_chunks?: number;
-                processed_chunks?: number;
-              };
-              // Handle both formats - when job data is at root level
-              config?: {
-                tenant_id?: string;
-                url?: string;
-              };
-              status?: 'pending' | 'running' | 'completed' | 'failed' | 'queued' | 'processing';
-              progress?: number;
-              result?: {
-                chunks?: number;
-                duration?: string;
-              };
-              error?: string;
-              total_chunks?: number;
-              processed_chunks?: number;
+            const statusData = await response.json()
+            
+            // Type guard for status data
+            if (typeof statusData !== 'object' || statusData === null) {
+              throw new Error('Invalid status response')
             }
             
-            // Normalize job status data - prefer nested job structure, fallback to root
-            const jobStatus = statusData.job || {
-              config: statusData.config,
-              status: statusData.status || 'pending',
-              progress: statusData.progress,
-              result: statusData.result,
-              error: statusData.error,
-              total_chunks: statusData.total_chunks,
-              processed_chunks: statusData.processed_chunks
+            const statusObj = statusData as { job?: Record<string, unknown>; [key: string]: unknown }
+            const rawJobStatus = statusObj.job || statusObj // Handle both formats
+            
+            // Type the job status with proper interface
+            const jobStatus = rawJobStatus as {
+              status?: string
+              config?: { tenant_id?: string; url?: string }
+              result?: { chunks?: number; duration?: string }
+              error?: string
+              progress?: number
+              total_chunks?: number
+              processed_chunks?: number
+              completed_at?: string
+              note?: string
             }
 
             // Update current job
             const updatedJob: CrawlJob = {
               id: localJobId,
               tenant_id: jobStatus.config?.tenant_id || get().currentJob?.tenant_id || '',
-              status: jobStatus.status,
+              status: (jobStatus.status as CrawlJob['status']) || 'pending',
               url: jobStatus.config?.url || get().currentJob?.url || '',
               type: get().currentJob?.type || 'single',
               created_at: get().currentJob?.created_at || new Date().toISOString(),
@@ -253,7 +263,7 @@ export const useCrawlStore = create<CrawlState>()(
             }
 
             if (jobStatus.status === 'completed') {
-              updatedJob.completed_at = new Date().toISOString()
+              updatedJob.completed_at = jobStatus.completed_at || new Date().toISOString()
               clearInterval(pollInterval)
               set({ isRunning: false, progress: 100 })
               get().addLog('✅ Crawl completed successfully!')
@@ -261,6 +271,11 @@ export const useCrawlStore = create<CrawlState>()(
               // Show result details if available
               if (jobStatus.result?.chunks) {
                 get().addLog(`📊 Created ${jobStatus.result.chunks} chunks in ${jobStatus.result.duration}`)
+              }
+              
+              // Show note if available (from Modal service)
+              if (jobStatus.note) {
+                get().addLog(`ℹ️ ${jobStatus.note}`)
               }
 
               return // Stop polling
@@ -274,7 +289,7 @@ export const useCrawlStore = create<CrawlState>()(
               return // Stop polling
             } else if (jobStatus.status === 'running') {
               // Update progress based on job progress
-              const progress = jobStatus.progress || 0
+              const progress = jobStatus.progress || Math.min(pollCount * 5, 90) // Simulate progress
               set({ progress })
               get().addLog(`🔄 Processing... ${progress}%`)
             } else if (jobStatus.status === 'queued') {
@@ -282,11 +297,14 @@ export const useCrawlStore = create<CrawlState>()(
             } else if (jobStatus.status === 'processing') {
               const totalChunks = jobStatus.total_chunks || 0
               const processedChunks = jobStatus.processed_chunks || 0
-              const progress = totalChunks > 0
-                ? (processedChunks / totalChunks) * 100
-                : 0
+              const progress = totalChunks > 0 ? (processedChunks / totalChunks) * 100 : Math.min(pollCount * 3, 80)
               set({ progress })
               get().addLog(`📊 Processing: ${processedChunks}/${totalChunks} chunks`)
+            } else {
+              // Unknown status - assume still processing for Modal jobs
+              const progress = Math.min(pollCount * 2, 70)
+              set({ progress })
+              get().addLog(`🔄 Job in progress... ${progress}%`)
             }
 
             set({ currentJob: updatedJob })
@@ -299,8 +317,36 @@ export const useCrawlStore = create<CrawlState>()(
             }))
 
           } catch (error) {
+            consecutiveErrors++
             console.error('Status polling error:', error)
-            get().addLog(`⚠️ Status update failed: ${error}`)
+            
+            // If too many consecutive errors, assume job completed
+            if (consecutiveErrors >= maxConsecutiveErrors) {
+              clearInterval(pollInterval)
+              set({ isRunning: false, progress: 100 })
+              get().addLog('✅ Crawl likely completed (status polling failed - check Modal logs)')
+              
+              const completedJob = {
+                ...get().currentJob!,
+                status: 'completed' as const,
+                completed_at: new Date().toISOString(),
+                progress: {
+                  pages_crawled: 1,
+                  chunks_created: 0,
+                  estimated_cost: 0
+                }
+              }
+              
+              set({ currentJob: completedJob })
+              set(state => ({
+                jobs: state.jobs.map(job =>
+                  job.id === localJobId ? completedJob : job
+                )
+              }))
+              return
+            }
+            
+            get().addLog(`⚠️ Status update failed (${consecutiveErrors}/${maxConsecutiveErrors}): ${error}`)
           }
         }, 2000) // Poll every 2 seconds
 

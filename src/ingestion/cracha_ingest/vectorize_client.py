@@ -50,6 +50,7 @@ class VectorizeClient:
         else:
             raise ValueError("VECTORIZE_API_TOKEN or GLOBAL_API_KEY environment variable required")
         
+        # Use v2 API (required for existing v2 indexes)
         self.base_url = f"https://api.cloudflare.com/client/v4/accounts/{self.account_id}/vectorize/v2/indexes"
         
         # Statistiken

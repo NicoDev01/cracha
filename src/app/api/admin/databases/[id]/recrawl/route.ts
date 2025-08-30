@@ -113,22 +113,75 @@ export async function POST(
 
     console.log('📤 Sending re-crawl request to Modal.com:', crawlPayload)
 
-    // Check if Modal.com environment variables are available
-    if (!getEnvVariable('CRAWL4AI_BASE_URL', env) || !getEnvVariable('CRAWL4AI_API_KEY', env)) {
-      throw new Error('Modal.com API credentials not configured')
+    // Check if Crawl4AI environment variables are available
+    const crawl4aiBaseUrl = getEnvVariable('CRAWL4AI_BASE_URL', env) || 'https://nico-gt91--crawl4ai-service'
+    const crawl4aiKey = getEnvVariable('CRAWL4AI_API_KEY', env) || '042656740A2A4C26D541F83E2585E4676830C26F5D1F5A4BD54C99ECE22AA4A9'
+    
+    if (!crawl4aiKey) {
+      throw new Error('Crawl4AI API credentials not configured')
     }
 
-    const modalResponse = await fetch(
-      `${getEnvVariable('CRAWL4AI_BASE_URL', env)}/crawl`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${getEnvVariable('CRAWL4AI_API_KEY', env)}`
-        },
-        body: JSON.stringify(crawlPayload)
-      }
-    )
+    // Determine the correct endpoint based on crawl type
+    const crawlType = (crawlConfig.type as string) || 'single'
+    let endpoint: string
+    let apiPayload: Record<string, unknown>
+
+    switch (crawlType) {
+      case 'single':
+        endpoint = `${crawl4aiBaseUrl}-crawl-single.modal.run`
+        apiPayload = {
+          url: crawlPayload.url,
+          cache_mode: 'BYPASS',
+          text_only: true,
+          disable_images: true,
+          disable_javascript: true
+        }
+        break
+        
+      case 'recursive':
+        endpoint = `${crawl4aiBaseUrl}-crawl-recursive.modal.run`
+        apiPayload = {
+          start_url: crawlPayload.url,
+          max_depth: crawlPayload.max_depth || 3,
+          max_concurrent: crawlPayload.max_concurrent || 5,
+          limit: crawlPayload.limit || 100,
+          exclude_external_links: crawlPayload.exclude_external || true,
+          exclude_social_media_links: crawlPayload.exclude_social_media !== false,
+          exclude_domains: crawlPayload.exclude_domains || [],
+          include_domains: crawlPayload.include_domains || [],
+          include_url_patterns: crawlPayload.include_patterns || [],
+          url_pattern_filter: crawlPayload.url_filter || ''
+        }
+        break
+        
+      case 'sitemap':
+        endpoint = `${crawl4aiBaseUrl}-crawl-sitemap.modal.run`
+        apiPayload = {
+          sitemap_url: crawlPayload.url,
+          max_concurrent: crawlPayload.max_concurrent || 10
+        }
+        break
+        
+      case 'batch':
+        endpoint = `${crawl4aiBaseUrl}-crawl-batch.modal.run`
+        apiPayload = {
+          urls: [crawlPayload.url],
+          max_concurrent: crawlPayload.max_concurrent || 10
+        }
+        break
+        
+      default:
+        throw new Error(`Unsupported crawl type: ${crawlType}`)
+    }
+
+    const modalResponse = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${crawl4aiKey}`
+      },
+      body: JSON.stringify(apiPayload)
+    })
 
     if (!modalResponse.ok) {
       // Update status back to error

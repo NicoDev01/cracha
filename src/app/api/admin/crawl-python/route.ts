@@ -5,7 +5,7 @@ import path from 'path'
 export async function POST(request: NextRequest) {
   try {
     const config = await request.json() as CrawlConfig
-    
+
     // Validate required fields
     if (!config.url || !config.tenant_id || !config.user_id) {
       return NextResponse.json(
@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
 
     // Build Python command arguments
     const args = buildPythonArgs(config)
-    
+
     // Execute Python script via venv
     const result = await executePythonScript(args)
 
@@ -36,8 +36,8 @@ export async function POST(request: NextRequest) {
         completed_at: Date.now()
       }
 
-      return NextResponse.json({ 
-        success: true, 
+      return NextResponse.json({
+        success: true,
         message: 'Python crawl completed successfully',
         job_id: jobInfo.job_id,
         job: jobInfo,
@@ -45,8 +45,8 @@ export async function POST(request: NextRequest) {
         duration: result.duration
       })
     } else {
-      return NextResponse.json({ 
-        success: false, 
+      return NextResponse.json({
+        success: false,
         error: result.error,
         output: result.output,
         duration: result.duration
@@ -55,8 +55,8 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Python Crawl API Error:', error)
-    return NextResponse.json({ 
-      success: false, 
+    return NextResponse.json({
+      success: false,
       error: 'Internal server error',
       details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 })
@@ -108,26 +108,26 @@ function buildPythonArgs(config: CrawlConfig): string[] {
 
   // Add array parameters
   if (config.include_patterns?.length) {
-    const patterns = Array.isArray(config.include_patterns) 
-      ? config.include_patterns 
+    const patterns = Array.isArray(config.include_patterns)
+      ? config.include_patterns
       : config.include_patterns.split('\n').filter((p: string) => p.trim())
     args.push('--include-patterns', ...patterns)
   }
-  
+
   if (config.exclude_domains?.length) {
-    const domains = Array.isArray(config.exclude_domains) 
-      ? config.exclude_domains 
+    const domains = Array.isArray(config.exclude_domains)
+      ? config.exclude_domains
       : config.exclude_domains.split('\n').filter((d: string) => d.trim())
     args.push('--exclude-domains', ...domains)
   }
-  
+
   if (config.include_domains?.length) {
-    const domains = Array.isArray(config.include_domains) 
-      ? config.include_domains 
+    const domains = Array.isArray(config.include_domains)
+      ? config.include_domains
       : config.include_domains.split(' ').filter((d: string) => d.trim())
     args.push('--include-domains', ...domains)
   }
-  
+
   if (config.url_filter) {
     args.push('--url-filter', config.url_filter)
   }
@@ -143,11 +143,11 @@ async function executePythonScript(args: string[]): Promise<{
 }> {
   return new Promise((resolve) => {
     const startTime = Date.now()
-    
+
     // Path to Python venv and script (use ASCII version for Windows compatibility)
     const pythonPath = path.join(process.cwd(), 'python', 'venv', 'Scripts', 'python.exe')
     const scriptPath = path.join(process.cwd(), 'python', 'main_ascii.py')
-    
+
     console.log('🐍 Python path:', pythonPath)
     console.log('📄 Script path:', scriptPath)
     console.log('🔧 Args:', args)
@@ -183,7 +183,7 @@ async function executePythonScript(args: string[]): Promise<{
     child.on('close', (code) => {
       const duration = `${Date.now() - startTime}ms`
       console.log(`🐍 Python process finished with code: ${code}`)
-      
+
       if (code === 0) {
         resolve({
           success: true,
@@ -228,7 +228,7 @@ function extractNumberFromOutput(output: string, type: 'chunks' | 'pages'): numb
     chunks: /Created (\d+) chunks/i,
     pages: /Pages Processed: (\d+)/i
   }
-  
+
   const match = output.match(patterns[type])
   return match ? parseInt(match[1], 10) : 0
 }

@@ -89,15 +89,21 @@ export function CrawlConfigForm() {
   }, [watchedValues])
 
   const onSubmit = async (values: CrawlConfig) => {
+    // Require authentication - no fallback user ID
     if (!user?.id) {
-      console.error("User not authenticated")
+      console.error("❌ Authentication required for crawling")
+      // You could add a toast notification here
+      alert("Bitte melden Sie sich an, um einen Crawl zu starten.")
       return
     }
+    
+    console.log('🚀 Starting crawl with authenticated user_id:', user.id)
+    console.log('🏢 Tenant ID:', values.tenant_id)
 
     try {
       await startCrawl({
         ...values,
-        user_id: user.id, // Automatisch hinzugefügt
+        user_id: user.id, // Only authenticated user ID
         // Automatische Hintergrund-Parameter (Phase 6 - task-frontend-erstellung2.md)
         max_concurrent: 5,           // Optimale Parallelität
         force: true,                // Keine Cost-Confirmation

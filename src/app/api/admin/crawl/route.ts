@@ -1,12 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ServerCrawlServiceFactory } from '@/lib/ingestion/server-crawl-service-factory'
 
+interface CrawlConfig {
+  url: string
+  tenant_id: string
+  user_id: string
+  include_patterns?: string
+  exclude_domains?: string
+  include_domains?: string
+  type?: 'single' | 'recursive' | 'sitemap' | 'batch'
+  embedding_model?: string
+  max_concurrent?: number
+  cleanup?: boolean
+  exclude_social_media?: boolean
+  [key: string]: unknown
+}
+
+function isValidCrawlConfig(obj: unknown): obj is CrawlConfig {
+  return (
+    typeof obj === 'object' &&
+    obj !== null &&
+    'url' in obj &&
+    'tenant_id' in obj &&
+    'user_id' in obj &&
+    typeof (obj as Record<string, unknown>).url === 'string' &&
+    typeof (obj as Record<string, unknown>).tenant_id === 'string' &&
+    typeof (obj as Record<string, unknown>).user_id === 'string'
+  )
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const config = await request.json() as Record<string, unknown>
+    const config = await request.json()
     
-    // Validate required fields
-    if (!config.url || !config.tenant_id || !config.user_id) {
+    // Validate and type check the config
+    if (!isValidCrawlConfig(config)) {
       return NextResponse.json(
         { success: false, error: 'Missing required fields: url, tenant_id, user_id' },
         { status: 400 }
@@ -17,14 +45,14 @@ export async function POST(request: NextRequest) {
     const processedConfig = {
       ...config,
       include_patterns: config.include_patterns ? 
-        String(config.include_patterns).split('\n').filter((p: string) => p.trim()) : undefined,
+        config.include_patterns.split('\n').filter((p: string) => p.trim()) : undefined,
       exclude_domains: config.exclude_domains ? 
-        String(config.exclude_domains).split('\n').filter((d: string) => d.trim()) : undefined,
+        config.exclude_domains.split('\n').filter((d: string) => d.trim()) : undefined,
       include_domains: config.include_domains ? 
-        String(config.include_domains).split(' ').filter((d: string) => d.trim()) : undefined,
+        config.include_domains.split(' ').filter((d: string) => d.trim()) : undefined,
       
       // Set defaults
-      type: config.type || 'single',
+      type: (config.type as 'single' | 'recursive' | 'sitemap' | 'batch') || 'single',
       embedding_model: config.embedding_model || 'gemini-768',
       force: true, // Skip cost confirmation in API mode
       max_concurrent: config.max_concurrent || 5,
@@ -38,12 +66,11 @@ export async function POST(request: NextRequest) {
     const crawlServiceFactory = ServerCrawlServiceFactory.getInstance()
     console.log(`🔧 Using service: ${crawlServiceFactory.getServiceType()}`)
     
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = await crawlServiceFactory.executeCrawl(processedConfig as any)
+    const result = await crawlServiceFactory.executeCrawl(processedConfig)
 
     if (result.success) {
       // Check if this is an async job (Cloudflare Worker)
-      const asyncResult = await handleAsyncJob(result, config as { tenant_id: string; url: string })
+      const asyncResult = await handleAsyncJob(result, config)
       if (asyncResult) {
         return NextResponse.json(asyncResult)
       }
@@ -88,7 +115,7 @@ export async function POST(request: NextRequest) {
 }
 
 // Helper function to handle job status for async services
-async function handleAsyncJob(result: { success: boolean; status?: string; job_id?: string; message?: string }, config: { tenant_id: string; url: string }) {
+async function handleAsyncJob(result: { success: boolean; status?: string; job_id?: string; message?: string }, config: CrawlConfig) {
   if (result.status === 'pending' || result.status === 'running') {
     // For async services, return job info immediately
     const jobInfo = {

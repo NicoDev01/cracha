@@ -21,6 +21,11 @@ async function loadCloudflareWorkerService() {
   return CloudflareWorkerService.getInstance()
 }
 
+async function loadModalService() {
+  const { ModalCrawlService } = await import('./modal-crawl-service')
+  return ModalCrawlService.getInstance()
+}
+
 async function loadSimpleCrawlService() {
   const { SimpleCrawlService } = await import('./simple-crawl-service')
   return SimpleCrawlService.getInstance()
@@ -50,12 +55,14 @@ export class CrawlServiceFactory {
   private async createService(): Promise<ICrawlService> {
     // Check environment variables to determine which service to use
     const useMock = process.env.USE_MOCK_CRAWL === 'true'
+    const useModal = process.env.USE_MODAL_CRAWL === 'true'
     const useCloudflareWorker = process.env.USE_CLOUDFLARE_WORKER === 'true'
     const usePythonVenv = process.env.USE_PYTHON_VENV === 'true'
     const useQueue = process.env.USE_QUEUE_CRAWL === 'true'
 
     console.log('🔧 Crawl Service Configuration:')
     console.log(`  USE_MOCK_CRAWL: ${useMock}`)
+    console.log(`  USE_MODAL_CRAWL: ${useModal}`)
     console.log(`  USE_QUEUE_CRAWL: ${useQueue}`)
     console.log(`  USE_PYTHON_VENV: ${usePythonVenv}`)
     console.log(`  USE_CLOUDFLARE_WORKER: ${useCloudflareWorker}`)
@@ -63,6 +70,11 @@ export class CrawlServiceFactory {
     if (useMock) {
       console.log('📝 Using Mock Crawl Service for UI testing')
       return await loadMockService()
+    }
+
+    if (useModal) {
+      console.log('🚀 Using Modal.com Ingestion Service (production)')
+      return await loadModalService()
     }
 
     if (useQueue) {
@@ -116,11 +128,13 @@ export class CrawlServiceFactory {
   // Get service type for UI display
   getServiceType(): string {
     const useMock = process.env.USE_MOCK_CRAWL === 'true'
+    const useModal = process.env.USE_MODAL_CRAWL === 'true'
     const useCloudflareWorker = process.env.USE_CLOUDFLARE_WORKER === 'true'
     const usePythonVenv = process.env.USE_PYTHON_VENV === 'true'
     const useQueue = process.env.USE_QUEUE_CRAWL === 'true'
 
     if (useMock) return 'Mock Service'
+    if (useModal) return 'Modal.com Ingestion Service'
     if (useQueue) return 'Simple Job Queue (production)'
     if (usePythonVenv) return 'Python venv (integrated)'
     if (useCloudflareWorker) return 'Cloudflare Worker → Modal.com'
