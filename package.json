@@ -13,6 +13,7 @@
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
   },
   "dependencies": {
+    "@ai-sdk/gateway": "^1.0.7",
     "@ai-sdk/react": "^2.0.15",
     "@cloudflare/next-on-pages": "^1.13.14",
     "@hookform/resolvers": "^5.2.1",
