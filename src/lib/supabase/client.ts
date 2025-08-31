@@ -32,7 +32,69 @@ export function createClient() {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
-      detectSessionInUrl: true
+      detectSessionInUrl: true,
+      // PKCE Konfiguration für Cloudflare Workers
+      flowType: 'pkce',
+      // Cookie-Konfiguration für Cross-Origin
+      storage: {
+        getItem: (key: string) => {
+          if (typeof window !== 'undefined') {
+            return window.localStorage.getItem(key)
+          }
+          return null
+        },
+        setItem: (key: string, value: string) => {
+          if (typeof window !== 'undefined') {
+            window.localStorage.setItem(key, value)
+          }
+        },
+        removeItem: (key: string) => {
+          if (typeof window !== 'undefined') {
+            window.localStorage.removeItem(key)
+          }
+        }
+      }
+    },
+    // Cloudflare Workers Cookie-Konfiguration
+    cookies: {
+      get: (name: string) => {
+        if (typeof document !== 'undefined') {
+          const value = document.cookie
+            .split('; ')
+            .find(row => row.startsWith(`${name}=`))
+            ?.split('=')[1]
+          return value || null
+        }
+        return null
+      },
+      set: (name: string, value: string, options: Record<string, unknown> = {}) => {
+        if (typeof document !== 'undefined') {
+          let cookieString = `${name}=${value}`
+          
+          // Cloudflare Workers optimierte Cookie-Optionen
+          const cookieOptions = {
+            path: '/',
+            secure: window.location.protocol === 'https:',
+            sameSite: 'lax', // Weniger restriktiv als 'none'
+            ...options
+          }
+          
+          Object.entries(cookieOptions).forEach(([key, val]) => {
+            if (val !== undefined && val !== null) {
+              cookieString += `; ${key}=${val}`
+            }
+          })
+          
+          document.cookie = cookieString
+          console.log('🍪 Cookie set for Workers:', name, cookieOptions)
+        }
+      },
+      remove: (name: string, _options: Record<string, unknown> = {}) => {
+        if (typeof document !== 'undefined') {
+          document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`
+          console.log('🗑️ Cookie removed:', name)
+        }
+      }
     }
   })
 }

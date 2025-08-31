@@ -235,6 +235,16 @@ export const useAuthStore = create<AuthState>()(
         try {
           console.log('🔄 Starting Google OAuth flow...')
 
+          // Clear any existing problematic cookies before starting
+          document.cookie.split(";").forEach(cookie => {
+            const eqPos = cookie.indexOf("=");
+            const name = eqPos > -1 ? cookie.substr(0, eqPos).trim() : cookie.trim();
+            if (name.includes('auth-token-code-verifier')) {
+              document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
+              console.log('🧹 Cleared old code verifier cookie:', name);
+            }
+          });
+
           // Determine correct redirect URL based on environment
           const currentOrigin = window.location.origin
           const isWranglerDev = currentOrigin.includes('localhost:8787')
@@ -261,6 +271,7 @@ export const useAuthStore = create<AuthState>()(
             port: window.location.port 
           })
 
+          // Cloudflare Workers PKCE-optimierte Konfiguration
           const { data, error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: {
@@ -268,16 +279,30 @@ export const useAuthStore = create<AuthState>()(
               queryParams: {
                 access_type: 'offline',
                 prompt: 'consent',
+                // Cloudflare Workers spezifische Parameter
+                response_type: 'code'
               },
-              // Für Wrangler Dev: Skippt HTTPS-Validierung
-              ...(isWranglerDev && {
-                skipBrowserRedirect: false
-              })
+              // Optimiert für serverless/edge Umgebungen
+              skipBrowserRedirect: false,
+              scopes: 'openid email profile'
             }
           })
 
           if (error) {
-            console.error('❌ Google OAuth error:', error)
+            console.error('❌ Google OAuth initiation error:', error)
+            
+            // Spezielle Behandlung für Workers-spezifische Fehler
+            if (error.message.includes('code verifier') || error.message.includes('PKCE')) {
+              set({ 
+                error: 'Google OAuth Fehler. Dies kann beim ersten Versuch passieren - bitte versuche es erneut.',
+                isLoading: false 
+              })
+            } else {
+              set({ 
+                error: error.message || 'Google Anmeldung fehlgeschlagen',
+                isLoading: false 
+              })
+            }
             throw error
           }
 

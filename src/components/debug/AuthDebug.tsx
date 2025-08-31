@@ -88,7 +88,7 @@ export function AuthDebug() {
     setIsLoading(false)
   }
 
-  const testCallbackRoute = async () => {
+  const _testCallbackRoute = async () => {
     setIsLoading(true)
     addLog('🔄 Testing callback route...')
     

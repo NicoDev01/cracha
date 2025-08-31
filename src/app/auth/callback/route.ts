@@ -55,10 +55,70 @@ export async function GET(request: NextRequest) {
     } else if (code) {
       // Handle OAuth code flow directly (Google, etc.)
       console.log('🔍 Processing OAuth code flow')
+      console.log('🔍 Request cookies:', request.headers.get('cookie'))
+      
+      // Debug PKCE code verifier
+      const cookies = request.headers.get('cookie') || ''
+      const codeVerifierMatch = cookies.match(/sb-[^-]+-auth-token-code-verifier=([^;]+)/)
+      const codeVerifier = codeVerifierMatch ? codeVerifierMatch[1] : null
+      
+      console.log('🔍 PKCE Code Verifier found:', codeVerifier ? 'Yes' : 'No')
+      console.log('🔍 Auth Code length:', code.length)
+      
       authResult = await supabase.auth.exchangeCodeForSession(code)
       
       if (authResult.error) {
         console.error('❌ OAuth error:', authResult.error)
+        
+        // Special handling for PKCE errors (Cloudflare Workers specific)
+        if (authResult.error.message.includes('code verifier') || 
+            authResult.error.message.includes('invalid request') ||
+            authResult.error.message.includes('both auth code and code verifier')) {
+          
+          console.log('🔄 PKCE error detected - Cloudflare Workers cookie issue')
+          console.log('🔍 Error details:', authResult.error.message)
+          
+          // Attempt immediate retry with session cleanup
+          try {
+            console.log('🔄 Attempting PKCE retry with fresh session...')
+            
+            // Create fresh Supabase client
+            const freshSupabase = await createClient()
+            
+            // Try exchangeCodeForSession again with fresh client
+            const retryResult = await freshSupabase.auth.exchangeCodeForSession(code)
+            
+            if (!retryResult.error && retryResult.data.session) {
+              console.log('✅ PKCE retry successful!')
+              return NextResponse.redirect(`${origin}${next}`)
+            }
+          } catch (retryError) {
+            console.log('❌ PKCE retry failed:', retryError)
+          }
+          
+          // If retry fails, redirect to login with helpful message
+          const response = NextResponse.redirect(`${origin}/login?retry=pkce&message=${encodeURIComponent('Google OAuth Fehler. Bitte versuche es erneut - dies passiert manchmal beim ersten Versuch.')}`)
+          
+          // Clear all auth-related cookies
+          const cookiesToClear = [
+            'sb-ncfrgsqfnccjfyezxjsj-auth-token-code-verifier',
+            'sb-placeholder-auth-token-code-verifier',
+            'sb-ncfrgsqfnccjfyezxjsj-auth-token',
+            'supabase-auth-token'
+          ]
+          
+          cookiesToClear.forEach(cookieName => {
+            response.cookies.set(cookieName, '', { 
+              expires: new Date(0), 
+              path: '/',
+              secure: true,
+              sameSite: 'lax'
+            })
+          })
+          
+          return response
+        }
+        
         return NextResponse.redirect(`${origin}/auth/auth-code-error?error=auth_failed&message=${encodeURIComponent(authResult.error.message)}`)
       }
 
