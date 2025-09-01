@@ -35,7 +35,7 @@ export interface CrawlResult {
 export interface CrawlStatus {
   success: boolean
   job_id: string
-  status: 'pending' | 'queued' | 'running' | 'processing' | 'completed' | 'failed'
+  status: 'pending' | 'running' | 'completed' | 'failed'
   progress?: number
   created_at?: string
   updated_at?: string

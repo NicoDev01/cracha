@@ -4,7 +4,7 @@ import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
-function CallbackUIContent() {
+function CallbackPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [status, setStatus] = useState<'processing' | 'success' | 'error'>('processing')
@@ -17,12 +17,7 @@ function CallbackUIContent() {
       const type = searchParams.get('type')
       const next = searchParams.get('next') || '/dashboard'
       
-      console.log('🔄 UI Callback processing:', { 
-        code: code?.substring(0, 8) + '...', 
-        token_hash: token_hash?.substring(0, 8) + '...', 
-        type, 
-        next 
-      })
+      console.log('🔄 Callback processing:', { code: code?.substring(0, 8) + '...', token_hash: token_hash?.substring(0, 8) + '...', type, next })
 
       if (!code && !token_hash) {
         console.error('❌ No authentication parameters found')
@@ -37,14 +32,14 @@ function CallbackUIContent() {
         
         if (token_hash && type) {
           // Handle token_hash + type flow (email confirmation, password reset)
-          console.log('🔍 Using token_hash + type flow for:', type)
+          console.log('🔍 Using token_hash + type flow')
           authResult = await supabase.auth.verifyOtp({
             token_hash,
             type: type as 'email' | 'signup' | 'recovery' | 'email_change'
           })
         } else if (code) {
           // Handle code flow (OAuth, etc.)
-          console.log('🔍 Using OAuth code flow')
+          console.log('🔍 Using code flow')
           authResult = await supabase.auth.exchangeCodeForSession(code)
         } else {
           throw new Error('Invalid authentication parameters')
@@ -60,10 +55,10 @@ function CallbackUIContent() {
         console.log('✅ Authentication successful, redirecting to:', next)
         setStatus('success')
         
-        // Show success message briefly, then redirect
+        // Redirect after successful auth
         setTimeout(() => {
           router.push(next)
-        }, 1500)
+        }, 1000)
 
       } catch (err) {
         console.error('❌ Callback processing error:', err)
@@ -79,7 +74,7 @@ function CallbackUIContent() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <h2 className="text-xl font-semibold text-gray-900 mb-2">
             Authentifizierung läuft...
           </h2>
@@ -113,7 +108,7 @@ function CallbackUIContent() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 to-rose-100">
-      <div className="text-center max-w-md mx-auto p-6">
+      <div className="text-center">
         <div className="h-12 w-12 text-red-600 mx-auto mb-4">⚠️</div>
         <h2 className="text-xl font-semibold text-gray-900 mb-2">
           Authentifizierung fehlgeschlagen
@@ -132,7 +127,7 @@ function CallbackUIContent() {
   )
 }
 
-export default function CallbackUIPage() {
+export default function CallbackPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -144,7 +139,7 @@ export default function CallbackUIPage() {
         </div>
       </div>
     }>
-      <CallbackUIContent />
+      <CallbackPageContent />
     </Suspense>
   )
 }

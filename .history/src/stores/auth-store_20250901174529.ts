@@ -286,7 +286,7 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'cracha-auth',
-      partialize: () => ({
+      partialize: (state) => ({
         // Only persist user data, never authentication status
         // This forces re-authentication on every session
         user: null, // Don't persist user to force proper auth check

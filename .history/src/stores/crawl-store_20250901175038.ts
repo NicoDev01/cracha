@@ -275,13 +275,11 @@ export const useCrawlStore = create<CrawlState>()(
             } else if (jobStatus.status === 'queued') {
               get().addLog('⏳ Job queued, waiting to start...')
             } else if (jobStatus.status === 'processing') {
-              const totalChunks = jobStatus.total_chunks || 0
-              const processedChunks = jobStatus.processed_chunks || 0
-              const progress = totalChunks > 0
-                ? (processedChunks / totalChunks) * 100
+              const progress = jobStatus.total_chunks > 0
+                ? (jobStatus.processed_chunks / jobStatus.total_chunks) * 100
                 : 0
               set({ progress })
-              get().addLog(`📊 Processing: ${processedChunks}/${totalChunks} chunks`)
+              get().addLog(`📊 Processing: ${jobStatus.processed_chunks}/${jobStatus.total_chunks} chunks`)
             }
 
             set({ currentJob: updatedJob })

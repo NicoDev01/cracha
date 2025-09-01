@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,27 +13,12 @@ import { GoogleAuthButton } from './GoogleAuthButton'
 
 export function LoginForm() {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const { login, isLoading, error, clearError } = useAuthStore()
   const [showPassword, setShowPassword] = useState(false)
-  const [retryMessage, setRetryMessage] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     email: '',
     password: ''
   })
-
-  // Handle retry messages from PKCE failures
-  useEffect(() => {
-    const retry = searchParams.get('retry')
-    const message = searchParams.get('message')
-    
-    if (retry === 'pkce' && message) {
-      setRetryMessage(decodeURIComponent(message))
-      // Clear URL parameters
-      const newUrl = window.location.pathname
-      window.history.replaceState({}, '', newUrl)
-    }
-  }, [searchParams])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -79,21 +64,10 @@ export function LoginForm() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Error Message */}
-          {(error || retryMessage) && (
+          {error && (
             <div className="flex items-center space-x-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700">
               <AlertCircle className="h-4 w-4 flex-shrink-0" />
-              <span className="text-sm">{error || retryMessage}</span>
-            </div>
-          )}
-          
-          {/* PKCE Retry Info */}
-          {retryMessage && (
-            <div className="flex items-center space-x-2 p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-700">
-              <AlertCircle className="h-4 w-4 flex-shrink-0" />
-              <div className="text-sm">
-                <p className="font-medium">Google OAuth Retry</p>
-                <p>Dies kann beim ersten Versuch passieren. Bitte versuche es erneut.</p>
-              </div>
+              <span className="text-sm">{error}</span>
             </div>
           )}
 

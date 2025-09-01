@@ -187,7 +187,7 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null })
         
         try {
-          const { error } = await supabase.auth.signUp({
+          const { data: _data, error } = await supabase.auth.signUp({ // _data available for user handling if needed
             email,
             password,
             options: {
@@ -286,7 +286,7 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'cracha-auth',
-      partialize: () => ({
+      partialize: (state) => ({
         // Only persist user data, never authentication status
         // This forces re-authentication on every session
         user: null, // Don't persist user to force proper auth check

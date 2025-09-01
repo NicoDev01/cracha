@@ -18,12 +18,7 @@ interface JobStatusData {
   }
   result?: {
     chunks?: number
-    duration?: string
   }
-  error?: string
-  progress?: number
-  total_chunks?: number
-  processed_chunks?: number
 }
 
 interface CrawlStatusResponse {
@@ -235,7 +230,7 @@ export const useCrawlStore = create<CrawlState>()(
             const updatedJob: CrawlJob = {
               id: localJobId,
               tenant_id: jobStatus.config?.tenant_id || get().currentJob?.tenant_id || '',
-              status: normalizeStatus(jobStatus.status),
+              status: jobStatus.status,
               url: jobStatus.config?.url || get().currentJob?.url || '',
               type: get().currentJob?.type || 'single',
               created_at: get().currentJob?.created_at || new Date().toISOString(),
@@ -254,8 +249,7 @@ export const useCrawlStore = create<CrawlState>()(
 
               // Show result details if available
               if (jobStatus.result?.chunks) {
-                const duration = jobStatus.result.duration || 'unknown time'
-                get().addLog(`📊 Created ${jobStatus.result.chunks} chunks in ${duration}`)
+                get().addLog(`📊 Created ${jobStatus.result.chunks} chunks in ${jobStatus.result.duration}`)
               }
 
               return // Stop polling
@@ -275,13 +269,11 @@ export const useCrawlStore = create<CrawlState>()(
             } else if (jobStatus.status === 'queued') {
               get().addLog('⏳ Job queued, waiting to start...')
             } else if (jobStatus.status === 'processing') {
-              const totalChunks = jobStatus.total_chunks || 0
-              const processedChunks = jobStatus.processed_chunks || 0
-              const progress = totalChunks > 0
-                ? (processedChunks / totalChunks) * 100
+              const progress = jobStatus.total_chunks > 0
+                ? (jobStatus.processed_chunks / jobStatus.total_chunks) * 100
                 : 0
               set({ progress })
-              get().addLog(`📊 Processing: ${processedChunks}/${totalChunks} chunks`)
+              get().addLog(`📊 Processing: ${jobStatus.processed_chunks}/${jobStatus.total_chunks} chunks`)
             }
 
             set({ currentJob: updatedJob })

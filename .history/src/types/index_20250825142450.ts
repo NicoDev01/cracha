@@ -54,7 +54,7 @@ export interface CrawlRequest {
 export interface CrawlJob {
   id: string
   tenant_id: string
-  status: 'pending' | 'queued' | 'running' | 'processing' | 'completed' | 'failed'
+  status: 'pending' | 'running' | 'completed' | 'failed'
   config: CrawlRequest
   progress?: {
     pages_crawled: number
