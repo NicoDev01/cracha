@@ -16,53 +16,34 @@ function CallbackPageContent() {
     const handleCallback = async () => {
       const code = searchParams.get('code')
       const next = searchParams.get('next') || '/dashboard'
-
+      
       console.log('🔄 Client-side callback processing:', { code: code?.substring(0, 8) + '...', next })
+
+      if (!code) {
+        console.error('❌ No code parameter found')
+        setStatus('error')
+        setError('Missing authentication code')
+        return
+      }
 
       try {
         const supabase = createClient()
+        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
 
-        // For PKCE flow, we need to handle the session from the URL
-        const { data, error } = await supabase.auth.getSession()
-
-        if (error) {
-          console.error('❌ Session retrieval failed:', error)
+        if (exchangeError) {
+          console.error('❌ Code exchange failed:', exchangeError)
           setStatus('error')
-          setError(error.message)
+          setError(exchangeError.message)
           return
         }
 
-        if (data.session) {
-          console.log('✅ Session found, authentication successful')
-          setStatus('success')
-
-          // Redirect after successful auth
-          setTimeout(() => {
-            router.push(next)
-          }, 1000)
-        } else if (code) {
-          // Fallback: try to exchange code for session
-          console.log('🔄 Attempting code exchange as fallback...')
-          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
-
-          if (exchangeError) {
-            console.error('❌ Code exchange failed:', exchangeError)
-            setStatus('error')
-            setError(exchangeError.message)
-            return
-          }
-
-          console.log('✅ Code exchange successful')
-          setStatus('success')
-
-          setTimeout(() => {
-            router.push(next)
-          }, 1000)
-        } else {
-          console.error('❌ No session or code found')
-          setStatus('error')
-          setError('No authentication data found')
-        }
+        console.log('✅ Authentication successful, redirecting to:', next)
+        setStatus('success')
+        
+        // Redirect after successful auth
+        setTimeout(() => {
+          router.push(next)
+        }, 1000)
 
       } catch (err) {
         console.error('❌ Callback processing error:', err)

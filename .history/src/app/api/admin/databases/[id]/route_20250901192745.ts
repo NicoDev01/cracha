@@ -121,7 +121,7 @@ export async function DELETE(
     try {
       const context = getRequestContext()
       env = (context.env as Record<string, unknown>) || {}
-    } catch {
+    } catch (error) {
       console.log('🖥️ Running in local development mode')
     }
 

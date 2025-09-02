@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 
 export async function middleware(request: NextRequest) {
-  const response = NextResponse.next({
+  let response = NextResponse.next({
     request: {
       headers: request.headers,
     },
@@ -29,16 +29,7 @@ export async function middleware(request: NextRequest) {
       })
 
       // Refresh session if expired - this is important for OAuth flows
-      const { data: { user } } = await supabase.auth.getUser()
-
-      // Log session status for debugging
-      if (request.nextUrl.pathname.includes('/auth/callback')) {
-        console.log('🔄 Middleware processing OAuth callback:', {
-          path: request.nextUrl.pathname,
-          hasUser: !!user,
-          searchParams: request.nextUrl.searchParams.toString()
-        })
-      }
+      await supabase.auth.getUser()
     } catch (error) {
       console.error('Middleware Supabase error:', error)
       // Continue without throwing to avoid breaking the app

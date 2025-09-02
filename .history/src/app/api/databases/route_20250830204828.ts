@@ -88,7 +88,7 @@ export async function GET(_request: NextRequest): Promise<NextResponse> {
       const context = getRequestContext()
       const env = context.env as CloudflareEnv
       kv = env?.DATABASE_REGISTRY
-    } catch {
+    } catch (_error) {
       console.log('📝 Local development mode: No KV binding available')
     }
 
@@ -363,7 +363,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       const context = getRequestContext()
       const env = context.env as CloudflareEnv
       kv = env?.DATABASE_REGISTRY
-    } catch {
+    } catch (_error) {
       console.log('📝 Running in local development mode (no Cloudflare context available)')
     }
 

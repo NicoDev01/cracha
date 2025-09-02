@@ -262,26 +262,21 @@ export const useAuthStore = create<AuthState>()(
       
       logout: async () => {
         set({ isLoading: true })
-
+        
         try {
-          // Clear cookies first to prevent refresh token errors
-          clearAuthCookies()
-
           const { error } = await supabase.auth.signOut()
-
+          
           if (error) {
-            console.warn('Logout error (continuing anyway):', error)
+            throw error
           }
-
+          
           // User state will be updated by onAuthStateChange
           set({ isLoading: false })
-
+          
         } catch (error) {
-          // Even if logout fails, clear local state
-          clearAuthCookies()
-          set({
+          set({ 
             error: error instanceof Error ? error.message : 'Logout failed',
-            isLoading: false
+            isLoading: false 
           })
         }
       },

@@ -192,7 +192,7 @@ async function handleGetDatabases(_request: NextRequest): Promise<NextResponse> 
     try {
       const context = getRequestContext()
       env = (context.env as Record<string, unknown>) || {}
-    } catch {
+    } catch (_error) {
       console.log('📝 Running in local development mode (no Cloudflare context available)')
     }
 
