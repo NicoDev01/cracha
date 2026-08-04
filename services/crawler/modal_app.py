@@ -19,7 +19,7 @@ image = (
         "httpx==0.28.1",
         "pydantic==2.13.4",
     )
-    .run_commands("playwright install --with-deps chromium")
+    .run_commands("crawl4ai-setup")
     .add_local_python_source("cracha_crawler")
 )
 app = modal.App(APP_NAME)

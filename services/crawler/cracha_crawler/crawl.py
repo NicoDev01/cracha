@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 from collections import deque
 from datetime import UTC, datetime
@@ -20,6 +21,8 @@ from .security import assert_public_url
 MAX_SITEMAP_BYTES = 2_000_000
 MAX_REDIRECTS = 5
 USER_AGENT = "CraChaBot/1.0"
+MIN_BROWSER_TIMEOUT_SECONDS = 60
+MAX_BROWSER_TIMEOUT_SECONDS = 300
 
 
 async def _safe_download(client: httpx.AsyncClient, url: str) -> tuple[bytes, str]:
@@ -202,7 +205,7 @@ async def _http_fallback_pages(request: CrawlRequest) -> tuple[list[Page], int]:
     return list(pages.values()), skipped
 
 
-async def crawl_pages(request: CrawlRequest) -> tuple[list[Page], int]:
+async def _crawl4ai_pages(request: CrawlRequest) -> tuple[list[Page], int]:
     from crawl4ai import AsyncWebCrawler, BrowserConfig, CacheMode, CrawlerRunConfig
     from crawl4ai.content_filter_strategy import PruningContentFilter
     from crawl4ai.content_scraping_strategy import LXMLWebScrapingStrategy
@@ -216,7 +219,6 @@ async def crawl_pages(request: CrawlRequest) -> tuple[list[Page], int]:
     from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 
     start_url = str(request.url)
-    await assert_public_url(start_url)
     browser_config = BrowserConfig(
         browser_type="chromium",
         headless=True,
@@ -293,6 +295,25 @@ async def crawl_pages(request: CrawlRequest) -> tuple[list[Page], int]:
             pages_by_url[page.url] = page
         else:
             skipped += 1
-    if pages_by_url:
-        return list(pages_by_url.values()), skipped
+    return list(pages_by_url.values()), skipped
+
+
+async def crawl_pages(request: CrawlRequest) -> tuple[list[Page], int]:
+    await assert_public_url(str(request.url))
+    browser_timeout = min(
+        MAX_BROWSER_TIMEOUT_SECONDS,
+        max(MIN_BROWSER_TIMEOUT_SECONDS, request.limit * 3),
+    )
+
+    try:
+        async with asyncio.timeout(browser_timeout):
+            pages, skipped = await _crawl4ai_pages(request)
+        if pages:
+            return pages, skipped
+    except Exception as error:
+        print(
+            f"[WARN] Crawl4AI unavailable ({type(error).__name__}: {error}); "
+            "using the HTTP fallback."
+        )
+
     return await _http_fallback_pages(request)

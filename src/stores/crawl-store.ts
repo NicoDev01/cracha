@@ -194,7 +194,9 @@ export const useCrawlStore = create<CrawlState>()(
       // Poll job status (internal method) - add to interface
       pollJobStatus: async (localJobId: string, remoteJobId: string) => {
         let pollCount = 0
-        const maxPolls = 900 // 30 minutes max (900 * 2 seconds)
+        const pollIntervalMs = 5000
+        const pollingTimeoutMs = 15 * 60 * 1000
+        const maxPolls = pollingTimeoutMs / pollIntervalMs
 
         const pollInterval = setInterval(async () => {
           pollCount++
@@ -203,7 +205,7 @@ export const useCrawlStore = create<CrawlState>()(
           if (pollCount > maxPolls) {
             clearInterval(pollInterval)
             set({ isRunning: false, progress: 0 })
-            get().addLog('⏰ Crawl timeout after 30 minutes')
+            get().addLog('⏰ Crawl timeout after 15 minutes')
             return
           }
           try {
@@ -289,16 +291,16 @@ export const useCrawlStore = create<CrawlState>()(
             console.error('Status polling error:', error)
             get().addLog(`⚠️ Status update failed: ${error}`)
           }
-        }, 2000) // Poll every 2 seconds
+        }, pollIntervalMs)
 
-        // Stop polling after 30 minutes
+        // Stop polling if the remote job never reaches a terminal state.
         setTimeout(() => {
           clearInterval(pollInterval)
           if (get().isRunning) {
             set({ isRunning: false })
             get().addLog('⏰ Polling timeout - check job status manually')
           }
-        }, 30 * 60 * 1000)
+        }, pollingTimeoutMs)
       },
 
       // Cancel crawl
