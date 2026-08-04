@@ -1,12 +1,35 @@
 {
   "main": ".open-next/worker.js",
   "name": "cracha",
-  "compatibility_date": "2025-08-25",
+  "compatibility_date": "2026-08-04",
+  "keep_vars": true,
   "compatibility_flags": [
     "nodejs_compat"
   ],
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
+  },
+  "kv_namespaces": [
+    {
+      "binding": "DATABASE_REGISTRY",
+      "id": "417ae907fb8547758b969c5eeaa635dd"
+    }
+  ],
+  "services": [
+    {
+      "binding": "RAG_API",
+      "service": "cracha-worker-rag"
+    }
+  ],
+  "ai": {
+    "binding": "AI"
+  },
+  "vars": {
+    "GENERATION_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
   }
 }

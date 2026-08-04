@@ -30,12 +30,7 @@ export interface QueryRequest {
   tenant_id: string
   question: string
   top_k?: number
-  stream?: boolean
-  language?: string
-  use_hyde?: boolean
-  rerank?: boolean
-  temperature?: number
-  max_tokens?: number
+  messages?: Array<{ role: 'user' | 'assistant'; content: string }>
 }
 
 export interface ChatState {
@@ -61,7 +56,7 @@ export interface Database {
   document_count?: number
   last_crawl?: string | Date
   source_url?: string
-  status?: 'active' | 'pending' | 'error' | 'crawling' | 'inactive'
+  status?: 'active' | 'pending' | 'error' | 'failed' | 'crawling' | 'inactive'
   chunks_count?: number
   pages_count?: number
   url?: string

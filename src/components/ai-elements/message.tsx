@@ -4,11 +4,11 @@ import {
   AvatarImage,
 } from '@/components/landing/ui/avatar';
 import { cn } from '@/lib/utils';
-import type { UIMessage } from 'ai';
+import type { UiMessage } from '@/types/ai';
 import type { ComponentProps, HTMLAttributes } from 'react';
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
-  from: UIMessage['role'];
+  from: UiMessage['role'];
 };
 
 export const Message = ({ className, from, ...props }: MessageProps) => (

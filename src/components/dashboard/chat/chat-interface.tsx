@@ -145,7 +145,7 @@ export function ChatInterface() {
                               href={source.url}
                               title={source.title}
                             >
-                              {source.snippet}
+                              {source.snippet || source.title}
                             </Source>
                           ))}
                         </SourcesContent>

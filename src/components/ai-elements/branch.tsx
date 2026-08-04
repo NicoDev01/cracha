@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import type { UIMessage } from 'ai';
+import type { UiMessage } from '@/types/ai';
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
 import type { ComponentProps, HTMLAttributes, ReactElement } from 'react';
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
@@ -109,7 +109,7 @@ export const BranchMessages = ({ children, ...props }: BranchMessagesProps) => {
 };
 
 export type BranchSelectorProps = HTMLAttributes<HTMLDivElement> & {
-  from: UIMessage['role'];
+  from: UiMessage['role'];
 };
 
 export const BranchSelector = ({

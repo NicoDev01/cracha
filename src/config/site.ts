@@ -1,7 +1,6 @@
 import { SidebarNavItem, SiteConfig } from "@/types";
-import { env } from "@/env.mjs";
 
-const site_url = env.NEXT_PUBLIC_APP_URL || "https://cracha.pages.dev";
+const site_url = process.env.NEXT_PUBLIC_APP_URL || "https://cracha.aimpact-agency.workers.dev";
 
 export const siteConfig: SiteConfig = {
   name: "CraCha",

@@ -1,0 +1,7 @@
+[
+  {
+    "question": "Was ist das Hauptthema der Website?",
+    "required_source_url_contains": "/",
+    "notes": "Smoke-Test: Antwort muss mindestens eine gecrawlte Quelle enthalten."
+  }
+]

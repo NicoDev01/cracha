@@ -13,7 +13,7 @@ export interface Database {
     chunks_count?: number
     pages_count?: number
     document_count?: number
-    status: 'active' | 'pending' | 'error' | 'crawling' | 'inactive'
+    status: 'active' | 'pending' | 'error' | 'failed' | 'crawling' | 'inactive'
     settings?: {
         embedding_model: string
         chunk_size: number

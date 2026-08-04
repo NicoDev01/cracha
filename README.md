@@ -1,113 +1,44 @@
-# CraCha Frontend
+# CraCha
 
-Ein modernes Next.js 15 Frontend für CraCha RAG-as-a-Service, optimiert für Cloudflare Workers.
+CraCha crawlt öffentliche Websites, überführt bereinigtes Markdown in eine mandantengetrennte Wissensbasis und beantwortet Fragen mit belegten Originalquellen.
 
-## 🚀 Features
+## Architektur
 
-- **Next.js 15** mit App Router und Turbopack
-- **TypeScript** für Type Safety
-- **Tailwind CSS** für Styling
-- **Shadcn/ui** für UI-Komponenten
-- **Cloudflare Workers** Integration mit OpenNext
-- **Zustand** für State Management
-- **React Query** für Data Fetching
+- `src/`: Next.js-/OpenNext-Frontend auf Cloudflare Workers
+- `workers/rag-api/`: authentifizierte Retrieval-API mit Cloudflare AI Search
+- `services/crawler/`: rekursiver Crawl4AI-Service auf Modal
+- `evals/`: reproduzierbare Retrieval-Smoke-Tests
 
-## 🏗️ Architektur
+Der Crawler speichert bereinigte Seiten mit Quellenmetadaten. AI Search übernimmt Chunking, BGE-M3-Embeddings, Keyword-Index, Reciprocal Rank Fusion und BGE-Reranking. Eine Wissensbasis entspricht einer AI-Search-Instanz. Die belegte Antwort erzeugt Workers AI mit Llama 3.3 70B Fast.
 
-```
-Frontend (Next.js) → Cloudflare Workers → CraCha RAG API
-```
-
-## 📦 Installation
+## Lokal prüfen
 
 ```bash
-npm install
-```
-
-## 🛠️ Development
-
-```bash
-# Development Server (Next.js)
-npm run dev
-
-# Preview (Cloudflare Workers Simulation)
-npm run preview
-
-# Type Check
+npm ci
 npm run type-check
+npm --prefix workers/rag-api ci
+npm run rag:typecheck
+npm run rag:test
 
-# Lint
-npm run lint
+python -m pip install -e "services/crawler[dev]"
+python -m pytest services/crawler/tests
+python -m ruff check services/crawler evals
 ```
 
-## 🚀 Deployment
+Lokale Variablen stehen in `.env.example`, `workers/rag-api/.dev.vars.example` und `services/crawler/.env.example`.
 
-```bash
-# Build für Cloudflare Workers
-npm run deploy
+## Deployment
 
-# Oder manuell
-npm run build
-open-next build
-wrangler deploy
-```
+Die drei Komponenten werden aus diesem Repository gebaut und per GitHub Actions veröffentlicht. Voraussetzungen, Secret-Namen und Reihenfolge stehen in [docs/deployment.md](docs/deployment.md).
 
-## 📁 Struktur
+Produktiv erreichbar: [cracha.aimpact-agency.workers.dev](https://cracha.aimpact-agency.workers.dev)
 
-```
-src/
-├── app/                 # Next.js App Router
-├── components/          # React Components
-│   ├── ui/             # Shadcn/ui Components
-│   ├── landing/        # Landing Page Components
-│   └── dashboard/      # Dashboard Components
-├── lib/                # Utilities & API Clients
-├── hooks/              # Custom React Hooks
-├── stores/             # Zustand Stores
-└── types/              # TypeScript Types
-```
+## Dokumentation
 
-## 🔧 Konfiguration
-
-### Environment Variables
-
-```bash
-# .env.local
-NEXT_PUBLIC_APP_ENV=development
-NEXT_PUBLIC_CRACHA_WORKER_URL=https://cracha-worker-rag.aimpact-agency.workers.dev
-```
-
-### Cloudflare Workers
-
-- `wrangler.toml` - Worker Konfiguration
-- `open-next.config.ts` - OpenNext Adapter Konfiguration
-
-## 📊 Performance
-
-- **TTFT Target**: <200ms
-- **Bundle Size**: <500KB
-- **Lighthouse Score**: >90
-
-## 🧪 Testing
-
-```bash
-# Unit Tests (coming soon)
-npm run test
-
-# E2E Tests (coming soon)
-npm run test:e2e
-```
-
-## 📚 Dokumentation
-
-- [Next.js 15 Docs](https://nextjs.org/docs)
-- [Cloudflare Workers](https://developers.cloudflare.com/workers/)
-- [OpenNext](https://opennext.js.org/cloudflare)
-- [Shadcn/ui](https://ui.shadcn.com/)
-
-## 🤝 Contributing
-
-1. Fork das Repository
-2. Erstelle einen Feature Branch
-3. Committe deine Änderungen
-4. Erstelle einen Pull Request
+- [Systemarchitektur](docs/architecture.md)
+- [Deployment](docs/deployment.md)
+- [Sicherheit](SECURITY.md)
+- [Cloudflare AI Search: Hybrid Search](https://developers.cloudflare.com/ai-search/configuration/indexing/hybrid-search/)
+- [Cloudflare AI Search: Reranking](https://developers.cloudflare.com/ai-search/configuration/retrieval/reranking/)
+- [Crawl4AI: Deep Crawling](https://docs.crawl4ai.com/core/deep-crawling/)
+- [Modal: Job Queues](https://modal.com/docs/guide/job-queue)

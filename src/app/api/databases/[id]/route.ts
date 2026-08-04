@@ -1,134 +1,55 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id } = await params
+import { getAuthenticatedUser } from '@/lib/supabase/server'
+import { getWorkerEnv } from '@/lib/server/cloudflare'
+import { getOwnedDatabase, saveDatabase } from '@/lib/server/database-registry'
 
-    if (!id) {
-      return NextResponse.json(
-        { success: false, error: 'Database ID is required' },
-        { status: 400 }
-      )
-    }
+export const dynamic = 'force-dynamic'
 
-    // Mock database details - in production this would query the database registry
-    const mockDatabase = {
-      id: id,
-      name: id.charAt(0).toUpperCase() + id.slice(1).replace(/-/g, ' '),
-      description: `Database for ${id}`,
-      url: `https://example.com/${id}`,
-      created_at: '2024-01-15T10:30:00Z',
-      updated_at: '2024-01-15T10:30:00Z',
-      chunks_count: 1250,
-      pages_count: 85,
-      status: 'active',
-      settings: {
-        embedding_model: 'gemini-768',
-        chunk_size: 800,
-        chunk_overlap: 120
-      },
-      urls: [
-        `https://example.com/${id}/page1`,
-        `https://example.com/${id}/page2`,
-        `https://example.com/${id}/page3`
-      ]
-    }
+type Context = { params: Promise<{ id: string }> }
 
-    return NextResponse.json({
-      success: true,
-      database: mockDatabase
-    })
-
-  } catch (error) {
-    console.error('Database details API error:', error)
-    return NextResponse.json(
-      { 
-        success: false, 
-        error: 'Failed to fetch database details',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
-      { status: 500 }
-    )
-  }
+export async function GET(_request: NextRequest, { params }: Context) {
+  const user = await getAuthenticatedUser()
+  if (!user) return NextResponse.json({ success: false, error: 'Authentifizierung erforderlich.' }, { status: 401 })
+  const { id } = await params
+  const database = await getOwnedDatabase(id, user.id)
+  if (!database) return NextResponse.json({ success: false, error: 'Wissensbasis nicht gefunden.' }, { status: 404 })
+  return NextResponse.json({ success: true, database })
 }
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id } = await params
+export async function PUT(request: NextRequest, { params }: Context) {
+  const user = await getAuthenticatedUser()
+  if (!user) return NextResponse.json({ success: false, error: 'Authentifizierung erforderlich.' }, { status: 401 })
+  const { id } = await params
+  const database = await getOwnedDatabase(id, user.id)
+  if (!database) return NextResponse.json({ success: false, error: 'Wissensbasis nicht gefunden.' }, { status: 404 })
 
-    if (!id) {
-      return NextResponse.json(
-        { success: false, error: 'Database ID is required' },
-        { status: 400 }
-      )
-    }
-
-    // In production, this would:
-    // 1. Delete from database registry
-    // 2. Delete from vector database
-    // 3. Clean up associated files
-
-    return NextResponse.json({
-      success: true,
-      message: `Database ${id} deleted successfully`
-    })
-
-  } catch (error) {
-    console.error('Database deletion error:', error)
-    return NextResponse.json(
-      { 
-        success: false, 
-        error: 'Failed to delete database',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
-      { status: 500 }
-    )
+  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null
+  const updated = {
+    ...database,
+    name: typeof body?.name === 'string' ? body.name.trim().slice(0, 120) || database.name : database.name,
+    description: typeof body?.description === 'string' ? body.description.trim().slice(0, 500) : database.description,
+    updated_at: new Date().toISOString(),
   }
+  await saveDatabase(updated)
+  return NextResponse.json({ success: true, database: updated })
 }
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id } = await params
-    const body = await request.json() as Record<string, unknown>
+export async function DELETE(_request: NextRequest, { params }: Context) {
+  const user = await getAuthenticatedUser()
+  if (!user) return NextResponse.json({ success: false, error: 'Authentifizierung erforderlich.' }, { status: 401 })
+  const { id } = await params
+  const database = await getOwnedDatabase(id, user.id)
+  if (!database) return NextResponse.json({ success: false, error: 'Wissensbasis nicht gefunden.' }, { status: 404 })
 
-    if (!id) {
-      return NextResponse.json(
-        { success: false, error: 'Database ID is required' },
-        { status: 400 }
-      )
-    }
-
-    // In production, this would update the database registry
-    const updatedDatabase = {
-      id: id,
-      name: (body.name as string) || id,
-      description: (body.description as string) || `Database for ${id}`,
-      updated_at: new Date().toISOString()
-    }
-
-    return NextResponse.json({
-      success: true,
-      database: updatedDatabase
-    })
-
-  } catch (error) {
-    console.error('Database update error:', error)
-    return NextResponse.json(
-      { 
-        success: false, 
-        error: 'Failed to update database',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
-      { status: 500 }
-    )
+  const env = getWorkerEnv()
+  const response = await env.RAG_API.fetch(`https://cracha-rag.internal/databases/${encodeURIComponent(id)}?user_id=${encodeURIComponent(user.id)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${env.RAG_QUERY_SECRET}` },
+  })
+  const result = (await response.json().catch(() => ({}))) as { error?: string }
+  if (!response.ok) {
+    return NextResponse.json({ success: false, error: result.error ?? 'Löschen fehlgeschlagen.' }, { status: response.status })
   }
+  return NextResponse.json({ success: true })
 }

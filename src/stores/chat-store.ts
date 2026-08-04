@@ -26,58 +26,41 @@ export const useChatStore = create<ChatState>()((set, get) => ({
           timestamp: new Date()
         }
 
-        // Add streaming assistant message placeholder
+        // Add assistant message placeholder
         const assistantMessageId = `assistant-${Date.now()}`
         const assistantMessage: Message = {
           id: assistantMessageId,
           type: 'assistant',
           content: '',
           timestamp: new Date(),
-          isStreaming: true,
+          isStreaming: false,
           sources: []
         }
 
         set(state => ({
           messages: [...state.messages, userMessage, assistantMessage],
           isLoading: true,
-          isStreaming: true,
+          isStreaming: false,
           error: null
         }))
 
         try {
-          // Use real RAG Worker API with streaming
-          const { streamChatQuery, sendChatQuery } = await import('@/lib/api/chat-api')
-          
-          let fullContent = ''
-          const stream = streamChatQuery({
-            question,
-            tenant_id: selectedDatabase,
-            top_k: 10
-          })
-
-          for await (const chunk of stream) {
-            fullContent += chunk
-            
-            set(state => ({
-              messages: state.messages.map(msg => 
-                msg.id === assistantMessageId 
-                  ? { ...msg, content: fullContent }
-                  : msg
-              )
-            }))
-          }
-
-          // Get sources from non-streaming API call
+          const { sendChatQuery } = await import('@/lib/api/chat-api')
+          const history = get().messages
+            .filter(message => message.id !== userMessage.id && !message.isError && (message.type === 'user' || message.type === 'assistant') && message.content.trim())
+            .slice(-12)
+            .map(message => ({ role: message.type as 'user' | 'assistant', content: message.content }))
           const response = await sendChatQuery({
             question,
             tenant_id: selectedDatabase,
-            top_k: 10
+            top_k: 6,
+            messages: history,
           })
 
           set(state => ({
             messages: state.messages.map(msg => 
               msg.id === assistantMessageId 
-                ? { ...msg, isStreaming: false, sources: response.sources }
+                ? { ...msg, content: response.message, isStreaming: false, sources: response.sources }
                 : msg
             ),
             isLoading: false,
@@ -88,11 +71,10 @@ export const useChatStore = create<ChatState>()((set, get) => ({
           console.error('Chat error:', error)
           const errorMessage = error instanceof Error ? error.message : 'Unbekannter Fehler'
           
-          // Add error message as assistant message
           const errorMessageObj: Message = {
             id: `error-${Date.now()}`,
             type: 'assistant',
-            content: `❌ **Fehler beim Verarbeiten der Anfrage**\n\n**Fehlermeldung:** ${errorMessage}\n\n**Mögliche Ursachen:**\n- RAG Worker API ist nicht erreichbar\n- Netzwerkverbindung unterbrochen\n- Ungültige Datenbank ausgewählt\n- Server-Fehler\n\n**Lösungsvorschläge:**\n1. Überprüfe deine Internetverbindung\n2. Wähle eine andere Datenbank aus\n3. Versuche es in ein paar Minuten erneut\n4. Kontaktiere den Support falls das Problem weiterhin besteht`,
+            content: `Die Anfrage ist fehlgeschlagen: ${errorMessage}`,
             timestamp: new Date(),
             isError: true
           }

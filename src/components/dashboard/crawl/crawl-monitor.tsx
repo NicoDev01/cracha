@@ -6,13 +6,10 @@ import { Progress } from "@/components/ui/progress"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Separator } from "@/components/ui/separator" // May be used for layout separation
 import { 
   Activity, 
   Globe, 
   FileText, 
-  Zap, // May be used for performance indicators
-  DollarSign, // May be used for cost tracking
   Clock, 
   StopCircle,
   CheckCircle,
@@ -140,7 +137,7 @@ export function CrawlMonitor() {
           </div>
 
           {/* Statistics Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="text-center p-3 bg-blue-50 rounded-lg">
               <div className="text-2xl font-bold text-blue-600">
                 {currentJob.progress?.pages_crawled || 0}
@@ -162,12 +159,6 @@ export function CrawlMonitor() {
               <div className="text-xs text-purple-600 font-medium">Verstrichene Zeit</div>
             </div>
             
-            <div className="text-center p-3 bg-orange-50 rounded-lg">
-              <div className="text-2xl font-bold text-orange-600">
-                ${(currentJob.progress?.estimated_cost || 0).toFixed(4)}
-              </div>
-              <div className="text-xs text-orange-600 font-medium">Geschätzte Kosten</div>
-            </div>
           </div>
         </CardContent>
       </Card>

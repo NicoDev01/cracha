@@ -1,109 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-interface ModalStatusResponse {
-  success?: boolean
-  message?: string
-  job_id?: string
-  note?: string
-  [key: string]: unknown
-}
+import { getWorkerEnv } from '@/lib/server/cloudflare'
+import { getAuthenticatedUser } from '@/lib/supabase/server'
 
-function isModalStatusResponse(obj: unknown): obj is ModalStatusResponse {
-  return typeof obj === 'object' && obj !== null
-}
+export const dynamic = 'force-dynamic'
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ jobId: string }> }
-) {
-  try {
-    // Await params in Next.js 15+
-    const { jobId } = await params
+export async function GET(_request: NextRequest, { params }: { params: Promise<{ jobId: string }> }) {
+  const user = await getAuthenticatedUser()
+  if (!user) return NextResponse.json({ success: false, error: 'Authentifizierung erforderlich.' }, { status: 401 })
 
-    if (!jobId) {
-      return NextResponse.json(
-        { success: false, error: 'Job ID is required' },
-        { status: 400 }
-      )
-    }
-
-    console.log('📊 Getting status for job:', jobId)
-
-    // Use Modal Service to get job status
-    const response = await fetch(`https://nico-gt91--cracha-ingestion-orchestrator-secrets-fastapi-app.modal.run/status/${jobId}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      }
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error('❌ Modal Service Status Error:', response.status, errorText)
-      
-      // Return completed status if job not found (likely finished)
-      if (response.status === 404) {
-        return NextResponse.json({
-          success: true,
-          job: {
-            status: 'completed',
-            config: { tenant_id: 'unknown', url: 'unknown' },
-            result: { chunks: 0, duration: 'unknown' },
-            progress: 100,
-            completed_at: new Date().toISOString()
-          }
-        })
-      }
-      
-      return NextResponse.json({
-        success: false,
-        error: `Modal Service error: ${response.status}`,
-        details: errorText
-      }, { status: response.status })
-    }
-
-    const rawResult = await response.json()
-    console.log('✅ Modal Service Status Response:', rawResult)
-
-    // Type guard the result
-    if (!isModalStatusResponse(rawResult)) {
-      return NextResponse.json({
-        success: false,
-        error: 'Invalid response format from Modal Service'
-      }, { status: 500 })
-    }
-
-    const result = rawResult as ModalStatusResponse
-
-    // Modal Service returns generic message - interpret as completed
-    // since Modal jobs are fire-and-forget without persistent storage
-    if (result.message && typeof result.message === 'string' && result.message.includes('persistent storage')) {
-      return NextResponse.json({
-        success: true,
-        job: {
-          status: 'completed',
-          config: { tenant_id: 'unknown', url: 'unknown' },
-          result: { chunks: 0, duration: 'unknown' },
-          progress: 100,
-          completed_at: new Date().toISOString(),
-          note: 'Job completed - check Modal logs for details'
-        }
-      })
-    }
-
-    // Return the result as-is if it has proper status
-    return NextResponse.json({
-      success: true,
-      job: result
-    })
-
-  } catch (error) {
-    console.error('❌ Status API Error:', error)
-
-    return NextResponse.json({
-      success: false,
-      error: 'Failed to get job status from Modal Service',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 })
+  const { jobId } = await params
+  const env = getWorkerEnv()
+  const job = await env.DATABASE_REGISTRY.get<{ user_id: string; database_id: string }>(`crawl_job:${jobId}`, 'json')
+  if (!job || job.user_id !== user.id) {
+    return NextResponse.json({ success: false, error: 'Crawl-Auftrag nicht gefunden.' }, { status: 404 })
   }
+
+  const response = await fetch(`${env.MODAL_CRAWLER_URL.replace(/\/$/, '')}/status/${encodeURIComponent(jobId)}`, {
+    headers: { Authorization: `Bearer ${env.CRAWLER_API_SECRET}` },
+  })
+  const result = (await response.json().catch(() => ({}))) as {
+    success?: boolean
+    status?: string
+    error?: string
+    result?: { pages_count?: number; skipped_count?: number }
+  }
+  if (!response.ok && response.status !== 202) {
+    return NextResponse.json({ success: false, status: 'failed', error: result.error ?? 'Statusabfrage fehlgeschlagen.' }, { status: 502 })
+  }
+
+  return NextResponse.json({
+    success: result.success !== false,
+    job_id: jobId,
+    status: result.status ?? 'running',
+    error: result.error,
+    config: { tenant_id: job.database_id },
+    result: result.result
+      ? { ...result.result, chunks: result.result.pages_count ?? 0 }
+      : undefined,
+  })
 }

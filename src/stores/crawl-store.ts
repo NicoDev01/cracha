@@ -42,14 +42,14 @@ function normalizeStatus(status: string): CrawlJob['status'] {
 
 export interface CrawlJob {
   id: string
+  remote_job_id?: string
   tenant_id: string
   status: 'pending' | 'queued' | 'running' | 'processing' | 'completed' | 'failed'
   url: string
-  type: 'single' | 'recursive' | 'sitemap' | 'batch'
+  type: 'single' | 'recursive' | 'sitemap'
   progress?: {
     pages_crawled: number
     chunks_created: number
-    estimated_cost: number
   }
   created_at: string
   completed_at?: string
@@ -60,25 +60,12 @@ export interface CrawlConfig {
   url: string
   tenant_id: string
   user_id: string
-  type: 'single' | 'recursive' | 'sitemap' | 'batch'
+  type: 'single' | 'recursive' | 'sitemap'
   max_depth: number
   limit: number
-  embedding_model: 'gemini-768' | 'gemini-1536' | 'gemini-3072' | 'openai-small' | 'openai-large'
-
-  // Advanced options
   include_patterns?: string
   exclude_domains?: string
-  include_domains?: string
-  url_filter?: string
-  exclude_external: boolean
-  generate_summaries: boolean
-  ultra_fast: boolean
-
-  // Automatic background parameters
-  max_concurrent: number
-  force: boolean
-  cleanup: boolean
-  exclude_social_media: boolean
+  respect_robots_txt: boolean
 }
 
 interface CrawlState {
@@ -128,8 +115,7 @@ export const useCrawlStore = create<CrawlState>()(
           created_at: new Date().toISOString(),
           progress: {
             pages_crawled: 0,
-            chunks_created: 0,
-            estimated_cost: 0
+            chunks_created: 0
           }
         }
 
@@ -168,8 +154,11 @@ export const useCrawlStore = create<CrawlState>()(
           const result = await response.json() as CrawlApiResponse
 
           if (result.success) {
-            // Start polling for job status
-            get().pollJobStatus(jobId, result.job_id || jobId)
+            const remoteJobId = result.job_id || jobId
+            const queuedJob = { ...newJob, remote_job_id: remoteJobId, status: 'queued' as const }
+            set({ currentJob: queuedJob })
+            set(state => ({ jobs: state.jobs.map(job => job.id === jobId ? queuedJob : job) }))
+            get().pollJobStatus(jobId, remoteJobId)
           } else {
             throw new Error(result.error || 'Crawl failed')
           }
@@ -198,6 +187,7 @@ export const useCrawlStore = create<CrawlState>()(
           }))
 
           get().addLog(`❌ Crawl failed: ${failedJob.error}`)
+          throw error
         }
       },
 
@@ -234,6 +224,7 @@ export const useCrawlStore = create<CrawlState>()(
             // Update current job
             const updatedJob: CrawlJob = {
               id: localJobId,
+              remote_job_id: remoteJobId,
               tenant_id: jobStatus.config?.tenant_id || get().currentJob?.tenant_id || '',
               status: normalizeStatus(jobStatus.status),
               url: jobStatus.config?.url || get().currentJob?.url || '',
@@ -241,15 +232,15 @@ export const useCrawlStore = create<CrawlState>()(
               created_at: get().currentJob?.created_at || new Date().toISOString(),
               progress: {
                 pages_crawled: jobStatus.result?.chunks || 0,
-                chunks_created: jobStatus.result?.chunks || 0,
-                estimated_cost: 0
+                chunks_created: jobStatus.result?.chunks || 0
               }
             }
 
             if (jobStatus.status === 'completed') {
               updatedJob.completed_at = new Date().toISOString()
               clearInterval(pollInterval)
-              set({ isRunning: false, progress: 100 })
+              set({ currentJob: updatedJob, isRunning: false, progress: 100 })
+              set(state => ({ jobs: state.jobs.map(job => job.id === localJobId ? updatedJob : job) }))
               get().addLog('✅ Crawl completed successfully!')
 
               // Show result details if available
@@ -263,7 +254,8 @@ export const useCrawlStore = create<CrawlState>()(
               updatedJob.error = jobStatus.error || 'Unknown error'
               updatedJob.completed_at = new Date().toISOString()
               clearInterval(pollInterval)
-              set({ isRunning: false, progress: 0 })
+              set({ currentJob: updatedJob, isRunning: false, progress: 0 })
+              set(state => ({ jobs: state.jobs.map(job => job.id === localJobId ? updatedJob : job) }))
               get().addLog(`❌ Crawl failed: ${updatedJob.error}`)
 
               return // Stop polling
@@ -299,14 +291,14 @@ export const useCrawlStore = create<CrawlState>()(
           }
         }, 2000) // Poll every 2 seconds
 
-        // Stop polling after 10 minutes
+        // Stop polling after 30 minutes
         setTimeout(() => {
           clearInterval(pollInterval)
           if (get().isRunning) {
             set({ isRunning: false })
             get().addLog('⏰ Polling timeout - check job status manually')
           }
-        }, 10 * 60 * 1000)
+        }, 30 * 60 * 1000)
       },
 
       // Cancel crawl
@@ -315,10 +307,10 @@ export const useCrawlStore = create<CrawlState>()(
         if (!currentJob || !get().isRunning) return
 
         try {
-          // Call cancel API if available
-          await fetch(`/api/admin/crawl/cancel/${currentJob.id}`, {
+          const response = await fetch(`/api/admin/crawl-queue/cancel/${currentJob.remote_job_id ?? currentJob.id}`, {
             method: 'POST'
           })
+          if (!response.ok) throw new Error(`Cancel API error: ${response.status}`)
 
           const cancelledJob = {
             ...currentJob,

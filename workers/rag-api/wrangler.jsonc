@@ -1,0 +1,29 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cracha-worker-rag",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-04",
+  "ai_search_namespaces": [
+    {
+      "binding": "AI_SEARCH",
+      "namespace": "default",
+      "remote": true
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "DATABASE_REGISTRY",
+      "id": "417ae907fb8547758b969c5eeaa635dd"
+    }
+  ],
+  "migrations": [
+    {
+      "tag": "remove-legacy-tenant-manager-2026-08-04",
+      "deleted_classes": ["TenantManager"]
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}

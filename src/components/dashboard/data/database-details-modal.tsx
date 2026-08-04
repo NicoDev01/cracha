@@ -104,7 +104,8 @@ export function DatabaseDetailsModal({
     switch (status) {
       case 'active': return 'bg-green-100 text-green-700 border-green-200'
       case 'crawling': return 'bg-blue-100 text-blue-700 border-blue-200'
-      case 'error': return 'bg-red-100 text-red-700 border-red-200'
+      case 'error':
+      case 'failed': return 'bg-red-100 text-red-700 border-red-200'
       case 'inactive': return 'bg-gray-100 text-gray-700 border-gray-200'
       default: return 'bg-gray-100 text-gray-700 border-gray-200'
     }
@@ -114,7 +115,8 @@ export function DatabaseDetailsModal({
     switch (status) {
       case 'active': return 'Aktiv'
       case 'crawling': return 'Crawling läuft'
-      case 'error': return 'Fehler'
+      case 'error':
+      case 'failed': return 'Fehler'
       case 'inactive': return 'Inaktiv'
       default: return 'Unbekannt'
     }
@@ -123,15 +125,14 @@ export function DatabaseDetailsModal({
   const loadDatabaseDetails = async () => {
     setIsLoading(true)
     try {
-      // TODO: Implement actual API call to get detailed database info
-      const response = await fetch(`/api/admin/databases/${database.id}/details`)
+      const response = await fetch(`/api/databases/${database.id}`)
       
       if (!response.ok) {
         throw new Error('Fehler beim Laden der Datenbankdetails')
       }
 
-      const data = await response.json() as DatabaseDetails
-      setDetails(data)
+      const data = await response.json() as { database: DatabaseDetails }
+      setDetails(data.database)
     } catch (error) {
       console.error('Failed to load database details:', error)
       // Fallback to basic database info
@@ -195,7 +196,7 @@ export function DatabaseDetailsModal({
   const handleDelete = async () => {
     setIsDeleting(true)
     try {
-      const response = await fetch(`/api/admin/databases/${database.id}`, {
+      const response = await fetch(`/api/databases/${database.id}`, {
         method: 'DELETE',
       })
 

@@ -1,7 +1,7 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
-/node_modules
+**/node_modules/
 /.pnp
 .pnp.*
 .yarn/*
@@ -10,16 +10,8 @@
 !.yarn/releases
 !.yarn/versions
 
-# testing
+# test artifacts
 /coverage
-test_*.py
-*_test.py
-*.test.ts
-*.test.js
-*.spec.ts
-*.spec.js
-/tests/
-__tests__/
 
 # next.js
 /.next/
@@ -81,6 +73,7 @@ src/ingestion/
 # IDE
 .vscode/
 .idea/
+.history/
 *.swp
 *.swo
 
@@ -128,3 +121,4 @@ storybook-static
 # Temporary folders
 tmp/
 temp/
+graphify-out/

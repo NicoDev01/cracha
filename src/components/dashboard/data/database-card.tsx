@@ -74,7 +74,8 @@ export function DatabaseCard({ database, onDelete, onUpdate, onViewDetails }: Da
     switch (status) {
       case 'active': return 'bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700/50'
       case 'crawling': return 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700/50'
-      case 'error': return 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700/50'
+      case 'error':
+      case 'failed': return 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700/50'
       case 'inactive': return 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800/50 dark:text-gray-400 dark:border-gray-700/50'
       default: return 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800/50 dark:text-gray-400 dark:border-gray-700/50'
     }
@@ -84,7 +85,8 @@ export function DatabaseCard({ database, onDelete, onUpdate, onViewDetails }: Da
     switch (status) {
       case 'active': return 'Aktiv'
       case 'crawling': return 'Crawling'
-      case 'error': return 'Fehler'
+      case 'error':
+      case 'failed': return 'Fehler'
       case 'inactive': return 'Inaktiv'
       default: return 'Unbekannt'
     }
@@ -93,8 +95,7 @@ export function DatabaseCard({ database, onDelete, onUpdate, onViewDetails }: Da
   const handleDelete = async () => {
     setIsDeleting(true)
     try {
-      // TODO: Implement actual delete API call
-      const response = await fetch(`/api/admin/databases/${database.id}`, {
+      const response = await fetch(`/api/databases/${database.id}`, {
         method: 'DELETE',
       })
 
