@@ -1,11 +1,11 @@
 {
     "schema_version": 1,
     "commit": "",
-    "indexed_at": "2026-08-04T18:23:01Z",
+    "indexed_at": "2026-08-04T18:38:44Z",
     "project": "C-Users-nico_-Desktop-Projekte-cracha",
     "nodes": 2254,
-    "edges": 4415,
+    "edges": 4407,
     "original_size": 5701632,
-    "compressed_size": 1185814,
+    "compressed_size": 1185214,
     "compression_level": 9
 }
