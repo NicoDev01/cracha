@@ -149,11 +149,11 @@ class DatabaseAPIClient {
                 },
             })
 
-            if (!response.ok) {
-                throw new Error(`Failed to delete database: ${response.status}`)
-            }
+            const data = await response.json().catch(() => ({})) as DatabaseResponse
 
-            const data = await response.json() as DatabaseResponse
+            if (!response.ok) {
+                throw new Error(data.error || `Datenbank konnte nicht gelöscht werden (${response.status}).`)
+            }
 
             if (!data.success) {
                 throw new Error(data.error || 'Failed to delete database')

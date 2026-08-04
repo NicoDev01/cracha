@@ -31,6 +31,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { toast } from "sonner"
+import { deleteDatabase } from "@/lib/api/database-api"
 import type { Database as DatabaseType } from "@/types/chat"
 
 interface DatabaseCardProps {
@@ -95,13 +96,7 @@ export function DatabaseCard({ database, onDelete, onUpdate, onViewDetails }: Da
   const handleDelete = async () => {
     setIsDeleting(true)
     try {
-      const response = await fetch(`/api/databases/${database.id}`, {
-        method: 'DELETE',
-      })
-
-      if (!response.ok) {
-        throw new Error('Fehler beim Löschen der Datenbank')
-      }
+      await deleteDatabase(database.id)
 
       toast.success(`Datenbank "${database.name}" wurde erfolgreich gelöscht`)
       onDelete()

@@ -141,6 +141,17 @@ export async function deleteStaleItems(
   return staleIds.length
 }
 
+export async function deleteInstanceIfExists(
+  namespace: Pick<AiSearchNamespace, 'list' | 'delete'>,
+  instanceId: string,
+): Promise<boolean> {
+  const response = await namespace.list({ search: instanceId, per_page: 50 })
+  if (!response.result.some((instance) => instance.id === instanceId)) return false
+
+  await namespace.delete(instanceId)
+  return true
+}
+
 export async function retrieve(
   instance: Pick<AiSearchInstance, 'search'>,
   question: string,

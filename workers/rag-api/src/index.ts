@@ -1,7 +1,7 @@
 import { authenticateIngest, authenticateQuery } from './auth'
 import { databaseForIngest, databaseForUser, removeFromUserIndex, saveDatabase } from './database'
 import { assertText, HttpError, json, readJson } from './http'
-import { deleteStaleItems, ensureInstance, instanceIdFor, retrieve, uploadPages } from './search'
+import { deleteInstanceIfExists, deleteStaleItems, ensureInstance, instanceIdFor, retrieve, uploadPages } from './search'
 import type { ConversationMessage, DatabaseRecord, Env, IngestPage, QueryBody } from './types'
 
 interface IngestBody {
@@ -210,11 +210,7 @@ async function handleDelete(request: Request, env: Env, databaseId: string): Pro
   const database = await databaseForUser(env, databaseId, userId)
   const instanceId = database.ai_search_instance_id ?? (await instanceIdFor(databaseId))
 
-  try {
-    await env.AI_SEARCH.delete(instanceId)
-  } catch (error) {
-    if (!(error instanceof Error) || !/not found/i.test(error.message)) throw error
-  }
+  await deleteInstanceIfExists(env.AI_SEARCH, instanceId)
 
   await Promise.all([
     env.DATABASE_REGISTRY.delete(databaseId),

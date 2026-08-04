@@ -32,6 +32,7 @@ import {
   XCircle
 } from "lucide-react"
 import { toast } from "sonner"
+import { deleteDatabase } from "@/lib/api/database-api"
 import type { Database as DatabaseType } from "@/types/chat"
 
 interface DatabaseDetailsModalProps {
@@ -196,13 +197,7 @@ export function DatabaseDetailsModal({
   const handleDelete = async () => {
     setIsDeleting(true)
     try {
-      const response = await fetch(`/api/databases/${database.id}`, {
-        method: 'DELETE',
-      })
-
-      if (!response.ok) {
-        throw new Error('Fehler beim Löschen der Datenbank')
-      }
+      await deleteDatabase(database.id)
 
       toast.success(`Datenbank "${database.name}" wurde erfolgreich gelöscht`)
       onDelete()

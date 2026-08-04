@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { assertText, HttpError } from '../src/http'
-import { deleteStaleItems, instanceIdFor, itemKeyFor, retrieve } from '../src/search'
+import { deleteInstanceIfExists, deleteStaleItems, instanceIdFor, itemKeyFor, retrieve } from '../src/search'
 
 describe('deterministic identifiers', () => {
   it('creates a valid, stable AI Search instance id', async () => {
@@ -93,5 +93,35 @@ describe('stale item cleanup', () => {
 
     expect(await deleteStaleItems(instance, new Set(['keep.md']))).toBe(2)
     expect(deleted).toEqual(['old-1', 'old-2'])
+  })
+})
+
+describe('instance cleanup', () => {
+  it('deletes an existing AI Search instance', async () => {
+    const deleted: string[] = []
+    const namespace: Pick<AiSearchNamespace, 'list' | 'delete'> = {
+      list: async () => ({
+        result: [{ id: 'kb-existing' } as AiSearchInstanceInfo],
+        result_info: { count: 1, page: 1, per_page: 50, total_count: 1 },
+      }),
+      delete: async (id: string) => { deleted.push(id) },
+    }
+
+    expect(await deleteInstanceIfExists(namespace, 'kb-existing')).toBe(true)
+    expect(deleted).toEqual(['kb-existing'])
+  })
+
+  it('allows deleting legacy databases without an AI Search instance', async () => {
+    const deleted: string[] = []
+    const namespace: Pick<AiSearchNamespace, 'list' | 'delete'> = {
+      list: async () => ({
+        result: [],
+        result_info: { count: 0, page: 1, per_page: 50, total_count: 0 },
+      }),
+      delete: async (id: string) => { deleted.push(id) },
+    }
+
+    expect(await deleteInstanceIfExists(namespace, 'kb-legacy')).toBe(false)
+    expect(deleted).toEqual([])
   })
 })
