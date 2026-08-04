@@ -6,6 +6,7 @@ export interface Message {
   sources?: Source[]
   isStreaming?: boolean
   isError?: boolean
+  metadata?: ChatResponse['metadata']
 }
 
 export interface Source {

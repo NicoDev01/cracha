@@ -24,7 +24,7 @@ export type PromptInputProps = HTMLAttributes<HTMLFormElement>;
 export const PromptInput = ({ className, ...props }: PromptInputProps) => (
   <form
     className={cn(
-      'w-full divide-y overflow-hidden rounded-xl border bg-background shadow-sm',
+      'w-full overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-theme-sm transition-shadow focus-within:border-brand-300 focus-within:shadow-focus-ring dark:border-gray-700 dark:bg-gray-900 dark:focus-within:border-brand-700',
       className
     )}
     {...props}
@@ -63,8 +63,8 @@ export const PromptInputTextarea = ({
   return (
     <Textarea
       className={cn(
-        'w-full resize-none rounded-none border-none p-3 shadow-none outline-none ring-0',
-        'field-sizing-content max-h-[6lh] bg-transparent dark:bg-transparent',
+        'w-full resize-none rounded-none border-none px-4 py-3 shadow-none outline-none ring-0',
+        'field-sizing-content min-h-12 max-h-[8lh] bg-transparent dark:bg-transparent',
         // Ensure readable text and placeholder in both themes
         'text-gray-800 dark:text-white/90 placeholder:text-gray-500 dark:placeholder:text-white/40',
         // Optional: better caret visibility
@@ -94,7 +94,7 @@ export const PromptInputToolbar = ({
   ...props
 }: PromptInputToolbarProps) => (
   <div
-    className={cn('flex items-center justify-between p-1', className)}
+    className={cn('flex items-center justify-between border-t border-gray-100 px-2 py-1.5 dark:border-gray-800', className)}
     {...props}
   />
 );
@@ -166,7 +166,7 @@ export const PromptInputSubmit = ({
 
   return (
     <Button
-      className={cn('gap-1.5 rounded-lg', className)}
+      className={cn('gap-1.5 rounded-xl bg-brand-500 text-white shadow-theme-xs hover:bg-brand-600', className)}
       size={size}
       type="submit"
       variant={variant}

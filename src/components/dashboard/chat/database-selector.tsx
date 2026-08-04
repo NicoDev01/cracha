@@ -96,7 +96,7 @@ export function DatabaseSelector() {
       <DropdownMenuTrigger asChild>
         <Button
           variant="outline"
-          className="min-w-[160px] sm:min-w-[200px] justify-between bg-white/80 dark:bg-white/[0.03] dark:text-white/90 backdrop-blur-sm border-gray-200/50 dark:border-gray-800 hover:bg-white/90 dark:hover:bg-white/[0.06] hover:border-gray-300/50 dark:hover:border-gray-700 transition-all duration-200"
+          className="w-[11.5rem] justify-between border-gray-200 bg-white/80 backdrop-blur-sm transition-all duration-200 hover:border-gray-300 hover:bg-white sm:w-[15rem] dark:border-gray-700 dark:bg-white/[0.03] dark:text-white/90 dark:hover:border-gray-600 dark:hover:bg-white/[0.06]"
         >
           <div className="flex items-center gap-2">
             <Database className="w-4 h-4 text-gray-500 dark:text-gray-400" />

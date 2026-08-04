@@ -9,7 +9,7 @@ export type MessageProps = HTMLAttributes<HTMLDivElement> & {
 export const Message = ({ className, from, ...props }: MessageProps) => (
   <div
     className={cn(
-      'group flex w-full items-end gap-3 py-4',
+      'group flex w-full items-start gap-3 py-3 sm:gap-4 sm:py-4',
       from === 'user' ? 'is-user justify-end' : 'is-assistant justify-start',
       className
     )}
@@ -26,9 +26,9 @@ export const MessageContent = ({
 }: MessageContentProps) => (
   <div
     className={cn(
-      'flex flex-col gap-2 overflow-hidden rounded-2xl px-4 py-3 text-sm max-w-[80%]',
-      'group-[.is-user]:bg-blue-600 group-[.is-user]:text-white group-[.is-user]:ml-auto',
-      'group-[.is-assistant]:bg-gray-100 group-[.is-assistant]:text-gray-900 dark:group-[.is-assistant]:bg-gray-800 dark:group-[.is-assistant]:text-gray-100',
+      'flex max-w-full flex-col gap-2 overflow-hidden text-sm sm:text-[15px]',
+      'group-[.is-user]:ml-auto group-[.is-user]:max-w-[85%] group-[.is-user]:rounded-2xl group-[.is-user]:rounded-br-md group-[.is-user]:bg-brand-500 group-[.is-user]:px-4 group-[.is-user]:py-3 group-[.is-user]:text-white sm:group-[.is-user]:max-w-[72%]',
+      'group-[.is-assistant]:w-full group-[.is-assistant]:max-w-3xl group-[.is-assistant]:text-gray-800 dark:group-[.is-assistant]:text-gray-100',
       className
     )}
     {...props}

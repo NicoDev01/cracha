@@ -11,8 +11,10 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   error: null,
 
       sendMessage: async (question: string) => {
-        const { selectedDatabase } = get()
+        const { selectedDatabase, isLoading, messages: previousMessages } = get()
         
+        if (isLoading) return
+
         if (!selectedDatabase) {
           set({ error: 'Bitte wähle zuerst eine Datenbank aus' })
           return
@@ -26,19 +28,8 @@ export const useChatStore = create<ChatState>()((set, get) => ({
           timestamp: new Date()
         }
 
-        // Add assistant message placeholder
-        const assistantMessageId = `assistant-${Date.now()}`
-        const assistantMessage: Message = {
-          id: assistantMessageId,
-          type: 'assistant',
-          content: '',
-          timestamp: new Date(),
-          isStreaming: false,
-          sources: []
-        }
-
         set(state => ({
-          messages: [...state.messages, userMessage, assistantMessage],
+          messages: [...state.messages, userMessage],
           isLoading: true,
           isStreaming: false,
           error: null
@@ -46,8 +37,8 @@ export const useChatStore = create<ChatState>()((set, get) => ({
 
         try {
           const { sendChatQuery } = await import('@/lib/api/chat-api')
-          const history = get().messages
-            .filter(message => message.id !== userMessage.id && !message.isError && (message.type === 'user' || message.type === 'assistant') && message.content.trim())
+          const history = previousMessages
+            .filter(message => !message.isError && (message.type === 'user' || message.type === 'assistant') && message.content.trim())
             .slice(-12)
             .map(message => ({ role: message.type as 'user' | 'assistant', content: message.content }))
           const response = await sendChatQuery({
@@ -58,11 +49,14 @@ export const useChatStore = create<ChatState>()((set, get) => ({
           })
 
           set(state => ({
-            messages: state.messages.map(msg => 
-              msg.id === assistantMessageId 
-                ? { ...msg, content: response.message, isStreaming: false, sources: response.sources }
-                : msg
-            ),
+            messages: [...state.messages, {
+              id: `assistant-${Date.now()}`,
+              type: 'assistant',
+              content: response.message,
+              timestamp: new Date(),
+              sources: response.sources,
+              metadata: response.metadata,
+            }],
             isLoading: false,
             isStreaming: false
           }))
@@ -80,7 +74,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
           }
           
           set(state => ({
-            messages: [...state.messages.filter(msg => msg.id !== assistantMessageId), errorMessageObj],
+            messages: [...state.messages, errorMessageObj],
             error: null, // Clear global error since we show it in chat
             isLoading: false,
             isStreaming: false
@@ -93,7 +87,9 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       },
 
       selectDatabase: (tenantId: string) => {
-        set({ selectedDatabase: tenantId, error: null })
+        set(state => state.selectedDatabase === tenantId
+          ? { error: null }
+          : { selectedDatabase: tenantId, messages: [], error: null })
       },
 
   setError: (error: string | null) => {

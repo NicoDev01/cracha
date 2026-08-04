@@ -1,6 +1,5 @@
 "use client";
 
-import PageBreadcrumb from "@/components/dashboard/common/PageBreadCrumb";
 import dynamic from "next/dynamic";
 import Head from "next/head";
 
@@ -24,11 +23,8 @@ export default function ChatPage() {
         <title>Chat - CraCha RAG-Agent Dashboard</title>
         <meta name="description" content="Intelligente Unterhaltungen mit Ihren gecrawlten Daten durch RAG-Technologie" />
       </Head>
-      <div>
-        <PageBreadcrumb pageTitle="Chat" />
-        <div className="min-h-screen rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] flex flex-col">
-          <ChatInterface />
-        </div>
+      <div className="h-[calc(100dvh-10rem)] min-h-0 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-theme-xs dark:border-gray-800 dark:bg-gray-900 lg:h-[calc(100dvh-7.75rem)]">
+        <ChatInterface />
       </div>
     </>
   );
