@@ -9,12 +9,13 @@ from .models import Page
 MAX_MARKDOWN_BYTES = 3_500_000
 
 
-def canonical_url(url: str) -> str:
+def canonical_url(url: str, *, preserve_fragment: bool = False) -> str:
     parsed = urlsplit(url)
     path = parsed.path or "/"
     if path != "/":
         path = path.rstrip("/")
-    return urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(), path, parsed.query, ""))
+    fragment = parsed.fragment if preserve_fragment else ""
+    return urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(), path, parsed.query, fragment))
 
 
 def matches_patterns(url: str, includes: list[str], excludes: list[str]) -> bool:
@@ -30,6 +31,11 @@ def normalize_markdown(markdown: str) -> str:
     return text.strip()
 
 
+def _is_indexable(markdown: str) -> bool:
+    searchable_body = re.sub(r"(?m)^\s{0,3}#{1,6}\s+.*$", "", markdown)
+    return len(markdown) >= 200 and len(re.sub(r"\W+", "", searchable_body)) >= 80
+
+
 def truncate_utf8(value: str, max_bytes: int = MAX_MARKDOWN_BYTES) -> str:
     encoded = value.encode("utf-8")
     if len(encoded) <= max_bytes:
@@ -41,18 +47,27 @@ def page_from_result(result: object, includes: list[str], excludes: list[str]) -
     if not getattr(result, "success", False):
         return None
 
-    url = canonical_url(str(getattr(result, "url", "")))
+    result_url = getattr(result, "redirected_url", None) or getattr(result, "url", "")
+    # Hash routes can identify distinct pages in documentation SPAs. Regular
+    # link discovery still strips ordinary anchors before scheduling requests.
+    url = canonical_url(str(result_url), preserve_fragment=True)
     if not url or not matches_patterns(url, includes, excludes):
         return None
 
     markdown_result = getattr(result, "markdown", None)
-    markdown = (
-        getattr(markdown_result, "fit_markdown", None)
-        or getattr(markdown_result, "raw_markdown", None)
-        or (markdown_result if isinstance(markdown_result, str) else "")
+    fit_markdown = normalize_markdown(
+        str(getattr(markdown_result, "fit_markdown", None) or "")
     )
-    markdown = normalize_markdown(markdown)
-    if len(markdown) < 200:
+    raw_markdown = normalize_markdown(
+        str(
+            getattr(markdown_result, "raw_markdown", None)
+            or (markdown_result if isinstance(markdown_result, str) else "")
+        )
+    )
+    # Fit markdown removes repeated navigation, cookie banners and sidebars.
+    # Fall back to raw content when pruning removed a compact but valid page.
+    markdown = fit_markdown if _is_indexable(fit_markdown) else raw_markdown
+    if not _is_indexable(markdown):
         return None
     markdown = truncate_utf8(markdown)
 

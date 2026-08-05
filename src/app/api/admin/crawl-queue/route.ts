@@ -25,6 +25,7 @@ export async function POST(request: NextRequest) {
     const input: CrawlInput = {
       url: body.url,
       tenant_id: body.tenant_id,
+      database_name: typeof body.database_name === 'string' ? body.database_name.trim().slice(0, 160) : undefined,
       type: body.type === 'single' || body.type === 'sitemap' ? body.type : 'recursive',
       max_depth: typeof body.max_depth === 'number' ? body.max_depth : 2,
       limit: typeof body.limit === 'number' ? body.limit : 100,

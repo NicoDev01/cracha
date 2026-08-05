@@ -7,15 +7,14 @@
 export function clearAuthCookies() {
   if (typeof window === 'undefined') return
 
-  // List of Supabase auth cookie names
-  const authCookieNames = [
-    'sb-access-token',
-    'sb-refresh-token',
-    'supabase-auth-token',
-    'supabase.auth.token',
-    'sb-ncfrgsqfnccjfyezxjsj-auth-token',
-    'sb-ncfrgsqfnccjfyezxjsj-auth-token-code-verifier'
-  ]
+  const authCookieNames = document.cookie
+    .split(';')
+    .map((cookie) => cookie.split('=')[0]?.trim())
+    .filter((name): name is string => Boolean(name && (
+      name.startsWith('sb-')
+      || name.startsWith('supabase.')
+      || name.startsWith('supabase-')
+    )))
 
   // Clear cookies by setting them to expire
   authCookieNames.forEach(name => {
@@ -39,5 +38,4 @@ export function clearAuthCookies() {
     }
   })
 
-  console.log('🧹 Cleared all auth cookies and storage')
 }

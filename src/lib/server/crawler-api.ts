@@ -6,6 +6,7 @@ import { databaseRegistry, getOwnedDatabase, saveDatabase, type DatabaseRecord }
 export interface CrawlInput {
   url: string
   tenant_id: string
+  database_name?: string
   type?: 'single' | 'recursive' | 'sitemap'
   max_depth?: number
   limit?: number
@@ -15,6 +16,9 @@ export interface CrawlInput {
 }
 
 export async function enqueueCrawl(input: CrawlInput, userId: string) {
+  const sourceUrl = new URL(input.url)
+  if (!['http:', 'https:'].includes(sourceUrl.protocol)) throw new Error('Ungültige Crawl-URL.')
+
   let database = await getOwnedDatabase(input.tenant_id, userId)
   if (!database) {
     const kv = databaseRegistry()
@@ -23,12 +27,10 @@ export async function enqueueCrawl(input: CrawlInput, userId: string) {
     if (!/^[a-zA-Z0-9_-]{1,160}$/.test(input.tenant_id)) {
       throw new Error('Die ID darf nur Buchstaben, Zahlen, Bindestriche und Unterstriche enthalten.')
     }
-    const sourceUrl = new URL(input.url)
-    if (!['http:', 'https:'].includes(sourceUrl.protocol)) throw new Error('Ungültige Crawl-URL.')
     const now = new Date().toISOString()
     database = {
       id: input.tenant_id,
-      name: input.tenant_id,
+      name: input.database_name || input.tenant_id,
       description: '',
       user_id: userId,
       source_url: sourceUrl.toString(),
@@ -56,6 +58,9 @@ export async function enqueueCrawl(input: CrawlInput, userId: string) {
 
   await saveDatabase({
     ...database,
+    name: input.database_name || database.name,
+    source_url: sourceUrl.toString(),
+    url: sourceUrl.toString(),
     status: 'crawling',
     updated_at: new Date().toISOString(),
     last_error: undefined,
@@ -68,12 +73,14 @@ export async function enqueueCrawl(input: CrawlInput, userId: string) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      ...input,
-      url: database.source_url,
+      url: sourceUrl.toString(),
+      tenant_id: input.tenant_id,
       user_id: userId,
       type: input.type ?? 'recursive',
       max_depth: input.max_depth ?? 2,
       limit: input.limit ?? 100,
+      include_patterns: input.include_patterns ?? [],
+      exclude_patterns: input.exclude_patterns ?? [],
       respect_robots_txt: input.respect_robots_txt !== false,
     }),
   })

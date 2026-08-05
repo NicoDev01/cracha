@@ -1,202 +1,396 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
-import { Plus, Search } from "lucide-react"
+import Link from "next/link"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { DatabaseIcon, ExternalLink, Loader2, Plus, RefreshCw, Search, Trash2 } from "lucide-react"
+import { toast } from "sonner"
+
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { DatabaseCard } from "./database-card"
-import { DatabaseDetailsModal } from "./database-details-modal"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { deleteDatabase } from "@/lib/api/database-api"
+import { apiFetch } from "@/lib/api/request"
+import { cn } from "@/lib/utils"
 import { useAuthStore } from "@/stores/auth-store"
 import { getDatabases } from "@/stores/chat-store"
 import type { Database } from "@/types/chat"
 
+const statusCopy: Record<string, string> = {
+  active: "Aktiv",
+  crawling: "Crawling",
+  pending: "Ausstehend",
+  error: "Fehler",
+  failed: "Fehler",
+  inactive: "Inaktiv",
+}
+
+function databaseName(database: Database) {
+  const name = database.name?.trim()
+  if (name && name !== database.id) return name
+  return database.id
+    .replace(/-[a-f0-9]{8}$/i, "")
+    .replace(/[-_]+/g, " ")
+    .trim() || database.id
+}
+
+function sourceUrl(database: Database) {
+  return database.source_url || database.url || ""
+}
+
+function hostname(url: string) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "")
+  } catch {
+    return url || "–"
+  }
+}
+
+function formatDate(value?: string | Date) {
+  if (!value) return "–"
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return "–"
+  return new Intl.DateTimeFormat("de-DE", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date)
+}
+
+function formatNumber(value?: number) {
+  return new Intl.NumberFormat("de-DE").format(value ?? 0)
+}
+
+function StatusBadge({ status }: { status?: Database["status"] }) {
+  const normalized = status ?? "pending"
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
+        normalized === "active" && "bg-success-50 text-success-700 dark:bg-success-500/10 dark:text-success-300",
+        (normalized === "crawling" || normalized === "pending") && "bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300",
+        (normalized === "error" || normalized === "failed") && "bg-error-50 text-error-700 dark:bg-error-500/10 dark:text-error-300",
+        normalized === "inactive" && "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300",
+      )}
+    >
+      <span
+        className={cn(
+          "size-1.5 rounded-full",
+          normalized === "active" && "bg-success-500",
+          (normalized === "crawling" || normalized === "pending") && "animate-pulse bg-brand-500",
+          (normalized === "error" || normalized === "failed") && "bg-error-500",
+          normalized === "inactive" && "bg-gray-400",
+        )}
+      />
+      {statusCopy[normalized] ?? "Unbekannt"}
+    </span>
+  )
+}
+
 export function DataDashboard() {
-    const { user } = useAuthStore()
-    const [databases, setDatabases] = useState<Database[]>([])
-    const [isLoading, setIsLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
-    const [searchQuery, setSearchQuery] = useState("")
-    const [selectedDatabase, setSelectedDatabase] = useState<Database | null>(null)
-    const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false)
+  const { user } = useAuthStore()
+  const [databases, setDatabases] = useState<Database[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [deleteIds, setDeleteIds] = useState<string[]>([])
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [recrawlingIds, setRecrawlingIds] = useState<Set<string>>(new Set())
 
-    // Load databases
-    const loadDatabases = useCallback(async () => {
-        if (!user) {
-            setDatabases([])
-            setIsLoading(false)
-            return
-        }
-
-        try {
-            setIsLoading(true)
-            setError(null)
-            // 🔐 SECURITY: getDatabases now uses authentication from server
-            const dbs = await getDatabases()
-            setDatabases(dbs)
-        } catch (error) {
-            console.error('Failed to load databases:', error)
-            const errorMessage = error instanceof Error ? error.message : 'Fehler beim Laden der Datenbanken'
-            setError(errorMessage)
-            setDatabases([])
-        } finally {
-            setIsLoading(false)
-        }
-    }, [user])
-
-    useEffect(() => {
-        loadDatabases()
-    }, [loadDatabases])
-
-    // Filter databases based on search query
-    const filteredDatabases = databases.filter(db =>
-        db.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        db.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        db.source_url?.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-
-    const handleDatabaseDeleted = () => {
-        loadDatabases() // Reload databases after deletion
+  const loadDatabases = useCallback(async (showLoading = true) => {
+    if (!user) {
+      setDatabases([])
+      setIsLoading(false)
+      return
     }
 
-    const handleDatabaseUpdated = () => {
-        loadDatabases() // Reload databases after update
+    try {
+      if (showLoading) setIsLoading(true)
+      setError(null)
+      setDatabases(await getDatabases())
+    } catch (loadError) {
+      const message = loadError instanceof Error ? loadError.message : "Fehler beim Laden der Datenbanken"
+      setError(message)
+      if (showLoading) setDatabases([])
+    } finally {
+      if (showLoading) setIsLoading(false)
     }
+  }, [user])
 
-    const openDatabaseDetails = (database: Database) => {
-        setSelectedDatabase(database)
-        setIsDetailsModalOpen(true)
+  useEffect(() => {
+    void loadDatabases()
+  }, [loadDatabases])
+
+  useEffect(() => {
+    if (!databases.some((database) => database.status === "crawling")) return
+    const timer = window.setInterval(() => void loadDatabases(false), 10_000)
+    return () => window.clearInterval(timer)
+  }, [databases, loadDatabases])
+
+  useEffect(() => {
+    const currentIds = new Set(databases.map((database) => database.id))
+    setSelectedIds((selected) => new Set([...selected].filter((id) => currentIds.has(id))))
+  }, [databases])
+
+  const filteredDatabases = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase()
+    if (!query) return databases
+    return databases.filter((database) => {
+      const url = sourceUrl(database)
+      return [databaseName(database), database.description, url, hostname(url), statusCopy[database.status ?? "pending"]]
+        .some((value) => value?.toLowerCase().includes(query))
+    })
+  }, [databases, searchQuery])
+
+  const selectedVisible = filteredDatabases.filter((database) => selectedIds.has(database.id))
+  const allVisibleSelected = filteredDatabases.length > 0 && selectedVisible.length === filteredDatabases.length
+  const someVisibleSelected = selectedVisible.length > 0 && !allVisibleSelected
+
+  const toggleAllVisible = () => {
+    setSelectedIds((current) => {
+      const next = new Set(current)
+      for (const database of filteredDatabases) {
+        if (allVisibleSelected) next.delete(database.id)
+        else next.add(database.id)
+      }
+      return next
+    })
+  }
+
+  const toggleDatabase = (id: string) => {
+    setSelectedIds((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const handleDelete = async () => {
+    if (deleteIds.length === 0) return
+    setIsDeleting(true)
+    const results = await Promise.allSettled(deleteIds.map((id) => deleteDatabase(id)))
+    const deleted = deleteIds.filter((_, index) => results[index].status === "fulfilled")
+    const failed = deleteIds.length - deleted.length
+
+    if (deleted.length > 0) {
+      const deletedSet = new Set(deleted)
+      setDatabases((current) => current.filter((database) => !deletedSet.has(database.id)))
+      setSelectedIds((current) => new Set([...current].filter((id) => !deletedSet.has(id))))
+      toast.success(deleted.length === 1 ? "Wissensbasis gelöscht." : `${deleted.length} Wissensbasen gelöscht.`)
     }
+    if (failed > 0) toast.error(`${failed} ${failed === 1 ? "Wissensbasis konnte" : "Wissensbasen konnten"} nicht gelöscht werden.`)
 
-    return (
-        <div className="space-y-10">
-            {/* Header Actions */}
-            <div className="flex flex-col lg:flex-row gap-6 justify-between items-start lg:items-center">
-                <div className="flex-1 max-w-lg">
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                        <Input
-                            placeholder="Datenbanken durchsuchen..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="pl-10 h-11 border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                        />
-                    </div>
-                </div>
+    setIsDeleting(false)
+    setDeleteIds([])
+  }
 
-                <div className="flex gap-3">
-                    <Button
-                        variant="outline"
-                        onClick={loadDatabases}
-                        disabled={isLoading}
-                        className="h-11 px-6 border-gray-300 hover:border-gray-400"
-                    >
-                        {isLoading ? "Lädt..." : "Aktualisieren"}
-                    </Button>
+  const handleRecrawl = async (database: Database) => {
+    setRecrawlingIds((current) => new Set(current).add(database.id))
+    try {
+      const response = await apiFetch(`/api/admin/databases/${encodeURIComponent(database.id)}/recrawl`, {
+        method: "POST",
+      })
+      const result = await response.json().catch(() => ({})) as { error?: string }
+      if (!response.ok) throw new Error(result.error || "Recrawl konnte nicht gestartet werden.")
+      setDatabases((current) => current.map((entry) => (
+        entry.id === database.id ? { ...entry, status: "crawling" } : entry
+      )))
+      toast.success(`Recrawl für „${databaseName(database)}“ gestartet.`)
+    } catch (recrawlError) {
+      toast.error(recrawlError instanceof Error ? recrawlError.message : "Recrawl konnte nicht gestartet werden.")
+    } finally {
+      setRecrawlingIds((current) => {
+        const next = new Set(current)
+        next.delete(database.id)
+        return next
+      })
+    }
+  }
 
-                    <Button
-                        onClick={() => window.location.href = '/dashboard/crawl'}
-                        className="h-11 px-6 bg-blue-600 hover:bg-blue-700 shadow-sm"
-                    >
-                        <Plus className="w-4 h-4 mr-2" />
-                        Neue Datenbank
-                    </Button>
-                </div>
-            </div>
-
-            {/* Stats entfernt */}
-
-            {/* Error State */}
-            {error && (
-                <div className="bg-red-50 border border-red-200 rounded-2xl p-6 shadow-sm dark:bg-red-900/20 dark:border-red-800">
-                    <div className="text-red-800 dark:text-red-300 font-semibold mb-2">Fehler beim Laden der Datenbanken</div>
-                    <div className="text-red-600 dark:text-red-400 text-sm mb-4">{error}</div>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={loadDatabases}
-                        className="text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300 rounded-xl dark:text-red-400 dark:border-red-700"
-                    >
-                        Erneut versuchen
-                    </Button>
-                </div>
-            )}
-
-            {/* Loading State */}
-            {isLoading && (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {[...Array(6)].map((_, i) => (
-                        <div key={i} className="bg-white rounded-2xl border border-gray-200 p-6 animate-pulse shadow-sm dark:border-gray-800 dark:bg-white/[0.03]">
-                            <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded-xl w-3/4 mb-4"></div>
-                            <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded-xl w-full mb-2"></div>
-                            <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded-xl w-2/3 mb-6"></div>
-                            <div className="flex gap-3">
-                                <div className="h-9 bg-gray-200 dark:bg-gray-700 rounded-xl w-24"></div>
-                                <div className="h-9 bg-gray-200 dark:bg-gray-700 rounded-xl w-24"></div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            )}
-
-            {/* Empty State */}
-            {!isLoading && !error && filteredDatabases.length === 0 && (
-                <div className="bg-gray-50 rounded-2xl border border-gray-200 shadow-sm dark:bg-gray-800/50 dark:border-gray-700">
-                    <div className="text-center py-16 px-6">
-                        <div className="text-gray-400 mb-6">
-                            <svg className="w-20 h-20 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2 2v-5m16 0h-2M4 13h2m0 0V9a2 2 0 012-2h2m0 0V6a2 2 0 012-2h2.586a1 1 0 01.707.293l2.414 2.414A1 1 0 0116 7.414V9" />
-                            </svg>
-                        </div>
-                        <h3 className="text-xl font-semibold text-gray-900 dark:text-white/90 mb-3">
-                            {searchQuery ? 'Keine Datenbanken gefunden' : 'Noch keine Datenbanken'}
-                        </h3>
-                        <p className="text-gray-600 dark:text-gray-400 mb-8 max-w-md mx-auto">
-                            {searchQuery
-                                ? `Keine Datenbanken entsprechen der Suche "${searchQuery}"`
-                                : 'Erstelle deine erste Datenbank, um loszulegen'
-                            }
-                        </p>
-                        {!searchQuery && (
-                            <Button
-                                onClick={() => window.location.href = '/dashboard/crawl'}
-                                className="bg-blue-600 hover:bg-blue-700 h-11 px-6 shadow-sm rounded-xl"
-                            >
-                                <Plus className="w-4 h-4 mr-2" />
-                                Erste Datenbank erstellen
-                            </Button>
-                        )}
-                    </div>
-                </div>
-            )}
-
-            {/* Database Grid */}
-            {!isLoading && !error && filteredDatabases.length > 0 && (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {filteredDatabases.map((database) => (
-                        <DatabaseCard
-                            key={database.id}
-                            database={database}
-                            onDelete={handleDatabaseDeleted}
-                            onUpdate={handleDatabaseUpdated}
-                            onViewDetails={() => openDatabaseDetails(database)}
-                        />
-                    ))}
-                </div>
-            )}
-
-            {/* Database Details Modal */}
-            {selectedDatabase && (
-                <DatabaseDetailsModal
-                    database={selectedDatabase}
-                    isOpen={isDetailsModalOpen}
-                    onClose={() => {
-                        setIsDetailsModalOpen(false)
-                        setSelectedDatabase(null)
-                    }}
-                    onUpdate={handleDatabaseUpdated}
-                    onDelete={handleDatabaseDeleted}
-                />
-            )}
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative w-full sm:max-w-sm">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-gray-400" />
+          <Input
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Datenbanken durchsuchen"
+            className="h-10 rounded-xl pl-9"
+          />
         </div>
-    )
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => void loadDatabases()} disabled={isLoading} className="h-10 gap-2 rounded-xl">
+            <RefreshCw className={cn("size-4", isLoading && "animate-spin")} />
+            Aktualisieren
+          </Button>
+          <Button asChild size="sm" className="h-10 gap-2 rounded-xl bg-brand-500 !text-white hover:bg-brand-600">
+            <Link href="/dashboard/crawl"><Plus className="size-4" />Neue Wissensbasis</Link>
+          </Button>
+        </div>
+      </div>
+
+      {selectedIds.size > 0 && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-700 dark:bg-gray-800/60">
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-200">{selectedIds.size} ausgewählt</span>
+          <Button variant="ghost" size="sm" onClick={() => setDeleteIds([...selectedIds])} className="gap-2 rounded-lg text-error-600 hover:bg-error-50 hover:text-error-700 dark:hover:bg-error-500/10">
+            <Trash2 className="size-4" />Löschen
+          </Button>
+        </div>
+      )}
+
+      {error && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700 dark:border-error-800 dark:bg-error-500/10 dark:text-error-300">
+          <span>{error}</span>
+          <Button variant="ghost" size="sm" onClick={() => void loadDatabases()} className="shrink-0">Erneut versuchen</Button>
+        </div>
+      )}
+
+      <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-theme-xs dark:border-gray-700 dark:bg-gray-900">
+        {isLoading ? (
+          <div className="flex min-h-64 items-center justify-center gap-2 text-sm text-gray-500">
+            <Loader2 className="size-4 animate-spin" />Datenbanken werden geladen
+          </div>
+        ) : !error && filteredDatabases.length === 0 ? (
+          <div className="flex min-h-64 flex-col items-center justify-center px-6 text-center">
+            <DatabaseIcon className="size-8 text-gray-300 dark:text-gray-600" />
+            <h2 className="mt-3 text-sm font-semibold text-gray-900 dark:text-white">{searchQuery ? "Keine Treffer" : "Noch keine Wissensbasis"}</h2>
+            <p className="mt-1 text-xs text-gray-500">{searchQuery ? "Passe deine Suche an." : "Starte einen Crawl, um Inhalte hinzuzufügen."}</p>
+          </div>
+        ) : !error && (
+          <Table className="min-w-[980px]">
+            <TableHeader className="bg-gray-50/80 dark:bg-gray-800/60">
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="w-11 pl-4">
+                  <input
+                    type="checkbox"
+                    checked={allVisibleSelected}
+                    ref={(element) => { if (element) element.indeterminate = someVisibleSelected }}
+                    onChange={toggleAllVisible}
+                    aria-label="Alle sichtbaren Wissensbasen auswählen"
+                    className="size-4 rounded border-gray-300 accent-brand-500"
+                  />
+                </TableHead>
+                <TableHead>Wissensbasis</TableHead>
+                <TableHead>Quelle</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Seiten</TableHead>
+                <TableHead className="text-right">Chunks</TableHead>
+                <TableHead>Letzter Crawl</TableHead>
+                <TableHead className="w-24 text-right">Aktionen</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredDatabases.map((database) => {
+                const url = sourceUrl(database)
+                const isRecrawling = recrawlingIds.has(database.id)
+                return (
+                  <TableRow key={database.id} data-state={selectedIds.has(database.id) ? "selected" : undefined}>
+                    <TableCell className="pl-4">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(database.id)}
+                        onChange={() => toggleDatabase(database.id)}
+                        aria-label={`${databaseName(database)} auswählen`}
+                        className="size-4 rounded border-gray-300 accent-brand-500"
+                      />
+                    </TableCell>
+                    <TableCell className="max-w-56">
+                      <div className="truncate font-semibold text-gray-900 dark:text-white" title={databaseName(database)}>{databaseName(database)}</div>
+                      {database.description && <div className="mt-0.5 truncate text-xs text-gray-500">{database.description}</div>}
+                    </TableCell>
+                    <TableCell className="max-w-64">
+                      {url ? (
+                        <a href={url} target="_blank" rel="noreferrer" className="group block min-w-0 text-gray-600 hover:text-brand-600 dark:text-gray-300">
+                          <span className="flex items-center gap-1.5 font-medium"><span className="truncate">{hostname(url)}</span><ExternalLink className="size-3 shrink-0 opacity-60" /></span>
+                          <span className="mt-0.5 block truncate text-xs text-gray-400" title={url}>{url}</span>
+                        </a>
+                      ) : "–"}
+                    </TableCell>
+                    <TableCell><StatusBadge status={database.status} /></TableCell>
+                    <TableCell className="text-right tabular-nums">{formatNumber(database.pages_count ?? database.document_count)}</TableCell>
+                    <TableCell className="text-right font-medium tabular-nums">{formatNumber(database.chunks_count)}</TableCell>
+                    <TableCell className="whitespace-nowrap text-gray-500 dark:text-gray-400">{formatDate(database.last_crawl)}</TableCell>
+                    <TableCell>
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => void handleRecrawl(database)}
+                          disabled={isRecrawling || database.status === "crawling"}
+                          className="size-8 rounded-lg text-gray-500 hover:text-brand-600"
+                          aria-label={`${databaseName(database)} erneut crawlen`}
+                          title="Recrawl starten"
+                        >
+                          <RefreshCw className={cn("size-4", isRecrawling && "animate-spin")} />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setDeleteIds([database.id])}
+                          className="size-8 rounded-lg text-gray-500 hover:bg-error-50 hover:text-error-600 dark:hover:bg-error-500/10"
+                          aria-label={`${databaseName(database)} löschen`}
+                          title="Löschen"
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+        )}
+      </div>
+
+      {!isLoading && !error && databases.length > 0 && (
+        <p className="text-xs text-gray-400">{filteredDatabases.length} von {databases.length} Wissensbasen</p>
+      )}
+
+      <AlertDialog open={deleteIds.length > 0} onOpenChange={(open) => { if (!open && !isDeleting) setDeleteIds([]) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{deleteIds.length === 1 ? "Wissensbasis löschen?" : `${deleteIds.length} Wissensbasen löschen?`}</AlertDialogTitle>
+            <AlertDialogDescription>
+              Seiten, Chunks und Suchindex werden dauerhaft entfernt. Diese Aktion kann nicht rückgängig gemacht werden.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault()
+                void handleDelete()
+              }}
+              disabled={isDeleting}
+              className="bg-error-600 text-white hover:bg-error-700"
+            >
+              {isDeleting ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Trash2 className="mr-2 size-4" />}
+              {isDeleting ? "Wird gelöscht" : "Löschen"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  )
 }

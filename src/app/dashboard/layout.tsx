@@ -9,6 +9,7 @@ import AppHeader from "@/components/dashboard/layout/AppHeader";
 import AppSidebar from "@/components/dashboard/layout/AppSidebar";
 import Backdrop from "@/components/dashboard/layout/Backdrop";
 import React from "react";
+import { usePathname } from "next/navigation";
 import { Inter, Urbanist } from "next/font/google";
 import localFont from "next/font/local";
 import "./global.css";
@@ -37,6 +38,8 @@ const geist = localFont({
 
 function DashboardContent({ children }: { children: React.ReactNode }) {
   const { isExpanded, isHovered, isMobileOpen } = useSidebar();
+  const pathname = usePathname();
+  const isChatPage = pathname === "/dashboard/chat";
 
   // Dynamic class for main content margin based on sidebar state
   const mainContentMargin = isMobileOpen
@@ -46,18 +49,18 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
       : "lg:ml-[90px]";
 
   return (
-    <div className="min-h-screen xl:flex">
+    <div className="h-dvh overflow-hidden xl:flex">
       {/* Sidebar and Backdrop */}
       <AppSidebar />
       <Backdrop />
 
       {/* Main Content Area */}
-      <div className={`flex-1 transition-all duration-300 ease-in-out ${mainContentMargin}`}>
+      <div className={`flex h-dvh min-w-0 flex-1 flex-col overflow-hidden transition-all duration-300 ease-in-out ${mainContentMargin}`}>
         {/* Header */}
         <AppHeader />
 
         {/* Page Content */}
-        <div className="p-4 mx-auto max-w-7xl md:p-6">
+        <div className={`mx-auto min-h-0 w-full max-w-7xl flex-1 p-4 md:p-6 ${isChatPage ? "overflow-hidden" : "overflow-y-auto"}`}>
           {children}
         </div>
       </div>

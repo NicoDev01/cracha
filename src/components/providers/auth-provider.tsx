@@ -1,11 +1,14 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/stores/auth-store'
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isClient, setIsClient] = useState(false)
+  const router = useRouter()
   const initialize = useAuthStore((state) => state.initialize)
+  const logout = useAuthStore((state) => state.logout)
 
   useEffect(() => {
     setIsClient(true)
@@ -27,6 +30,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     initAuth()
   }, [initialize])
+
+  useEffect(() => {
+    const handleExpiredSession = async () => {
+      await logout()
+      router.replace('/login?reason=session-expired')
+    }
+    window.addEventListener('cracha:auth-expired', handleExpiredSession)
+    return () => window.removeEventListener('cracha:auth-expired', handleExpiredSession)
+  }, [logout, router])
 
   // Prevent hydration mismatch by only rendering on client
   if (!isClient) {

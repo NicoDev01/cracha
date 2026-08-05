@@ -67,11 +67,26 @@ const components: Options['components'] = {
   strong: ({ node: _node, children, className, ...props }) => (
     <strong className={cn('font-semibold text-gray-950 dark:text-white', className)} {...props}>{children}</strong>
   ),
-  a: ({ node: _node, children, className, ...props }) => (
-    <a className={cn('font-medium text-brand-600 underline decoration-brand-200 underline-offset-2 hover:text-brand-700 dark:text-brand-400', className)} rel="noreferrer" target="_blank" {...props}>
-      {children}
-    </a>
-  ),
+  a: ({ node: _node, children, className, ...props }) => {
+    const label = Array.isArray(children) ? children.join('') : String(children)
+    const isCitation = /^\[\d+\]$/.test(label)
+    return (
+      <a
+        aria-label={isCitation ? `Quelle ${label.slice(1, -1)} öffnen` : undefined}
+        className={cn(
+          isCitation
+            ? 'mx-0.5 inline-flex min-w-5 items-center justify-center rounded-md bg-brand-50 px-1.5 py-0.5 align-baseline text-[0.75em] font-semibold leading-none text-brand-700 no-underline transition-colors hover:bg-brand-100 dark:bg-brand-500/15 dark:text-brand-300 dark:hover:bg-brand-500/25'
+            : 'font-medium text-brand-600 underline decoration-brand-200 underline-offset-2 hover:text-brand-700 dark:text-brand-400',
+          className,
+        )}
+        rel="noreferrer"
+        target="_blank"
+        {...props}
+      >
+        {children}
+      </a>
+    )
+  },
   blockquote: ({ node: _node, children, className, ...props }) => (
     <blockquote className={cn('my-4 rounded-r-lg border-l-4 border-brand-300 bg-brand-25 px-4 py-2 text-gray-600 dark:border-brand-700 dark:bg-brand-500/10 dark:text-gray-300', className)} {...props}>
       {children}

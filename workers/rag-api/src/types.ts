@@ -53,8 +53,16 @@ export interface Source {
   chunk_index: string
 }
 
+export interface ContextBlock {
+  n: number
+  title: string
+  url: string
+  text: string
+}
+
 export interface RetrievalResponse {
   context: string
+  blocks: ContextBlock[]
   sources: Source[]
   search_query: string
   usage: { latency_ms: number }

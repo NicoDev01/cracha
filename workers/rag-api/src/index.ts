@@ -67,7 +67,7 @@ async function handleQuery(request: Request, env: Env): Promise<Response> {
   const userId = assertText(body.user_id, 'user_id', 160)
   const database = await databaseForUser(env, databaseId, userId)
 
-  const topK = Number.isFinite(body.top_k) ? Math.min(Math.max(Number(body.top_k), 1), 10) : 6
+  const topK = Number.isFinite(body.top_k) ? Math.min(Math.max(Number(body.top_k), 1), 12) : 8
   const messages = validHistory(body.messages)
   const instance = env.AI_SEARCH.get(database.ai_search_instance_id ?? (await instanceIdFor(databaseId)))
   let retrieval
@@ -79,9 +79,12 @@ async function handleQuery(request: Request, env: Env): Promise<Response> {
     }
     throw error
   }
-  const { context, sources, searchQuery } = retrieval
+  const { context, blocks, sources, searchQuery } = retrieval
   return json(request, env, {
     context,
+    // The generator needs the blocks separately to verify citations against the
+    // exact text each source number stands for.
+    blocks,
     sources,
     search_query: searchQuery,
     usage: { latency_ms: Date.now() - started },
@@ -124,8 +127,8 @@ async function handleComplete(request: Request, env: Env): Promise<Response> {
   const instanceId = database.ai_search_instance_id ?? (await instanceIdFor(databaseId))
   const instance = env.AI_SEARCH.get(instanceId)
   const deleted = await deleteStaleItems(instance, new Set(body.active_keys))
-  // Stats can be temporarily unavailable while newly uploaded items are still
-  // being embedded. A successful enqueue must still complete the crawl job.
+  // The crawler calls this endpoint only after every retained item has produced
+  // searchable chunks. The supplied count is therefore the committed index state.
   let chunksCount = Number.isFinite(body.chunks_count)
     ? Math.max(0, Math.floor(Number(body.chunks_count)))
     : database.chunks_count ?? 0
@@ -172,9 +175,16 @@ async function handleIndexStatus(request: Request, env: Env): Promise<Response> 
     for (const item of response.result) {
       if (!activeKeys.has(item.key)) continue
       foundKeys.add(item.key)
-      chunksCount += item.chunks_count ?? 0
+      const itemChunks = item.chunks_count ?? 0
+      chunksCount += itemChunks
       if (item.status === 'error') failures.push(`${item.key}: ${item.error ?? 'Indexierungsfehler'}`)
-      else if (item.status !== 'completed' && item.status !== 'skipped') pending += 1
+      else if (item.status === 'completed' || item.status === 'skipped') {
+        if (itemChunks === 0) failures.push(`${item.key}: keine durchsuchbaren Inhalte erzeugt`)
+      } else {
+        // queued/running/outdated items are not ready even if AI Search already
+        // reports provisional chunks for them.
+        pending += 1
+      }
     }
     const totalCount = response.result_info?.total_count ?? response.result.length
     if (page * pageSize >= totalCount) break

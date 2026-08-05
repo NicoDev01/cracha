@@ -1,266 +1,208 @@
 "use client"
 
+import Link from "next/link"
 import { useEffect, useState } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Progress } from "@/components/ui/progress"
+import { Check, CheckCircle2, Circle, Clock3, Database, ExternalLink, FileText, Loader2, OctagonX, XCircle } from "lucide-react"
+import { toast } from "sonner"
+
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { 
-  Activity, 
-  Globe, 
-  FileText, 
-  Clock, 
-  StopCircle,
-  CheckCircle,
-  XCircle,
-  AlertCircle,
-  Loader2
-} from "lucide-react"
-import { useCrawlStore } from "@/stores/crawl-store"
 import { cn } from "@/lib/utils"
+import { useCrawlStore, type CrawlJob, type CrawlPhase } from "@/stores/crawl-store"
+
+const phaseOrder: CrawlPhase[] = ["queued", "crawling", "indexing", "completed"]
+const phases = [
+  { value: "queued" as const, label: "Vorbereiten" },
+  { value: "crawling" as const, label: "Seiten erfassen" },
+  { value: "indexing" as const, label: "Inhalte indexieren" },
+]
+
+function formatDuration(seconds: number) {
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  const remainder = seconds % 60
+  return `${minutes}m ${remainder.toString().padStart(2, "0")}s`
+}
+
+function statusCopy(job: CrawlJob) {
+  switch (job.phase) {
+    case "queued": return { title: "Wird vorbereitet" }
+    case "crawling": return { title: "Website wird erfasst" }
+    case "indexing": return { title: "Wissensbasis wird erstellt" }
+    case "completed": return { title: "Bereit" }
+    case "cancelled": return { title: "Abgebrochen" }
+    default: return { title: "Fehlgeschlagen", detail: job.error || "Der Crawl konnte nicht abgeschlossen werden." }
+  }
+}
+
+function StepIcon({ complete, active }: { complete: boolean; active: boolean }) {
+  if (complete) return <Check className="size-3.5" />
+  if (active) return <Loader2 className="size-3.5 animate-spin" />
+  return <Circle className="size-3" />
+}
 
 export function CrawlMonitor() {
-  const { currentJob, isRunning, progress, logs, cancelCrawl, clearLogs } = useCrawlStore()
-  const [elapsedTime, setElapsedTime] = useState(0)
+  const { currentJob, isRunning, statusError, cancelCrawl } = useCrawlStore()
+  const [elapsed, setElapsed] = useState(0)
 
-  // Timer for elapsed time
   useEffect(() => {
-    let interval: NodeJS.Timeout
-    
-    if (isRunning && currentJob) {
-      interval = setInterval(() => {
-        const startTime = new Date(currentJob.created_at).getTime()
-        const now = Date.now()
-        setElapsedTime(Math.floor((now - startTime) / 1000))
-      }, 1000)
-    } else {
-      setElapsedTime(0)
+    if (!currentJob) return
+    const update = () => {
+      const end = currentJob.completed_at ? new Date(currentJob.completed_at).getTime() : Date.now()
+      setElapsed(Math.max(0, Math.floor((end - new Date(currentJob.created_at).getTime()) / 1000)))
     }
-
-    return () => {
-      if (interval) clearInterval(interval)
-    }
-  }, [isRunning, currentJob])
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60)
-    const secs = seconds % 60
-    return `${mins}:${secs.toString().padStart(2, '0')}`
-  }
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return <Clock className="w-4 h-4 text-yellow-500" />
-      case 'running':
-        return <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
-      case 'completed':
-        return <CheckCircle className="w-4 h-4 text-green-500" />
-      case 'failed':
-        return <XCircle className="w-4 h-4 text-red-500" />
-      default:
-        return <AlertCircle className="w-4 h-4 text-gray-500" />
-    }
-  }
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200'
-      case 'running':
-        return 'bg-blue-100 text-blue-800 border-blue-200'
-      case 'completed':
-        return 'bg-green-100 text-green-800 border-green-200'
-      case 'failed':
-        return 'bg-red-100 text-red-800 border-red-200'
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-200'
-    }
-  }
+    update()
+    if (!isRunning) return
+    const timer = window.setInterval(update, 1000)
+    return () => window.clearInterval(timer)
+  }, [currentJob, isRunning])
 
   if (!currentJob) {
     return (
-      <div className="max-w-4xl mx-auto flex flex-col items-center justify-center h-64 text-center">
-        <Activity className="w-12 h-12 text-gray-300 mb-4" />
-        <h3 className="text-lg font-medium text-gray-900 mb-2">Kein aktiver Crawl-Job</h3>
-        <p className="text-gray-500">
-          Starte einen neuen Crawl-Job in der Konfiguration, um den Fortschritt hier zu verfolgen.
-        </p>
-      </div>
+      <aside className="flex min-h-72 flex-col items-center justify-center rounded-2xl border border-dashed border-gray-200 bg-gray-50/60 p-7 text-center dark:border-gray-700 dark:bg-gray-800/30">
+        <div className="flex size-11 items-center justify-center rounded-xl bg-white text-gray-400 shadow-theme-xs dark:bg-gray-900">
+          <Clock3 className="size-5" />
+        </div>
+        <h2 className="mt-4 text-sm font-semibold text-gray-800 dark:text-white">Noch kein Crawl gestartet</h2>
+        <p className="mt-1 max-w-56 text-xs leading-5 text-gray-500 dark:text-gray-400">Der Status deines nächsten Crawls erscheint automatisch hier.</p>
+      </aside>
     )
   }
 
+  const copy = statusCopy(currentJob)
+  const terminal = ["completed", "failed", "cancelled"].includes(currentJob.status)
+  const successful = currentJob.status === "completed"
+  const currentPhaseIndex = phaseOrder.indexOf(currentJob.phase)
+  const progress = currentJob.progress
+  const progressLabel = currentJob.phase === "queued"
+    ? "Crawler wird gestartet"
+    : currentJob.phase === "indexing"
+      ? (progress?.current ?? 0) === 0
+        ? "Inhalte werden an Cloudflare übergeben"
+        : `${progress?.current ?? 0} von ${progress?.total ?? currentJob.pages_crawled} Seiten verfügbar`
+      : (progress?.current ?? 0) === 0
+        ? "Seiten werden gesucht"
+        : `${progress?.current ?? 0} Seiten erfasst`
+
+  const handleCancel = async () => {
+    try {
+      await cancelCrawl()
+      toast.success("Crawl wurde abgebrochen.")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Crawl konnte nicht abgebrochen werden.")
+    }
+  }
+
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      {/* Job Status Header */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              {getStatusIcon(currentJob.status)}
-              <div>
-                <CardTitle className="text-lg">{currentJob.tenant_id}</CardTitle>
-                <CardDescription className="flex items-center gap-2">
-                  <Globe className="w-3 h-3" />
-                  {currentJob.url}
-                </CardDescription>
-              </div>
+    <aside
+      className={cn(
+        "overflow-hidden rounded-2xl border bg-white shadow-theme-xs dark:bg-gray-900",
+        successful ? "border-success-200 dark:border-success-800" : "border-gray-200 dark:border-gray-700",
+      )}
+      aria-live="polite"
+    >
+      <div className={cn("h-1 w-full", successful ? "bg-success-500" : terminal ? "bg-error-500" : "animate-pulse bg-brand-500")} />
+      <div className="p-5 sm:p-6">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className={cn(
+              "flex size-10 shrink-0 items-center justify-center rounded-xl",
+              successful
+                ? "bg-success-50 text-success-600 dark:bg-success-500/10"
+                : terminal
+                  ? "bg-error-50 text-error-600 dark:bg-error-500/10"
+                  : "bg-brand-50 text-brand-600 dark:bg-brand-500/10",
+            )}>
+              {successful ? <CheckCircle2 className="size-5" /> : terminal ? <XCircle className="size-5" /> : <Loader2 className="size-5 animate-spin" />}
             </div>
-            <div className="flex items-center gap-2">
-              <Badge className={cn("border", getStatusColor(currentJob.status))}>
-                {currentJob.status.toUpperCase()}
-              </Badge>
-              {isRunning && (
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={cancelCrawl}
-                  className="text-red-600 hover:text-red-700"
-                >
-                  <StopCircle className="w-4 h-4 mr-1" />
-                  Abbrechen
-                </Button>
+            <div className="min-w-0">
+              <h2 className="text-base font-semibold text-gray-900 dark:text-white">{copy.title}</h2>
+            </div>
+          </div>
+          <span className="shrink-0 font-mono text-xs tabular-nums text-gray-400">{formatDuration(elapsed)}</span>
+        </div>
+
+        {copy.detail && <p className="mt-4 text-sm leading-6 text-error-600 dark:text-error-400">{copy.detail}</p>}
+
+        <div className="mt-5 rounded-xl border border-gray-100 bg-gray-50/80 p-3.5 dark:border-gray-800 dark:bg-gray-800/50">
+          <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-gray-800 dark:text-gray-100">
+            <Database className="size-4 shrink-0 text-gray-400" />
+            <span className="truncate">{currentJob.name}</span>
+          </div>
+          <a href={currentJob.url} target="_blank" rel="noreferrer" className="mt-2 flex min-w-0 items-center gap-2 text-xs text-gray-500 hover:text-brand-600 dark:text-gray-400">
+            <span className="truncate">{currentJob.url}</span>
+            <ExternalLink className="size-3 shrink-0" />
+          </a>
+        </div>
+
+        {isRunning && (
+          <div className="mt-5 flex items-start gap-2.5 text-xs" aria-label="Crawl-Fortschritt">
+            <Loader2 className="mt-0.5 size-3.5 shrink-0 animate-spin text-brand-500" />
+            <div className="min-w-0">
+              <p className="font-medium text-gray-700 dark:text-gray-200">{progressLabel}</p>
+              {progress?.url && currentJob.phase === "crawling" && (
+                <p className="mt-1 truncate font-mono text-[11px] text-gray-400">{progress.url}</p>
               )}
             </div>
           </div>
-        </CardHeader>
-        
-        <CardContent className="space-y-4">
-          {/* Progress Bar */}
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span>Fortschritt</span>
-              <span>{Math.round(progress)}%</span>
-            </div>
-            <Progress value={progress} className="h-2" />
-          </div>
+        )}
 
-          {/* Statistics Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="text-center p-3 bg-blue-50 rounded-lg">
-              <div className="text-2xl font-bold text-blue-600">
-                {currentJob.progress?.pages_crawled || 0}
-              </div>
-              <div className="text-xs text-blue-600 font-medium">Seiten gecrawlt</div>
-            </div>
-            
-            <div className="text-center p-3 bg-green-50 rounded-lg">
-              <div className="text-2xl font-bold text-green-600">
-                {currentJob.progress?.chunks_created || 0}
-              </div>
-              <div className="text-xs text-green-600 font-medium">Chunks erstellt</div>
-            </div>
-            
-            <div className="text-center p-3 bg-purple-50 rounded-lg">
-              <div className="text-2xl font-bold text-purple-600">
-                {formatTime(elapsedTime)}
-              </div>
-              <div className="text-xs text-purple-600 font-medium">Verstrichene Zeit</div>
-            </div>
-            
+        {!terminal && (
+          <div className="mt-5 space-y-3">
+            {phases.map((phase, index) => {
+              const complete = currentPhaseIndex > index
+              const active = currentJob.phase === phase.value
+              return (
+                <div key={phase.value} className="flex items-center gap-3">
+                  <span className={cn(
+                    "flex size-6 items-center justify-center rounded-full border",
+                    complete
+                      ? "border-success-500 bg-success-500 text-white"
+                      : active
+                        ? "border-brand-500 bg-brand-50 text-brand-600 dark:bg-brand-500/10"
+                        : "border-gray-200 text-gray-300 dark:border-gray-700 dark:text-gray-600",
+                  )}>
+                    <StepIcon complete={complete} active={active} />
+                  </span>
+                  <span className={cn("text-sm", active ? "font-semibold text-gray-900 dark:text-white" : "text-gray-500 dark:text-gray-400")}>{phase.label}</span>
+                </div>
+              )
+            })}
           </div>
-        </CardContent>
-      </Card>
+        )}
 
-      {/* Live Logs */}
-      <Card className="flex-1">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <FileText className="w-5 h-5" />
-              Live Logs
-            </CardTitle>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={clearLogs}
-              disabled={logs.length === 0}
-            >
-              Logs löschen
+        {successful && (
+          <div className="mt-5 grid grid-cols-2 gap-2">
+            <div className="rounded-xl bg-gray-50 p-3 dark:bg-gray-800/60">
+              <strong className="block text-lg text-gray-900 dark:text-white">{currentJob.pages_crawled}</strong>
+              <span className="text-[11px] text-gray-500">Seiten</span>
+            </div>
+            <div className="rounded-xl bg-gray-50 p-3 dark:bg-gray-800/60">
+              <strong className="block text-lg text-gray-900 dark:text-white">{currentJob.chunks_created}</strong>
+              <span className="text-[11px] text-gray-500">Chunks</span>
+            </div>
+          </div>
+        )}
+
+        {statusError && isRunning && (
+          <p className="mt-4 text-xs leading-5 text-amber-600 dark:text-amber-400">Status kurzzeitig nicht erreichbar. Die Aktualisierung wird automatisch wiederholt.</p>
+        )}
+
+        <div className="mt-5 flex flex-wrap gap-2">
+          {isRunning && (
+            <Button type="button" variant="outline" size="sm" onClick={handleCancel} className="gap-2 rounded-lg text-gray-600 dark:text-gray-300">
+              <OctagonX className="size-4" />
+              Abbrechen
             </Button>
-          </div>
-        </CardHeader>
-        
-        <CardContent>
-          <ScrollArea className="h-64 w-full rounded-md border p-4">
-            {logs.length === 0 ? (
-              <div className="flex items-center justify-center h-full text-gray-500">
-                <div className="text-center">
-                  <FileText className="w-8 h-8 mx-auto mb-2 text-gray-300" />
-                  <p>Keine Logs verfügbar</p>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-1">
-                {logs.map((log, index) => (
-                  <div key={index} className="flex items-start gap-2 text-sm">
-                    <span className="text-gray-400 font-mono text-xs mt-0.5 flex-shrink-0">
-                      {new Date().toLocaleTimeString()}
-                    </span>
-                    <span className="font-mono text-xs leading-relaxed break-all">
-                      {log}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </ScrollArea>
-        </CardContent>
-      </Card>
+          )}
+          {successful && (
+            <Button asChild size="sm" className="gap-2 rounded-lg bg-brand-500 !text-white hover:bg-brand-600">
+              <Link href="/dashboard/chat"><FileText className="size-4" />Zum Chat</Link>
+            </Button>
+          )}
+        </div>
 
-      {/* Job Details */}
-      {currentJob.status === 'completed' && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <CheckCircle className="w-5 h-5 text-green-500" />
-              Crawl abgeschlossen
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-              <div>
-                <span className="font-medium">Gestartet:</span>
-                <div className="text-gray-600">
-                  {new Date(currentJob.created_at).toLocaleString()}
-                </div>
-              </div>
-              {currentJob.completed_at && (
-                <div>
-                  <span className="font-medium">Abgeschlossen:</span>
-                  <div className="text-gray-600">
-                    {new Date(currentJob.completed_at).toLocaleString()}
-                  </div>
-                </div>
-              )}
-              <div>
-                <span className="font-medium">Typ:</span>
-                <div className="text-gray-600 capitalize">{currentJob.type}</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Error Details */}
-      {currentJob.status === 'failed' && currentJob.error && (
-        <Card className="border-red-200">
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2 text-red-600">
-              <XCircle className="w-5 h-5" />
-              Crawl fehlgeschlagen
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="bg-red-50 border border-red-200 rounded-md p-3">
-              <pre className="text-sm text-red-800 whitespace-pre-wrap font-mono">
-                {currentJob.error}
-              </pre>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-    </div>
+        {isRunning && <p className="mt-4 text-[11px] leading-5 text-gray-400">Du kannst die Seite verlassen. Der Crawl läuft im Hintergrund weiter.</p>}
+      </div>
+    </aside>
   )
 }

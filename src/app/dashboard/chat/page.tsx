@@ -23,7 +23,7 @@ export default function ChatPage() {
         <title>Chat - CraCha RAG-Agent Dashboard</title>
         <meta name="description" content="Intelligente Unterhaltungen mit Ihren gecrawlten Daten durch RAG-Technologie" />
       </Head>
-      <div className="h-[calc(100dvh-10rem)] min-h-0 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-theme-xs dark:border-gray-800 dark:bg-gray-900 lg:h-[calc(100dvh-7.75rem)]">
+      <div className="h-full min-h-0 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-theme-xs dark:border-gray-800 dark:bg-gray-900">
         <ChatInterface />
       </div>
     </>

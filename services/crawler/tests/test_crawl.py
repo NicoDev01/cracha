@@ -24,10 +24,10 @@ async def test_browser_failure_uses_http_fallback(monkeypatch) -> None:
     async def allow_url(_url: str) -> None:
         return None
 
-    async def failed_browser(_request: CrawlRequest) -> tuple[list[Page], int]:
+    async def failed_browser(_request: CrawlRequest, _on_progress=None) -> tuple[list[Page], int]:
         raise RuntimeError("Browser is not available")
 
-    async def fallback(_request: CrawlRequest) -> tuple[list[Page], int]:
+    async def fallback(_request: CrawlRequest, _on_progress=None) -> tuple[list[Page], int]:
         return [fallback_page], 0
 
     monkeypatch.setattr(crawl, "assert_public_url", allow_url)
@@ -52,10 +52,12 @@ async def test_successful_browser_result_skips_fallback(monkeypatch) -> None:
     async def allow_url(_url: str) -> None:
         return None
 
-    async def browser(_request: CrawlRequest) -> tuple[list[Page], int]:
+    async def browser(_request: CrawlRequest, _on_progress=None) -> tuple[list[Page], int]:
         return [browser_page], 1
 
-    async def unexpected_fallback(_request: CrawlRequest) -> tuple[list[Page], int]:
+    async def unexpected_fallback(
+        _request: CrawlRequest, _on_progress=None
+    ) -> tuple[list[Page], int]:
         raise AssertionError("fallback must not run")
 
     monkeypatch.setattr(crawl, "assert_public_url", allow_url)

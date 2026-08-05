@@ -1,5 +1,7 @@
 'use client'
 
+import { apiFetch } from '@/lib/api/request'
+
 // Types for database API
 export interface Database {
     id: string
@@ -36,7 +38,7 @@ class DatabaseAPIClient {
 
     async getUserDatabases(): Promise<Database[]> {
         try {
-            const response = await fetch(`${this.baseUrl}/databases`, {
+            const response = await apiFetch(`${this.baseUrl}/databases`, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
@@ -44,7 +46,7 @@ class DatabaseAPIClient {
             })
 
             if (!response.ok) {
-                throw new Error(`Failed to fetch databases: ${response.status}`)
+                throw new Error(response.status === 401 ? 'Deine Sitzung ist abgelaufen.' : `Failed to fetch databases: ${response.status}`)
             }
 
             const data = await response.json() as DatabaseResponse
@@ -62,7 +64,7 @@ class DatabaseAPIClient {
 
     async getDatabaseInfo(id: string): Promise<Database> {
         try {
-            const response = await fetch(`${this.baseUrl}/databases/${id}`, {
+            const response = await apiFetch(`${this.baseUrl}/databases/${id}`, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
@@ -88,7 +90,7 @@ class DatabaseAPIClient {
 
     async createDatabase(database: Partial<Database>): Promise<Database> {
         try {
-            const response = await fetch(`${this.baseUrl}/databases`, {
+            const response = await apiFetch(`${this.baseUrl}/databases`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -115,7 +117,7 @@ class DatabaseAPIClient {
 
     async updateDatabase(id: string, updates: Partial<Database>): Promise<Database> {
         try {
-            const response = await fetch(`${this.baseUrl}/databases/${id}`, {
+            const response = await apiFetch(`${this.baseUrl}/databases/${id}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -142,7 +144,7 @@ class DatabaseAPIClient {
 
     async deleteDatabase(id: string): Promise<void> {
         try {
-            const response = await fetch(`${this.baseUrl}/databases/${id}`, {
+            const response = await apiFetch(`${this.baseUrl}/databases/${id}`, {
                 method: 'DELETE',
                 headers: {
                     'Content-Type': 'application/json',

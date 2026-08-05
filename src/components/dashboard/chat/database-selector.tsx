@@ -92,11 +92,11 @@ export function DatabaseSelector() {
   }
 
   return (
-    <DropdownMenu>
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <Button
           variant="outline"
-          className="w-[11.5rem] justify-between border-gray-200 bg-white/80 backdrop-blur-sm transition-all duration-200 hover:border-gray-300 hover:bg-white sm:w-[15rem] dark:border-gray-700 dark:bg-white/[0.03] dark:text-white/90 dark:hover:border-gray-600 dark:hover:bg-white/[0.06]"
+          className="w-[10.5rem] justify-between border-gray-200 bg-white/80 backdrop-blur-sm transition-all duration-200 hover:border-gray-300 hover:bg-white sm:w-[13rem] dark:border-gray-700 dark:bg-white/[0.03] dark:text-white/90 dark:hover:border-gray-600 dark:hover:bg-white/[0.06]"
         >
           <div className="flex items-center gap-2">
             <Database className="w-4 h-4 text-gray-500 dark:text-gray-400" />
@@ -109,8 +109,8 @@ export function DatabaseSelector() {
       </DropdownMenuTrigger>
 
       <DropdownMenuContent
-        align="start"
-        className="w-[92vw] sm:w-80 max-h-[12rem] sm:max-h-[20rem] overflow-y-auto overscroll-contain bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl border-gray-200/50 dark:border-gray-800 shadow-xl"
+        align="end"
+        className="max-h-[12rem] w-[92vw] overflow-y-auto overscroll-contain border-gray-200/50 bg-white/95 shadow-xl backdrop-blur-xl sm:max-h-[20rem] sm:w-72 dark:border-gray-800 dark:bg-gray-900/95"
       >
         <DropdownMenuLabel className="flex items-center justify-between text-gray-700 dark:text-white/90">
           <div className="flex items-center gap-2">

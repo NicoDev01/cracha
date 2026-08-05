@@ -6,13 +6,14 @@ import { cookies } from 'next/headers'
 export async function createClient() {
   const cookieStore = await cookies()
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+    ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-  if (!supabaseUrl || !supabaseAnonKey) {
+  if (!supabaseUrl || !supabaseKey) {
     throw new Error('Supabase ist nicht konfiguriert.')
   }
 
-  return createServerClient(supabaseUrl, supabaseAnonKey, {
+  return createServerClient(supabaseUrl, supabaseKey, {
     cookies: {
       getAll: () => cookieStore.getAll(),
       setAll(cookiesToSet) {
@@ -31,25 +32,10 @@ export async function createClient() {
 export async function getAuthenticatedUser() {
   try {
     const supabase = await createClient()
-    const { data, error } = await supabase.auth.getUser()
-    return error ? null : data.user
+    const { data, error } = await supabase.auth.getClaims()
+    const id = data?.claims?.sub
+    return error || typeof id !== 'string' ? null : { id }
   } catch {
     return null
   }
-}
-
-export async function getAuthenticatedSession() {
-  const supabase = await createClient()
-  const [{ data: userData, error: userError }, { data: sessionData }] = await Promise.all([
-    supabase.auth.getUser(),
-    supabase.auth.getSession(),
-  ])
-  if (userError || !userData.user || !sessionData.session?.access_token) return null
-  return { user: userData.user, accessToken: sessionData.session.access_token }
-}
-
-export async function requireAuth(): Promise<string> {
-  const user = await getAuthenticatedUser()
-  if (!user) throw new Error('Authentifizierung erforderlich.')
-  return user.id
 }

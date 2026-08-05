@@ -13,7 +13,7 @@ export type SourcesProps = ComponentProps<'div'>;
 
 export const Sources = ({ className, ...props }: SourcesProps) => (
   <Collapsible
-    className={cn('not-prose mt-4 text-sm', className)}
+    className={cn('not-prose mt-5 border-t border-gray-100 pt-4 text-sm dark:border-gray-800', className)}
     {...props}
   />
 );
@@ -30,16 +30,17 @@ export const SourcesTrigger = ({
 }: SourcesTriggerProps) => (
   <CollapsibleTrigger
     className={cn(
-      'group/source flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 font-medium text-gray-700 transition-colors hover:border-brand-200 hover:bg-brand-25 hover:text-brand-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:border-brand-800 dark:hover:bg-brand-500/10',
+      'group/source flex w-full items-center gap-2 rounded-lg px-1 py-1.5 text-left font-medium text-gray-600 transition-colors hover:text-brand-600 dark:text-gray-300 dark:hover:text-brand-400',
       className
     )}
     {...props}
   >
     {children ?? (
       <>
-        <BookOpenIcon className="size-4" />
-        <span>{count} {count === 1 ? 'Quelle' : 'Quellen'}</span>
-        <ChevronDownIcon className="size-4 transition-transform group-data-[state=open]/source:rotate-180" />
+        <BookOpenIcon className="size-4 text-gray-400" />
+        <span>Verwendete Quellen</span>
+        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400">{count}</span>
+        <ChevronDownIcon className="ml-auto size-4 text-gray-400 transition-transform group-data-[state=open]/source:rotate-180" />
       </>
     )}
   </CollapsibleTrigger>
@@ -53,7 +54,7 @@ export const SourcesContent = ({
 }: SourcesContentProps) => (
   <CollapsibleContent
     className={cn(
-      'mt-3 grid w-full gap-2 sm:grid-cols-2',
+      'mt-2 grid w-full gap-3',
       'data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 outline-none data-[state=closed]:animate-out data-[state=open]:animate-in',
       className
     )}

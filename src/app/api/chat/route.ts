@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getWorkerEnv } from '@/lib/server/cloudflare'
-import { generateGroundedAnswer } from '@/lib/server/generation'
+import { streamGroundedAnswer } from '@/lib/server/generation'
 import { getAuthenticatedUser } from '@/lib/supabase/server'
 import type { Source } from '@/types/chat'
 
@@ -16,9 +16,26 @@ interface ChatBody {
 
 interface RetrievalResponse {
   context?: string
+  blocks?: Array<{ n: number; title: string; url: string; text: string }>
   sources?: Array<{ id: string; title: string; url: string; snippet: string; score: number; chunk_index: string }>
   usage?: { latency_ms?: number }
   error?: string
+}
+
+const encoder = new TextEncoder()
+
+function encodeEvent(event: 'meta' | 'delta' | 'done' | 'error', data: unknown): Uint8Array {
+  return encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+}
+
+function streamResponse(stream: ReadableStream<Uint8Array>): Response {
+  return new Response(stream, {
+    headers: {
+      'Cache-Control': 'no-cache, no-transform',
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'X-Accel-Buffering': 'no',
+    },
+  })
 }
 
 export async function POST(request: NextRequest) {
@@ -40,7 +57,7 @@ export async function POST(request: NextRequest) {
   const retrievalResponse = await env.RAG_API.fetch('https://cracha-rag.internal/query', {
     method: 'POST',
     headers: { Authorization: `Bearer ${env.RAG_QUERY_SECRET}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ question, tenant_id: tenantId, user_id: user.id, top_k: body?.top_k ?? 6, messages }),
+    body: JSON.stringify({ question, tenant_id: tenantId, user_id: user.id, top_k: body?.top_k ?? 8, messages }),
   })
   const retrieval = await retrievalResponse.json().catch(() => ({})) as RetrievalResponse
   if (!retrievalResponse.ok) {
@@ -55,31 +72,48 @@ export async function POST(request: NextRequest) {
     relevance_score: source.score,
   }))
   if (!retrieval.context || sources.length === 0) {
-    return NextResponse.json({
-      answer: 'Ich konnte in dieser Wissensbasis keine ausreichend relevanten Informationen finden.',
-      sources: [],
-      usage: { latency_ms: Date.now() - started, llm_tokens: 0 },
-      model: 'Cloudflare AI Search',
-    })
+    return streamResponse(new ReadableStream({
+      start(controller) {
+        const model = 'Cloudflare AI Search'
+        controller.enqueue(encodeEvent('meta', { sources: [], model }))
+        controller.enqueue(encodeEvent('delta', { text: 'Ich konnte in dieser Wissensbasis keine ausreichend relevanten Informationen finden.' }))
+        controller.enqueue(encodeEvent('done', {
+          usage: { latency_ms: Date.now() - started, retrieval_ms: retrieval.usage?.latency_ms ?? 0, llm_tokens: 0 },
+          model,
+        }))
+        controller.close()
+      },
+    }))
   }
 
-  try {
-    const generated = await generateGroundedAnswer({
-      ai: env.AI,
-      model: env.GENERATION_MODEL || '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
-      question,
-      history: messages,
-      context: retrieval.context,
-      sources,
-    })
-    return NextResponse.json({
-      answer: generated.answer,
-      sources,
-      usage: { latency_ms: Date.now() - started, retrieval_ms: retrieval.usage?.latency_ms ?? 0, llm_tokens: generated.tokens },
-      model: `${generated.model} + Cloudflare AI Search`,
-    })
-  } catch (error) {
-    console.error(JSON.stringify({ event: 'chat_generation_failed', error: error instanceof Error ? error.message : 'unknown' }))
-    return NextResponse.json({ error: 'Die Antwort konnte nicht erzeugt werden.' }, { status: 502 })
-  }
+  return streamResponse(new ReadableStream({
+    async start(controller) {
+      try {
+        const generated = await streamGroundedAnswer({
+          ai: env.AI,
+          model: env.GENERATION_MODEL || 'google/gemini-3.5-flash',
+          question,
+          history: messages,
+          context: retrieval.context as string,
+          blocks: retrieval.blocks ?? [],
+        })
+        const model = `${generated.model} + Cloudflare AI Search`
+        controller.enqueue(encodeEvent('meta', { sources, model }))
+
+        for await (const text of generated.text) {
+          controller.enqueue(encodeEvent('delta', { text }))
+        }
+
+        controller.enqueue(encodeEvent('done', {
+          usage: { latency_ms: Date.now() - started, retrieval_ms: retrieval.usage?.latency_ms ?? 0, llm_tokens: 0 },
+          model,
+        }))
+      } catch (error) {
+        console.error(JSON.stringify({ event: 'chat_generation_failed', error: error instanceof Error ? error.message : 'unknown' }))
+        controller.enqueue(encodeEvent('error', { message: 'Die Antwort konnte nicht erzeugt werden.' }))
+      } finally {
+        controller.close()
+      }
+    },
+  }))
 }

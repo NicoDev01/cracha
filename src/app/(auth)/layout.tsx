@@ -9,12 +9,18 @@ export default function AuthLayout({
 }: {
   children: React.ReactNode
 }) {
-  const { isInitialized, error } = useAuthStore()
+  const { isInitialized, error, initialize } = useAuthStore()
   const [showTimeout, setShowTimeout] = useState(false)
   const pathname = usePathname()
   
   // Allow callback and confirm routes to render immediately without waiting for auth
   const isAuthCallbackRoute = pathname?.includes('/callback') || pathname?.includes('/confirm')
+
+  useEffect(() => {
+    if (!isAuthCallbackRoute && !isInitialized) {
+      void initialize()
+    }
+  }, [initialize, isAuthCallbackRoute, isInitialized])
 
   // Show timeout message after 10 seconds
   useEffect(() => {

@@ -1,94 +1,78 @@
 "use client"
 
-import { useState } from "react"
-import { CrawlConfigForm } from "./crawl-config-form"
-import { CrawlMonitor } from "./crawl-monitor"
-import { CrawlJobsList } from "./crawl-jobs-list"
+import { useEffect, useState } from "react"
+import { Activity, History, Plus, Radar } from "lucide-react"
+
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Settings, List, Activity } from "lucide-react"
+import { useCrawlStore } from "@/stores/crawl-store"
+import { CrawlConfigForm } from "./crawl-config-form"
+import { CrawlJobsList } from "./crawl-jobs-list"
+import { CrawlMonitor } from "./crawl-monitor"
 
 export function CrawlInterface() {
-  const [activeTab, setActiveTab] = useState("config")
+  const [activeTab, setActiveTab] = useState("new")
+  const { isRunning, resumeCurrentCrawl } = useCrawlStore()
+
+  useEffect(() => {
+    resumeCurrentCrawl()
+  }, [resumeCurrentCrawl])
+
+  useEffect(() => {
+    if (isRunning) setActiveTab("status")
+  }, [isRunning])
 
   return (
-    <div className="h-full">
-      <div className="mx-auto w-full max-w-[630px] text-center mb-8">
-        <h3 className="mb-4 font-semibold text-gray-800 text-theme-xl dark:text-white/90 sm:text-2xl">
-          Website Crawling
-        </h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400 sm:text-base">
-          Crawle Websites und erstelle intelligente, durchsuchbare Wissensspeicher für RAG-basierte Abfragen
-        </p>
-      </div>
+    <section className="flex h-full min-h-0 flex-col" aria-label="Website-Crawler">
+      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-gray-200 px-4 py-3 sm:px-5 dark:border-gray-800">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-500 text-white shadow-theme-sm">
+            <Radar className="size-5" />
+          </div>
+          <h1 className="truncate font-semibold text-gray-900 dark:text-white">Crawl</h1>
+        </div>
 
-      <div className="max-w-6xl mx-auto">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
-          <TabsList className="grid w-full grid-cols-3 mb-6 rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
-            <TabsTrigger value="config" className="flex items-center gap-2 rounded-xl">
-              <Settings className="w-4 h-4" />
-              Konfiguration
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="h-9 rounded-xl bg-gray-100 p-1 dark:bg-gray-800">
+            <TabsTrigger value="new" className="rounded-lg px-3" aria-label="Neuer Crawl">
+              <Plus className="size-4" />
+              <span className="hidden sm:inline">Neu</span>
             </TabsTrigger>
-            <TabsTrigger value="monitor" className="flex items-center gap-2 rounded-xl">
-              <Activity className="w-4 h-4" />
-              Live Monitor
+            <TabsTrigger value="status" className="relative rounded-lg px-3" aria-label="Crawl-Status">
+              <Activity className="size-4" />
+              <span className="hidden sm:inline">Status</span>
+              {isRunning && <span className="absolute right-1 top-1 size-1.5 animate-pulse rounded-full bg-brand-500" />}
             </TabsTrigger>
-            <TabsTrigger value="jobs" className="flex items-center gap-2 rounded-xl">
-              <List className="w-4 h-4" />
-              Crawl Jobs
+            <TabsTrigger value="history" className="rounded-lg px-3" aria-label="Crawl-Verlauf">
+              <History className="size-4" />
+              <span className="hidden sm:inline">Verlauf</span>
             </TabsTrigger>
           </TabsList>
+        </Tabs>
+      </header>
 
-          <div className="flex-1 overflow-hidden">
-            <TabsContent value="config" className="h-full mt-0">
-              <div className="rounded-2xl border border-gray-200 bg-white px-5 py-7 dark:border-gray-800 dark:bg-white/[0.03] xl:px-10 xl:py-12">
-                <div className="mb-6">
-                  <h4 className="mb-2 font-semibold text-gray-800 text-lg dark:text-white/90">
-                    Crawl Konfiguration
-                  </h4>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Konfiguriere deine Website-Crawling Parameter
-                  </p>
-                </div>
-                <div className="overflow-auto">
-                  <CrawlConfigForm />
-                </div>
+      <div className="min-h-0 flex-1 overflow-y-auto bg-gradient-to-b from-gray-25 to-white dark:from-gray-950 dark:to-gray-900">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="min-h-full">
+          <TabsContent value="new" className="m-0">
+            <div className="mx-auto w-full max-w-3xl p-4 sm:p-6 lg:p-8">
+              <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-theme-xs sm:p-7 dark:border-gray-700 dark:bg-gray-900">
+                <CrawlConfigForm onStarted={() => setActiveTab("status")} />
               </div>
-            </TabsContent>
+            </div>
+          </TabsContent>
 
-            <TabsContent value="monitor" className="h-full mt-0">
-              <div className="rounded-2xl border border-gray-200 bg-white px-5 py-7 dark:border-gray-800 dark:bg-white/[0.03] xl:px-10 xl:py-12">
-                <div className="mb-6">
-                  <h4 className="mb-2 font-semibold text-gray-800 text-lg dark:text-white/90">
-                    Live Crawl Monitor
-                  </h4>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Verfolge den Fortschritt deines aktuellen Crawl-Jobs
-                  </p>
-                </div>
-                <div className="overflow-auto">
-                  <CrawlMonitor />
-                </div>
-              </div>
-            </TabsContent>
+          <TabsContent value="status" className="m-0">
+            <div className="mx-auto w-full max-w-3xl p-4 sm:p-6 lg:p-8">
+              <CrawlMonitor />
+            </div>
+          </TabsContent>
 
-            <TabsContent value="jobs" className="h-full mt-0">
-              <div className="rounded-2xl border border-gray-200 bg-white px-5 py-7 dark:border-gray-800 dark:bg-white/[0.03] xl:px-10 xl:py-12">
-                <div className="mb-6">
-                  <h4 className="mb-2 font-semibold text-gray-800 text-lg dark:text-white/90">
-                    Crawl Jobs Historie
-                  </h4>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Übersicht aller vergangenen und aktuellen Crawl-Jobs
-                  </p>
-                </div>
-                <div className="overflow-auto">
-                  <CrawlJobsList />
-                </div>
-              </div>
-            </TabsContent>
-          </div>
+          <TabsContent value="history" className="m-0">
+            <div className="mx-auto w-full max-w-5xl p-4 sm:p-6 lg:p-8">
+              <CrawlJobsList />
+            </div>
+          </TabsContent>
         </Tabs>
       </div>
-    </div>
+    </section>
   )
 }

@@ -5,16 +5,14 @@ import {
   Bot,
   Check,
   Copy,
-  Database,
   ExternalLink,
   MessageSquare,
-  Search,
-  ShieldCheck,
   Sparkles,
   Trash2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useHydratedChatStore } from '@/hooks/use-chat-store';
+import { getCitedSources, linkifyCitations, type IndexedSource } from '@/lib/chat/citations';
 import type { Message as ChatMessage } from '@/types/chat';
 import {
   Conversation,
@@ -26,11 +24,8 @@ import { Loader } from './loader';
 import { Message, MessageContent } from './message';
 import {
   PromptInput,
-  PromptInputButton,
   PromptInputSubmit,
   PromptInputTextarea,
-  PromptInputToolbar,
-  PromptInputTools,
 } from './prompt-input';
 import { Response } from './response';
 import { Source, Sources, SourcesContent, SourcesTrigger } from './source';
@@ -54,6 +49,25 @@ const getHostname = (url: string) => {
   }
 };
 
+const getSourcePath = (url: string) => {
+  try {
+    const parsed = new URL(url);
+    const path = `${parsed.pathname}${parsed.search}`;
+    return path === '/' ? 'Startseite' : path;
+  } catch {
+    return url;
+  }
+};
+
+const groupSourcesByDomain = (sources: IndexedSource[]) => {
+  const groups = new Map<string, IndexedSource[]>();
+  sources.forEach((entry) => {
+    const hostname = getHostname(entry.source.url);
+    groups.set(hostname, [...(groups.get(hostname) ?? []), entry]);
+  });
+  return Array.from(groups, ([hostname, items]) => ({ hostname, items }));
+};
+
 export function ChatInterface() {
   const {
     messages,
@@ -62,6 +76,7 @@ export function ChatInterface() {
     setError,
     sendMessage,
     isLoading,
+    isStreaming,
   } = useHydratedChatStore();
   const [input, setInput] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -72,8 +87,8 @@ export function ChatInterface() {
   }, [setError]);
 
   useEffect(() => {
-    if (!isLoading && selectedDatabase) inputRef.current?.focus();
-  }, [isLoading, selectedDatabase]);
+    if (!isLoading && !isStreaming && selectedDatabase) inputRef.current?.focus();
+  }, [isLoading, isStreaming, selectedDatabase]);
 
   const handleClearChat = () => {
     if (window.confirm('Möchtest du wirklich alle Nachrichten löschen?')) clearChat();
@@ -82,7 +97,7 @@ export function ChatInterface() {
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     const question = input.trim();
-    if (!question || !selectedDatabase || isLoading) return;
+    if (!question || !selectedDatabase || isLoading || isStreaming) return;
 
     setInput('');
     await sendMessage(question);
@@ -101,18 +116,7 @@ export function ChatInterface() {
           <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-500 text-white shadow-theme-sm">
             <MessageSquare className="size-5" />
           </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="truncate font-semibold text-gray-900 dark:text-white">CraCha Chat</h1>
-              <span className="hidden items-center gap-1 rounded-full bg-success-50 px-2 py-0.5 text-[11px] font-medium text-success-700 sm:inline-flex dark:bg-success-500/10 dark:text-success-400">
-                <ShieldCheck className="size-3" />
-                quellenbasiert
-              </span>
-            </div>
-            <p className="truncate text-xs text-gray-500 dark:text-gray-400">
-              {selectedDatabase ? 'Bereit für Fragen an deine Wissensbasis' : 'Wähle eine Wissensbasis aus'}
-            </p>
-          </div>
+          <h1 className="truncate font-semibold text-gray-900 dark:text-white">CraCha Chat</h1>
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
@@ -171,8 +175,19 @@ export function ChatInterface() {
               <div className="mt-auto">
                 {messages.map((message) => {
                   const isUser = message.type === 'user';
+                  const messageSources = message.sources ?? [];
+                  const citedSources = isUser
+                    ? []
+                    : getCitedSources(message.content, messageSources, !message.isStreaming);
+                  const renderedContent = isUser
+                    ? message.content
+                    : linkifyCitations(message.content, messageSources);
                   return (
-                    <Message key={message.id} from={isUser ? 'user' : 'assistant'}>
+                    <Message
+                      key={message.id}
+                      from={isUser ? 'user' : 'assistant'}
+                      data-model={!isUser ? message.metadata?.model_used : undefined}
+                    >
                       {!isUser && (
                         <div className={`mt-6 flex size-8 shrink-0 items-center justify-center rounded-xl ${message.isError ? 'bg-error-50 text-error-600 dark:bg-error-500/10' : 'bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-400'}`}>
                           <Bot className="size-4" />
@@ -187,37 +202,58 @@ export function ChatInterface() {
                         <MessageContent className={message.isError ? 'rounded-xl border border-error-200 bg-error-50 p-4 text-error-700 dark:border-error-800 dark:bg-error-500/10 dark:text-error-300' : undefined}>
                           {isUser ? (
                             <p className="whitespace-pre-wrap leading-6">{message.content}</p>
+                          ) : message.isStreaming && !message.content ? (
+                            <span className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                              <Loader className="text-brand-500" />
+                              Formuliere Antwort …
+                            </span>
                           ) : (
-                            <Response>{message.content}</Response>
+                            <div>
+                              <Response>{renderedContent}</Response>
+                              {message.isStreaming && (
+                                <span className="ml-1 inline-block h-4 w-0.5 animate-pulse rounded-full bg-brand-500 align-middle" aria-label="Antwort wird erstellt" />
+                              )}
+                            </div>
                           )}
 
-                          {!isUser && message.sources && message.sources.length > 0 && (
+                          {!isUser && citedSources.length > 0 && (
                             <Sources>
-                              <SourcesTrigger count={message.sources.length} />
+                              <SourcesTrigger count={citedSources.length} />
                               <SourcesContent>
-                                {message.sources.map((source, index) => (
-                                  <Source key={source.id} href={source.url} title={source.title}>
-                                    <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-brand-50 text-xs font-semibold text-brand-600 dark:bg-brand-500/10 dark:text-brand-400">
-                                      {index + 1}
-                                    </span>
-                                    <span className="min-w-0 flex-1">
-                                      <span className="flex items-center gap-1.5">
-                                        <span className="truncate font-medium text-gray-800 dark:text-gray-100">{source.title}</span>
-                                        <ExternalLink className="size-3 shrink-0 text-gray-400" />
-                                      </span>
-                                      <span className="mt-0.5 block truncate text-xs text-gray-400">{getHostname(source.url)}</span>
-                                      {source.snippet && (
-                                        <span className="mt-1.5 line-clamp-2 block text-xs leading-5 text-gray-500 dark:text-gray-400">{source.snippet}</span>
-                                      )}
-                                    </span>
-                                  </Source>
+                                {groupSourcesByDomain(citedSources).map((group) => (
+                                  <div key={group.hostname} className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800/60">
+                                    <div className="border-b border-gray-100 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">
+                                      {group.hostname}
+                                    </div>
+                                    <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                                      {group.items.map(({ index, source }) => {
+                                        return (
+                                          <Source
+                                            key={source.id}
+                                            href={source.url}
+                                            title={source.title}
+                                            className="rounded-none border-0 bg-transparent px-3 py-2.5 shadow-none hover:translate-y-0 hover:bg-brand-25 hover:shadow-none dark:bg-transparent dark:hover:bg-brand-500/10"
+                                          >
+                                            <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-brand-50 text-xs font-semibold text-brand-600 dark:bg-brand-500/10 dark:text-brand-400">
+                                              {index}
+                                            </span>
+                                            <span className="min-w-0 flex-1">
+                                              <span className="block truncate font-medium text-gray-800 dark:text-gray-100">{source.title}</span>
+                                              <span className="mt-0.5 block truncate font-mono text-[11px] text-gray-400">{getSourcePath(source.url)}</span>
+                                            </span>
+                                            <ExternalLink className="mt-1 size-3.5 shrink-0 text-gray-400" />
+                                          </Source>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
                                 ))}
                               </SourcesContent>
                             </Sources>
                           )}
                         </MessageContent>
 
-                        {!isUser && message.content && (
+                        {!isUser && message.content && !message.isStreaming && (
                           <div className="mt-1.5 flex items-center gap-1">
                             <Button
                               type="button"
@@ -257,39 +293,26 @@ export function ChatInterface() {
           <ConversationScrollButton className="bottom-3 border-gray-200 bg-white shadow-theme-md dark:border-gray-700 dark:bg-gray-800" />
         </Conversation>
 
-        <div className="shrink-0 border-t border-gray-200 bg-white/95 px-3 py-3 backdrop-blur sm:px-5 sm:py-4 dark:border-gray-800 dark:bg-gray-900/95">
+        <div className="shrink-0 border-t border-gray-200 bg-white/95 px-3 py-3 backdrop-blur sm:px-5 dark:border-gray-800 dark:bg-gray-900/95">
           <div className="mx-auto w-full max-w-5xl">
-            <PromptInput onSubmit={handleSubmit}>
+            <PromptInput onSubmit={handleSubmit} className="relative flex items-end px-4 py-3 pr-14">
               <PromptInputTextarea
                 ref={inputRef}
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
-                placeholder={selectedDatabase ? (isLoading ? 'Du kannst bereits die nächste Frage vorbereiten …' : 'Frage etwas zu deiner Wissensbasis …') : 'Wähle zuerst eine Wissensbasis aus'}
+                placeholder={selectedDatabase ? 'Frage etwas zu deiner Wissensbasis …' : 'Wähle zuerst eine Wissensbasis aus'}
                 disabled={!selectedDatabase}
+                className="min-h-7 px-0 py-0 pr-2"
                 aria-label="Nachricht"
               />
-              <PromptInputToolbar>
-                <PromptInputTools>
-                  <PromptInputButton variant="ghost" className="max-w-[13rem] text-xs" aria-label="Ausgewählte Wissensbasis">
-                    <Database className="size-4" />
-                    <span className="truncate">{selectedDatabase ? 'Wissensbasis ausgewählt' : 'Keine Wissensbasis'}</span>
-                  </PromptInputButton>
-                  <span className="hidden items-center gap-1 text-xs text-gray-400 md:flex">
-                    <Search className="size-3.5" />
-                    Hybrid Search
-                  </span>
-                </PromptInputTools>
-                <PromptInputSubmit
-                  disabled={!input.trim() || !selectedDatabase || isLoading}
-                  status={isLoading ? 'submitted' : undefined}
-                  aria-label="Nachricht senden"
-                  title="Nachricht senden"
-                />
-              </PromptInputToolbar>
+              <PromptInputSubmit
+                className="absolute bottom-2 right-2"
+                disabled={!input.trim() || !selectedDatabase || isLoading || isStreaming}
+                status={isLoading || isStreaming ? 'submitted' : undefined}
+                aria-label="Nachricht senden"
+                title="Nachricht senden"
+              />
             </PromptInput>
-            <p className="mt-2 hidden text-center text-[11px] text-gray-400 sm:block">
-              Enter zum Senden · Shift + Enter für eine neue Zeile · Antworten können Fehler enthalten
-            </p>
           </div>
         </div>
       </div>

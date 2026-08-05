@@ -37,9 +37,14 @@ export async function getOwnedDatabase(id: string, userId: string): Promise<Data
 
   const now = new Date().toISOString()
   const sourceUrl = raw.source_url ?? raw.url ?? ''
+  const storedName = raw.name?.trim()
+  const legacyName = id
+    .replace(/-[a-f0-9]{8}$/i, '')
+    .replace(/[-_]+/g, ' ')
+    .trim()
   const database: DatabaseRecord = {
     id,
-    name: raw.name ?? id,
+    name: storedName && storedName !== id ? storedName : legacyName || id,
     description: raw.description ?? '',
     user_id: userId,
     source_url: sourceUrl,

@@ -24,7 +24,7 @@ export type PromptInputProps = HTMLAttributes<HTMLFormElement>;
 export const PromptInput = ({ className, ...props }: PromptInputProps) => (
   <form
     className={cn(
-      'w-full overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-theme-sm transition-shadow focus-within:border-brand-300 focus-within:shadow-focus-ring dark:border-gray-700 dark:bg-gray-900 dark:focus-within:border-brand-700',
+      'w-full rounded-2xl border border-gray-200 bg-white shadow-theme-sm transition-shadow focus-within:border-brand-300 focus-within:shadow-focus-ring dark:border-gray-700 dark:bg-gray-900 dark:focus-within:border-brand-700',
       className
     )}
     {...props}

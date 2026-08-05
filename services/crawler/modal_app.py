@@ -1,5 +1,7 @@
 import hmac
 import os
+import uuid
+from datetime import UTC, datetime
 from typing import Annotated
 
 import modal
@@ -24,6 +26,108 @@ image = (
 )
 app = modal.App(APP_NAME)
 runtime_secret = modal.Secret.from_name("cracha-crawler-secrets-v2")
+crawl_statuses = modal.Dict.from_name("cracha-crawl-status-v1", create_if_missing=True)
+
+
+async def update_status(job_id: str, **changes) -> dict:
+    current = await crawl_statuses.get.aio(job_id) or {}
+    if "result" in changes:
+        changes["result"] = {**(current.get("result") or {}), **changes["result"]}
+    updated = {**current, **changes, "updated_at": datetime.now(UTC).isoformat()}
+    await crawl_statuses.put.aio(job_id, updated)
+    return updated
+
+
+@app.function(
+    image=image,
+    secrets=[runtime_secret],
+    timeout=1800,
+    cpu=0.25,
+    memory=512,
+    scaledown_window=60,
+)
+async def finalize_index(
+    job_id: str,
+    database_id: str,
+    user_id: str,
+    active_keys: list[str],
+    skipped_count: int,
+) -> dict:
+    ingest_client = RagIngestClient()
+    submitted_count = len(active_keys)
+
+    async def report_progress(progress: dict[str, object]) -> None:
+        indexed = int(progress.get("current") or 0)
+        total = int(progress.get("total") or len(active_keys))
+        chunks = int(progress.get("chunks_count") or 0)
+        await update_status(
+            job_id,
+            status="running",
+            phase="indexing",
+            progress=progress,
+            result={
+                "pages_count": len(active_keys),
+                "chunks_count": chunks,
+                "indexed_pages": indexed,
+                "indexing_pending": max(0, total - indexed),
+                "indexing_complete": False,
+                "skipped_count": skipped_count + submitted_count - len(active_keys),
+            },
+        )
+
+    try:
+        status = await ingest_client.finalize(
+            database_id,
+            user_id,
+            active_keys,
+            attempts=900,
+            on_progress=report_progress,
+        )
+        if not status.complete:
+            raise TimeoutError("AI Search indexing did not finish within 30 minutes")
+
+        result = {
+            "success": True,
+            "pages_count": len(active_keys),
+            "skipped_count": skipped_count + submitted_count - len(active_keys),
+            "chunks_count": status.chunks_count,
+            "indexed_pages": status.indexed_count,
+            "indexing_pending": 0,
+            "indexing_complete": True,
+            "active_keys": active_keys,
+        }
+        await update_status(
+            job_id,
+            status="completed",
+            phase="completed",
+            call_id=None,
+            finalizer_call_id=None,
+            result=result,
+            progress={
+                "stage": "completed",
+                "current": status.indexed_count,
+                "total": len(active_keys),
+                "percent": 100,
+                "chunks_count": status.chunks_count,
+            },
+        )
+        return result
+    except Exception as error:
+        try:
+            await ingest_client.mark_failed(database_id, user_id, str(error))
+        finally:
+            await update_status(
+                job_id,
+                status="failed",
+                phase="failed",
+                call_id=None,
+                finalizer_call_id=None,
+                error=(
+                    "Cloudflare konnte die Wissensbasis nicht vollständig indexieren. "
+                    "Details stehen im Modal-Log."
+                ),
+            )
+        raise
 
 
 @app.function(
@@ -32,27 +136,126 @@ runtime_secret = modal.Secret.from_name("cracha-crawler-secrets-v2")
     timeout=3600,
     cpu=2.0,
     memory=4096,
-    scaledown_window=2,
+    scaledown_window=60,
 )
-async def process_crawl(payload: dict) -> dict:
+async def process_crawl(payload: dict, job_id: str) -> dict:
     request = CrawlRequest.model_validate(payload)
     ingest_client = RagIngestClient()
+
+    async def report_progress(progress: dict[str, object]) -> None:
+        result = {}
+        if "pages_count" in progress:
+            result["pages_count"] = progress["pages_count"]
+        if "skipped_count" in progress:
+            result["skipped_count"] = progress["skipped_count"]
+        if "chunks_count" in progress:
+            result["chunks_count"] = progress["chunks_count"]
+        if progress.get("stage") == "indexing":
+            indexed = int(progress.get("current") or 0)
+            total = int(progress.get("total") or len(pages))
+            result.update(
+                indexed_pages=indexed,
+                indexing_pending=max(0, total - indexed),
+                indexing_complete=False,
+            )
+        await update_status(job_id, progress=progress, result=result)
+
     try:
-        pages, skipped = await crawl_pages(request)
+        await update_status(
+            job_id,
+            status="running",
+            phase="crawling",
+            error=None,
+            progress={
+                "stage": "crawling",
+                "current": 0,
+                "total": 1 if request.type.value == "single" else request.limit,
+                "percent": 0,
+            },
+        )
+        pages, skipped = await crawl_pages(request, report_progress)
         if not pages:
             raise RuntimeError("No indexable content was found.")
 
-        active_keys = await ingest_client.ingest(request.tenant_id, request.user_id, pages)
-        return {
+        await update_status(
+            job_id,
+            status="running",
+            phase="indexing",
+            result={"pages_count": len(pages), "skipped_count": skipped},
+            progress={
+                "stage": "indexing",
+                "current": 0,
+                "total": len(pages),
+                "percent": 0,
+            },
+        )
+        ingest_result = await ingest_client.ingest(
+            request.tenant_id, request.user_id, pages, report_progress
+        )
+        skipped += len(pages) - len(ingest_result.active_keys)
+        result = {
             "success": True,
-            "pages_count": len(pages),
+            "pages_count": len(ingest_result.active_keys),
             "skipped_count": skipped,
-            "active_keys": active_keys,
+            "chunks_count": ingest_result.chunks_count,
+            "indexed_pages": ingest_result.indexed_count,
+            "indexing_pending": ingest_result.pending_count,
+            "indexing_complete": ingest_result.indexing_complete,
+            "active_keys": ingest_result.active_keys,
         }
+        if not ingest_result.indexing_complete:
+            finalizer = await finalize_index.spawn.aio(
+                job_id,
+                request.tenant_id,
+                request.user_id,
+                ingest_result.active_keys,
+                skipped,
+            )
+            await update_status(
+                job_id,
+                status="running",
+                phase="indexing",
+                call_id=None,
+                finalizer_call_id=finalizer.object_id,
+                result=result,
+                progress={
+                    "stage": "indexing",
+                    "current": ingest_result.indexed_count,
+                    "total": len(ingest_result.active_keys),
+                    "percent": round(
+                        ingest_result.indexed_count
+                        / max(1, len(ingest_result.active_keys))
+                        * 100
+                    ),
+                    "chunks_count": ingest_result.chunks_count,
+                },
+            )
+        else:
+            await update_status(
+                job_id,
+                status="completed",
+                phase="completed",
+                call_id=None,
+                result=result,
+                progress={
+                    "stage": "completed",
+                    "current": ingest_result.indexed_count,
+                    "total": len(ingest_result.active_keys),
+                    "percent": 100,
+                    "chunks_count": ingest_result.chunks_count,
+                },
+            )
+        return result
     except Exception as error:
         try:
             await ingest_client.mark_failed(request.tenant_id, request.user_id, str(error))
         finally:
+            await update_status(
+                job_id,
+                status="failed",
+                phase="failed",
+                error="Crawl oder Indexierung ist fehlgeschlagen. Details stehen im Modal-Log.",
+            )
             raise
 
 
@@ -83,37 +286,87 @@ def api():
 
     @web.post("/crawl", dependencies=[Depends(authorize)])
     async def start_crawl(request: CrawlRequest) -> dict:
-        call = await process_crawl.spawn.aio(request.model_dump(mode="json"))
-        return {"success": True, "job_id": call.object_id, "status": "queued"}
+        job_id = uuid.uuid4().hex
+        await update_status(
+            job_id,
+            status="queued",
+            phase="queued",
+            result={"pages_count": 0, "chunks_count": 0, "skipped_count": 0},
+            progress={"stage": "queued", "current": 0, "total": 0, "percent": 0},
+        )
+        call = await process_crawl.spawn.aio(request.model_dump(mode="json"), job_id)
+        await update_status(job_id, call_id=call.object_id)
+        return {"success": True, "job_id": job_id, "status": "queued", "phase": "queued"}
 
     @web.get("/status/{job_id}", dependencies=[Depends(authorize)])
     async def crawl_status(job_id: str):
         from fastapi.responses import JSONResponse
 
-        call = modal.FunctionCall.from_id(job_id)
-        try:
-            result = await call.get.aio(timeout=0)
-        except TimeoutError:
-            return JSONResponse(
-                status_code=202,
-                content={"success": True, "job_id": job_id, "status": "running"},
-            )
-        except Exception:
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "success": False,
-                    "job_id": job_id,
-                    "status": "failed",
-                    "error": "Crawl or indexing failed. Check the Modal logs.",
-                },
-            )
-        return {"success": True, "job_id": job_id, "status": "completed", "result": result}
+        status = await crawl_statuses.get.aio(job_id)
+        if not status:
+            raise HTTPException(status_code=404, detail="Crawl job not found")
+
+        if status.get("status") in {"queued", "running"}:
+            call_id = status.get("call_id")
+            if call_id:
+                call = modal.FunctionCall.from_id(call_id)
+                try:
+                    result = await call.get.aio(timeout=0)
+                except TimeoutError:
+                    return JSONResponse(
+                        status_code=202,
+                        content={"success": True, "job_id": job_id, **status},
+                    )
+                except Exception:
+                    status = await update_status(
+                        job_id,
+                        status="failed",
+                        phase="failed",
+                        error=(
+                            "Crawl oder Indexierung ist fehlgeschlagen. "
+                            "Details stehen im Modal-Log."
+                        ),
+                    )
+                else:
+                    latest = await crawl_statuses.get.aio(job_id) or status
+                    if latest.get("status") not in {"queued", "running"}:
+                        status = latest
+                    elif result.get("indexing_complete") is False:
+                        status = await update_status(
+                            job_id,
+                            status="running",
+                            phase="indexing",
+                            call_id=None,
+                            result=result,
+                        )
+                        return JSONResponse(
+                            status_code=202,
+                            content={"success": True, "job_id": job_id, **status},
+                        )
+                    else:
+                        status = await update_status(
+                            job_id,
+                            status="completed",
+                            phase="completed",
+                            call_id=None,
+                            result=result,
+                        )
+            else:
+                return JSONResponse(
+                    status_code=202,
+                    content={"success": True, "job_id": job_id, **status},
+                )
+        return {"success": status.get("status") == "completed", "job_id": job_id, **status}
 
     @web.post("/cancel/{job_id}", dependencies=[Depends(authorize)])
     async def cancel_crawl(job_id: str) -> dict:
-        call = modal.FunctionCall.from_id(job_id)
-        await call.cancel.aio()
-        return {"success": True, "job_id": job_id, "status": "cancelled"}
+        status = await crawl_statuses.get.aio(job_id)
+        if not status:
+            raise HTTPException(status_code=404, detail="Crawl job not found")
+        for call_id in {status.get("call_id"), status.get("finalizer_call_id")} - {None}:
+            call = modal.FunctionCall.from_id(call_id)
+            await call.cancel.aio()
+        await update_status(job_id, status="cancelled", phase="cancelled", error=None)
+        return {"success": True, "job_id": job_id, "status": "cancelled", "phase": "cancelled"}
 
     return web

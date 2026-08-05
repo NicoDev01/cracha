@@ -22,8 +22,26 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   const result = (await response.json().catch(() => ({}))) as {
     success?: boolean
     status?: string
+    phase?: 'queued' | 'crawling' | 'indexing' | 'completed' | 'failed' | 'cancelled'
     error?: string
-    result?: { pages_count?: number; skipped_count?: number }
+    result?: {
+      pages_count?: number
+      chunks_count?: number
+      skipped_count?: number
+      indexed_pages?: number
+      indexing_pending?: number
+      indexing_complete?: boolean
+    }
+    progress?: {
+      stage?: string
+      current?: number
+      total?: number
+      percent?: number
+      pages_count?: number
+      skipped_count?: number
+      chunks_count?: number
+      url?: string
+    }
   }
   if (!response.ok && response.status !== 202) {
     return NextResponse.json({ success: false, status: 'failed', error: result.error ?? 'Statusabfrage fehlgeschlagen.' }, { status: 502 })
@@ -33,10 +51,19 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     success: result.success !== false,
     job_id: jobId,
     status: result.status ?? 'running',
+    phase: result.phase,
     error: result.error,
+    progress: result.progress,
     config: { tenant_id: job.database_id },
     result: result.result
-      ? { ...result.result, chunks: result.result.pages_count ?? 0 }
+      ? {
+          pages_count: result.result.pages_count ?? 0,
+          chunks_count: result.result.chunks_count ?? 0,
+          skipped_count: result.result.skipped_count ?? 0,
+          indexed_pages: result.result.indexed_pages,
+          indexing_pending: result.result.indexing_pending,
+          indexing_complete: result.result.indexing_complete,
+        }
       : undefined,
   })
 }

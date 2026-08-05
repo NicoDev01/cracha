@@ -35,6 +35,26 @@ interface AuthState {
 
 const supabase = createClient()
 
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(
+      () => reject(new Error('Authentifizierung hat das Zeitlimit überschritten.')),
+      timeoutMs
+    )
+
+    promise.then(
+      (value) => {
+        window.clearTimeout(timeout)
+        resolve(value)
+      },
+      (error) => {
+        window.clearTimeout(timeout)
+        reject(error)
+      }
+    )
+  })
+}
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
@@ -51,9 +71,10 @@ export const useAuthStore = create<AuthState>()(
         try {
           // Check if Supabase is properly configured
           const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-          const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+          const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+            ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
           
-          if (!supabaseUrl || !supabaseAnonKey || supabaseUrl.includes('placeholder')) {
+          if (!supabaseUrl || !supabaseKey || supabaseUrl.includes('placeholder')) {
             console.warn('Supabase not configured - skipping auth initialization')
             set({
               user: null,
@@ -66,12 +87,14 @@ export const useAuthStore = create<AuthState>()(
             return
           }
           
-          // First try to get session (less strict than getUser)
-          const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+          const { data: claimsData, error: claimsError } = await withTimeout(
+            supabase.auth.getClaims(),
+            5_000
+          )
           
-          if (sessionError) {
-            console.log('Session error (expected if no session):', sessionError.message)
-            // This is expected if user is not logged in
+          if (claimsError || !claimsData?.claims?.sub) {
+            await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
+            clearAuthCookies()
             set({
               user: null,
               session: null,
@@ -82,6 +105,8 @@ export const useAuthStore = create<AuthState>()(
             })
             return
           }
+
+          const { data: { session } } = await supabase.auth.getSession()
           
           if (session?.user) {
             const authUser: AuthUser = {
@@ -114,7 +139,7 @@ export const useAuthStore = create<AuthState>()(
           
           // Listen for auth changes
           supabase.auth.onAuthStateChange((event, session) => {
-            if (event === 'SIGNED_IN' && session?.user) {
+            if (event !== 'SIGNED_OUT' && session?.user) {
               const authUser: AuthUser = {
                 id: session.user.id,
                 email: session.user.email || '',
@@ -130,7 +155,7 @@ export const useAuthStore = create<AuthState>()(
                 isAuthenticated: true,
                 error: null
               })
-            } else if (event === 'SIGNED_OUT') {
+            } else {
               set({
                 user: null,
                 session: null,
@@ -142,9 +167,14 @@ export const useAuthStore = create<AuthState>()(
           
         } catch (error) {
           console.error('Auth initialization error:', error)
+          clearAuthCookies()
           set({ 
-            error: error instanceof Error ? error.message : 'Authentication failed',
-            isLoading: false 
+            error: null,
+            isLoading: false,
+            isInitialized: true,
+            isAuthenticated: false,
+            user: null,
+            session: null,
           })
         }
       },
@@ -264,24 +294,29 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true })
 
         try {
-          // Clear cookies first to prevent refresh token errors
-          clearAuthCookies()
-
-          const { error } = await supabase.auth.signOut()
+          const { error } = await supabase.auth.signOut({ scope: 'local' })
 
           if (error) {
             console.warn('Logout error (continuing anyway):', error)
           }
 
-          // User state will be updated by onAuthStateChange
-          set({ isLoading: false })
+          clearAuthCookies()
+          set({
+            user: null,
+            session: null,
+            isAuthenticated: false,
+            isLoading: false,
+          })
 
         } catch (error) {
           // Even if logout fails, clear local state
           clearAuthCookies()
           set({
             error: error instanceof Error ? error.message : 'Logout failed',
-            isLoading: false
+            user: null,
+            session: null,
+            isAuthenticated: false,
+            isLoading: false,
           })
         }
       },
