@@ -1,18 +1,47 @@
 import 'server-only'
 
 import { getWorkerEnv } from './cloudflare'
-import { databaseRegistry, getOwnedDatabase, saveDatabase, type DatabaseRecord } from './database-registry'
+import {
+  DEFAULT_CRAWL_SETTINGS,
+  databaseRegistry,
+  getOwnedDatabase,
+  normalizeCrawlSettings,
+  saveDatabase,
+  type CrawlSettings,
+  type CrawlType,
+  type DatabaseRecord,
+} from './database-registry'
 
 export interface CrawlInput {
   url: string
   tenant_id: string
   database_name?: string
-  type?: 'single' | 'recursive' | 'sitemap'
+  type?: CrawlType
   max_depth?: number
   limit?: number
   include_patterns?: string[]
   exclude_patterns?: string[]
   respect_robots_txt?: boolean
+}
+
+/**
+ * A re-crawl supplies no settings and must rebuild the knowledge base the way
+ * it was built the first time. Anything the caller leaves out therefore falls
+ * back to what the record stores, and only then to the defaults.
+ */
+export function resolveCrawlSettings(
+  input: CrawlInput,
+  stored: CrawlSettings | undefined,
+): CrawlSettings {
+  const base = stored ?? DEFAULT_CRAWL_SETTINGS
+  return normalizeCrawlSettings({
+    type: input.type ?? base.type,
+    max_depth: input.max_depth ?? base.max_depth,
+    limit: input.limit ?? base.limit,
+    include_patterns: input.include_patterns ?? base.include_patterns,
+    exclude_patterns: input.exclude_patterns ?? base.exclude_patterns,
+    respect_robots_txt: input.respect_robots_txt ?? base.respect_robots_txt,
+  })!
 }
 
 export async function enqueueCrawl(input: CrawlInput, userId: string) {
@@ -56,6 +85,7 @@ export async function enqueueCrawl(input: CrawlInput, userId: string) {
     throw new Error('Crawler-Service ist nicht konfiguriert.')
   }
 
+  const settings = resolveCrawlSettings(input, database.crawl_settings)
   await saveDatabase({
     ...database,
     name: input.database_name || database.name,
@@ -64,6 +94,7 @@ export async function enqueueCrawl(input: CrawlInput, userId: string) {
     status: 'crawling',
     updated_at: new Date().toISOString(),
     last_error: undefined,
+    crawl_settings: settings,
   })
 
   const response = await fetch(`${env.MODAL_CRAWLER_URL.replace(/\/$/, '')}/crawl`, {
@@ -76,12 +107,7 @@ export async function enqueueCrawl(input: CrawlInput, userId: string) {
       url: sourceUrl.toString(),
       tenant_id: input.tenant_id,
       user_id: userId,
-      type: input.type ?? 'recursive',
-      max_depth: input.max_depth ?? 2,
-      limit: input.limit ?? 100,
-      include_patterns: input.include_patterns ?? [],
-      exclude_patterns: input.exclude_patterns ?? [],
-      respect_robots_txt: input.respect_robots_txt !== false,
+      ...settings,
     }),
   })
 

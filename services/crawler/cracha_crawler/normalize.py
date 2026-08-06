@@ -113,8 +113,12 @@ def page_from_result(result: object, includes: list[str], excludes: list[str]) -
     # Crawl4AI reports a rendered error page as a success with its status code
     # intact. Sites whose 404 carries the full layout would otherwise index
     # "Seite nicht gefunden" as an answerable source.
+    #
+    # Redirects must pass. The reported status belongs to the first response,
+    # so a 301 still carries the destination's content under redirected_url.
+    # Rejecting those dropped every blog article behind a legacy permalink.
     status_code = getattr(result, "status_code", None)
-    if isinstance(status_code, int) and not 200 <= status_code < 300:
+    if isinstance(status_code, int) and status_code >= 400:
         return None
 
     result_url = getattr(result, "redirected_url", None) or getattr(result, "url", "")

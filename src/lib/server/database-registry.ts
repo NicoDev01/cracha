@@ -2,6 +2,27 @@ import 'server-only'
 
 import { getWorkerEnv } from './cloudflare'
 
+export type CrawlType = 'single' | 'recursive' | 'sitemap'
+
+/** What the knowledge base was built with, so a re-crawl can reproduce it. */
+export interface CrawlSettings {
+  type: CrawlType
+  max_depth: number
+  limit: number
+  include_patterns: string[]
+  exclude_patterns: string[]
+  respect_robots_txt: boolean
+}
+
+export const DEFAULT_CRAWL_SETTINGS: CrawlSettings = {
+  type: 'recursive',
+  max_depth: 2,
+  limit: 100,
+  include_patterns: [],
+  exclude_patterns: [],
+  respect_robots_txt: true,
+}
+
 export interface DatabaseRecord {
   id: string
   name: string
@@ -18,6 +39,29 @@ export interface DatabaseRecord {
   status: 'pending' | 'crawling' | 'active' | 'failed'
   ai_search_instance_id?: string
   last_error?: string
+  crawl_settings?: CrawlSettings
+}
+
+function patternList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string').slice(0, 20)
+    : []
+}
+
+/** Records written before crawl settings were stored return undefined. */
+export function normalizeCrawlSettings(value: unknown): CrawlSettings | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const raw = value as Partial<CrawlSettings>
+  const limit = Number(raw.limit)
+  const maxDepth = Number(raw.max_depth)
+  return {
+    type: raw.type === 'single' || raw.type === 'sitemap' ? raw.type : 'recursive',
+    max_depth: Number.isFinite(maxDepth) ? Math.min(Math.max(Math.floor(maxDepth), 0), 5) : 2,
+    limit: Number.isFinite(limit) ? Math.min(Math.max(Math.floor(limit), 1), 500) : 100,
+    include_patterns: patternList(raw.include_patterns),
+    exclude_patterns: patternList(raw.exclude_patterns),
+    respect_robots_txt: raw.respect_robots_txt !== false,
+  }
 }
 
 export function databaseRegistry(): KVNamespace {
@@ -60,6 +104,7 @@ export async function getOwnedDatabase(id: string, userId: string): Promise<Data
       : 'pending',
     ai_search_instance_id: raw.ai_search_instance_id,
     last_error: raw.last_error,
+    crawl_settings: normalizeCrawlSettings(raw.crawl_settings),
   }
 
   if (!raw.user_id) await saveDatabase(database)

@@ -12,13 +12,12 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
   if (!database) return NextResponse.json({ success: false, error: 'Wissensbasis nicht gefunden.' }, { status: 404 })
 
   try {
+    // No settings on purpose: enqueueCrawl reuses what the knowledge base was
+    // built with. Passing defaults here silently re-crawled every base with
+    // limit 100 and depth 2, regardless of how it was originally configured.
     const result = await enqueueCrawl({
       url: database.source_url,
       tenant_id: database.id,
-      type: 'recursive',
-      max_depth: 2,
-      limit: 100,
-      respect_robots_txt: true,
     }, user.id)
     return NextResponse.json({ success: true, job_id: result.job_id, status: result.status ?? 'queued' }, { status: 202 })
   } catch (error) {

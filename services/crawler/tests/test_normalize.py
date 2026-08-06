@@ -99,8 +99,14 @@ def test_page_normalization_rejects_rendered_error_pages() -> None:
         )
 
     assert page_from_result(result(404), [], []) is None
+    assert page_from_result(result(410), [], []) is None
     assert page_from_result(result(500), [], []) is None
     assert page_from_result(result(200), [], []) is not None
+    # The reported status belongs to the first response. A legacy permalink
+    # answers 301 and still carries the destination's content, so rejecting it
+    # removed every blog article behind such a redirect.
+    assert page_from_result(result(301), [], []) is not None
+    assert page_from_result(result(307), [], []) is not None
     # Sources without a status code (raw HTML, file input) stay indexable.
     assert page_from_result(result(None), [], []) is not None
 
