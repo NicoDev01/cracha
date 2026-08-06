@@ -411,7 +411,7 @@ export function packContext(
   if (hub) {
     const text = hub.text.slice(0, Math.min(HUB_MAX_CHARACTERS, contextBudget))
     const sourceNumber = addSource(hub.url, hub.title, hub.url, text, 1, `hub-${hub.key}`)
-    blocks.push({ n: sourceNumber, title: hub.title, url: hub.url, text })
+    blocks.push({ n: sourceNumber, title: hub.title, url: hub.url, text, collection: true })
     chunksPerSource.set(hub.url, maxChunksPerSource)
     contextCharacters += text.length
   }
@@ -444,7 +444,12 @@ export function packContext(
 
   return {
     context: blocks
-      .map((block) => `[${block.n}] ${block.title}\nURL: ${block.url || 'unbekannt'}\n${block.text}`)
+      .map((block) => {
+        const label = block.collection
+          ? `[${block.n}] ${block.title} (ÜBERSICHTSSEITE — maßgebliche vollständige Liste)`
+          : `[${block.n}] ${block.title}`
+        return `${label}\nURL: ${block.url || 'unbekannt'}\n${block.text}`
+      })
       .join('\n\n---\n\n'),
     blocks,
     sources,
@@ -531,6 +536,8 @@ export interface ContextBlock {
   title: string
   url: string
   text: string
+  /** Set on the collection page: it defines the authoritative set of entries. */
+  collection?: boolean
 }
 
 export function classifyQuestion(question: string): QuestionIntent {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { groundListEntry, paddedBlockText, type GroundingBlock } from './generation'
+import { groundListEntry, paddedBlockText, type ContextBlock, type GroundingBlock } from './generation'
 
 const teamPage: GroundingBlock = {
   n: 1,
@@ -13,6 +13,43 @@ const detailPage: GroundingBlock = {
   paddedText: paddedBlockText('Klaus Becker ist seit 2011 bei Webmen und leitet die Entwicklung.'),
 }
 const blocks = [teamPage, detailPage]
+
+describe('collection page restriction', () => {
+  const overview: ContextBlock = {
+    n: 1,
+    title: 'Unser Team',
+    url: 'https://www.webmen.de/agentur-bremen/team',
+    text: 'Stephan Müller\nKlaus Becker\nFabian Holler',
+    collection: true,
+  }
+  const blogPost: ContextBlock = {
+    n: 2,
+    title: 'Über Webmen',
+    url: 'https://www.webmen.de/blog/ueber-webmen',
+    text: 'Lena Fellner hat den Beitrag verfasst. Auch Klaus Becker kommt vor.',
+  }
+
+  function ground(line: string, context: ContextBlock[]): string | null {
+    const collection = context.filter((block) => block.collection)
+    const scope = (collection.length ? collection : context)
+      .map((block) => ({ n: block.n, paddedText: paddedBlockText(block.text) }))
+    return groundListEntry(line, scope)
+  }
+
+  it('drops entries that only appear outside the collection page', () => {
+    // Production listed Lena Fellner and Sonja Ahrens as team members.
+    expect(ground('- Lena Fellner [2]', [overview, blogPost])).toBeNull()
+  })
+
+  it('keeps collection entries and points their citation at the overview', () => {
+    expect(ground('- Fabian Holler [8]', [overview, blogPost])).toBe('- Fabian Holler [1]')
+    expect(ground('- Klaus Becker [2]', [overview, blogPost])).toBe('- Klaus Becker [1]')
+  })
+
+  it('uses every block when no collection page was identified', () => {
+    expect(ground('- Lena Fellner [2]', [blogPost])).toBe('- Lena Fellner [2]')
+  })
+})
 
 describe('list entry grounding', () => {
   it('keeps an entry whose citation already points at a supporting source', () => {
