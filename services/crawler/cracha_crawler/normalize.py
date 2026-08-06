@@ -8,6 +8,49 @@ from .models import Page
 
 MAX_MARKDOWN_BYTES = 3_500_000
 
+# A link target: `(url)`, `(<url>)` or `(url "title")`, tolerating one level of
+# parentheses inside the URL itself.
+_LINK_TARGET = (
+    r"\(\s*(?:<[^>\n]*>|[^\s()]*(?:\([^()\n]*\)[^\s()]*)*)"
+    r"(?:\s+(?:\"[^\"\n]*\"|'[^'\n]*'))?\s*\)"
+)
+MARKDOWN_IMAGE_RE = re.compile(rf"!\[([^\[\]\n]*)\]{_LINK_TARGET}")
+MARKDOWN_LINK_RE = re.compile(rf"\[([^\[\]\n]*)\]{_LINK_TARGET}")
+MARKDOWN_REFERENCE_LINK_RE = re.compile(r"\[([^\[\]\n]*)\]\[[^\]\n]*\]")
+# Indentation is horizontal only. `\s` would swallow the preceding blank line.
+MARKDOWN_REFERENCE_DEFINITION_RE = re.compile(r"(?m)^[ \t]{0,3}\[[^\]\n]+\]:[ \t]*\S+.*$")
+AUTOLINK_RE = re.compile(r"<((?:https?|mailto):[^>\s]+)>")
+EMPTY_LIST_ITEM_RE = re.compile(r"(?m)^[ \t]{0,3}(?:[-*+]|\d+[.)])[ \t]*$\n?")
+EMPTY_HEADING_RE = re.compile(r"(?m)^[ \t]{0,3}#{1,6}[ \t]*$\n?")
+
+
+def strip_markdown_links(markdown: str) -> str:
+    """Replace markdown links with their text and drop images.
+
+    Cloudflare AI Search runs its own boilerplate filter over uploaded content
+    and treats link-dense markdown as navigation. Measured against the indexing
+    pipeline, a page of 60 `## [Name](url)` lines fails outright with
+    `file_content_empty`, and 60 `- [Name](url)` lines index as an item whose
+    chunks contain none of the names. The same lists survive intact once the
+    link syntax is gone, so collection pages must reach the index as plain
+    text. Bare URLs are not affected and stay readable.
+
+    Crawling is unaffected: link discovery reads the rendered DOM, not this
+    markdown.
+    """
+    text = MARKDOWN_REFERENCE_DEFINITION_RE.sub("", markdown)
+    text = AUTOLINK_RE.sub(r"\1", text)
+    text = MARKDOWN_IMAGE_RE.sub(lambda match: match.group(1).strip(), text)
+    # `[![alt](image)](target)` needs a second pass once the image is gone.
+    for _ in range(3):
+        unwrapped = MARKDOWN_LINK_RE.sub(lambda match: match.group(1).strip(), text)
+        if unwrapped == text:
+            break
+        text = unwrapped
+    text = MARKDOWN_REFERENCE_LINK_RE.sub(lambda match: match.group(1).strip(), text)
+    text = EMPTY_LIST_ITEM_RE.sub("", text)
+    return EMPTY_HEADING_RE.sub("", text)
+
 
 def canonical_url(url: str, *, preserve_fragment: bool = False) -> str:
     parsed = urlsplit(url)
@@ -25,7 +68,9 @@ def matches_patterns(url: str, includes: list[str], excludes: list[str]) -> bool
 
 
 def normalize_markdown(markdown: str) -> str:
-    text = markdown.replace("\x00", "")
+    # Every ingest path funnels through here, so link stripping cannot be
+    # forgotten by a caller that builds markdown some other way.
+    text = strip_markdown_links(markdown.replace("\x00", ""))
     text = re.sub(r"[ \t]+\n", "\n", text)
     text = re.sub(r"\n{4,}", "\n\n\n", text)
     return text.strip()
@@ -45,6 +90,13 @@ def truncate_utf8(value: str, max_bytes: int = MAX_MARKDOWN_BYTES) -> str:
 
 def page_from_result(result: object, includes: list[str], excludes: list[str]) -> Page | None:
     if not getattr(result, "success", False):
+        return None
+
+    # Crawl4AI reports a rendered error page as a success with its status code
+    # intact. Sites whose 404 carries the full layout would otherwise index
+    # "Seite nicht gefunden" as an answerable source.
+    status_code = getattr(result, "status_code", None)
+    if isinstance(status_code, int) and not 200 <= status_code < 300:
         return None
 
     result_url = getattr(result, "redirected_url", None) or getattr(result, "url", "")

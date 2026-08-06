@@ -3,7 +3,9 @@ from types import SimpleNamespace
 from cracha_crawler.normalize import (
     canonical_url,
     matches_patterns,
+    normalize_markdown,
     page_from_result,
+    strip_markdown_links,
     truncate_utf8,
 )
 
@@ -80,3 +82,66 @@ def test_page_normalization_preserves_spa_route_and_rejects_heading_only_content
 
 def test_truncate_utf8_preserves_character_boundaries() -> None:
     assert truncate_utf8("äöü", 5) == "äö"
+
+
+def test_page_normalization_rejects_rendered_error_pages() -> None:
+    # webmen.de/kontakt answers 404 with a styled page. Crawl4AI reports that as
+    # success=True, so only the status code distinguishes it from real content.
+    def result(status_code: int | None) -> SimpleNamespace:
+        return SimpleNamespace(
+            success=True,
+            status_code=status_code,
+            url="https://example.com/kontakt",
+            metadata={"title": "404"},
+            markdown=SimpleNamespace(
+                fit_markdown="# 404 Seite nicht gefunden\n\n" + "zurueck zur startseite " * 20
+            ),
+        )
+
+    assert page_from_result(result(404), [], []) is None
+    assert page_from_result(result(500), [], []) is None
+    assert page_from_result(result(200), [], []) is not None
+    # Sources without a status code (raw HTML, file input) stay indexable.
+    assert page_from_result(result(None), [], []) is not None
+
+
+def test_link_stripping_keeps_the_text_that_answers_questions() -> None:
+    # The webmen team page reached the index as 34 link headings. AI Search
+    # discarded the tail of that list, so four members were unanswerable.
+    entries = "\n".join(
+        f"## [Vorname Nachname{index} ](https://example.com/team/detail/person-{index})"
+        for index in range(1, 35)
+    )
+    stripped = strip_markdown_links(entries)
+    assert "](" not in stripped
+    assert stripped.count("\n") == 33
+    assert stripped.startswith("## Vorname Nachname1")
+    assert stripped.endswith("## Vorname Nachname34")
+
+
+def test_link_stripping_handles_images_titles_and_reference_style() -> None:
+    assert strip_markdown_links("![Foto von Klaus](/img/klaus.webp)") == "Foto von Klaus"
+    assert strip_markdown_links("![](/img/spacer.gif)") == ""
+    assert strip_markdown_links('[Kontakt](/kontakt "Zum Kontakt")') == "Kontakt"
+    assert strip_markdown_links("[![Logo](/logo.svg)](https://example.com)") == "Logo"
+    assert strip_markdown_links("Siehe [Doku][1].\n\n[1]: https://example.com/doku") == (
+        "Siehe Doku.\n\n"
+    )
+    # A URL that carries parentheses must not leak its tail into the text.
+    assert strip_markdown_links("[Merkur](https://de.wikipedia.org/wiki/Merkur_(Planet))") == (
+        "Merkur"
+    )
+
+
+def test_link_stripping_leaves_prose_and_bare_urls_intact() -> None:
+    # Bare URLs index without trouble; only the `[text](url)` form is harmful.
+    text = "Schreiben Sie an info@example.com oder besuchen Sie https://example.com/kontakt."
+    assert strip_markdown_links(text) == text
+    assert strip_markdown_links("Ein Array-Zugriff wie data[0] (siehe oben) bleibt.") == (
+        "Ein Array-Zugriff wie data[0] (siehe oben) bleibt."
+    )
+    assert strip_markdown_links("<https://example.com/feed>") == "https://example.com/feed"
+
+
+def test_normalize_markdown_strips_links_on_every_ingest_path() -> None:
+    assert normalize_markdown("## [Klaus Becker ](https://example.com/k)") == "## Klaus Becker"
