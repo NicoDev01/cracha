@@ -49,7 +49,11 @@ describe('collection page restriction', () => {
 
   it('drops entries that only appear outside the collection page', async () => {
     // Production listed Lena Fellner and Sonja Ahrens as team members.
-    expect(await ground('- Lena Fellner [2]', [overview, blogPost])).toBe('')
+    const answer = await ground(
+      '- Stephan Müller [1]\n- Lena Fellner [2]\n- Fabian Holler [1]',
+      [overview, blogPost],
+    )
+    expect(answer).toBe('- Stephan Müller [1]\n- Fabian Holler [1]')
   })
 
   it('keeps collection entries and points their citation at the overview', async () => {
@@ -59,6 +63,33 @@ describe('collection page restriction', () => {
 
   it('uses every block when no collection page was identified', async () => {
     expect(await ground('- Lena Fellner [2]', [blogPost])).toBe('- Lena Fellner [2]')
+  })
+
+  it('keeps the whole list when every entry would be rejected', async () => {
+    // Production answered "zähle alle Mitarbeiter auf" with an intro and no
+    // entries: retrieval had chosen an author archive as the set. An answer
+    // with a stray name is recoverable, an empty one is not.
+    const wrongScope: ContextBlock = {
+      n: 1,
+      title: 'webmen, Autor auf',
+      url: 'https://www.webmen.de/blog/author/webmen',
+      text: 'Beiträge von webmen: Relaunch, Barrierefreiheit, Konferenzsysteme.',
+      collection: true,
+      authoritative: true,
+    }
+    const answer = await ground(
+      'Die Mitarbeiter sind:\n- Stephan Müller [1]\n- Klaus Becker [1]',
+      [wrongScope],
+    )
+    expect(answer).toBe('Die Mitarbeiter sind:\n- Stephan Müller [1]\n- Klaus Becker [1]')
+  })
+
+  it('keeps blank lines inside a loose list from splitting the decision', async () => {
+    const answer = await ground(
+      '- Stephan Müller [1]\n\n- Lena Fellner [2]\n\n- Fabian Holler [1]',
+      [overview, blogPost],
+    )
+    expect(answer).toBe('- Stephan Müller [1]\n\n\n- Fabian Holler [1]')
   })
 
   it('keeps entries from other pages when the overview was cut short', async () => {

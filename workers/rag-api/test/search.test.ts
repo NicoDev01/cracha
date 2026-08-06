@@ -15,6 +15,7 @@ import {
   needsUpload,
   publishedAtRanking,
   retrieve,
+  siblingMentions,
   uploadPages,
 } from '../src/search'
 import type { IngestPage } from '../src/types'
@@ -262,6 +263,71 @@ describe('collection page detection', () => {
     const candidates = hubCandidates(ranked, ['team'])
     expect(candidates[0].url).toBe('https://hochschule.example/team')
     expect(candidates[0].namesQuery).toBe(true)
+  })
+
+  it('ignores the site name in a path when scoring an overview', () => {
+    // Production picked `/blog/author/webmen` as the authoritative list of
+    // employees, because "Webmen" is in the question and in every URL on the
+    // site. Every list entry was then rejected and the answer was empty.
+    const ranked = [
+      {
+        chunk: {
+          id: 'author',
+          text: 'Relaunch 2026\nBarrierefreiheit\nKonferenzsysteme\nSuchmaschinen',
+          item: { key: 'a', metadata: { url: 'https://www.webmen.de/blog/author/webmen' } },
+        },
+        score: 1,
+      },
+    ] as unknown as Parameters<typeof hubCandidates>[0]
+
+    expect(hubCandidates(ranked, ['zaehle', 'mitarbeiter', 'webmen'])).toEqual([])
+  })
+
+  it('recognises the page that names the other retrieved pages', () => {
+    // "Zähle alle Mitarbeiter auf" shares no word with `/team`. The only link
+    // between them is that the team page names the people whose detail pages
+    // were retrieved.
+    const ranked = [
+      {
+        chunk: {
+          id: 'detail-1',
+          text: 'Alena Scholz ist Projektleiterin.',
+          item: { key: 'd1', metadata: { url: 'https://www.webmen.de/agentur-bremen/team/detail/alena-scholz' } },
+        },
+        score: 1,
+      },
+      {
+        chunk: {
+          id: 'detail-2',
+          text: 'Stephan Müller leitet die Entwicklung.',
+          item: { key: 'd2', metadata: { url: 'https://www.webmen.de/agentur-bremen/team/detail/stephan-mueller' } },
+        },
+        score: 0.9,
+      },
+      {
+        chunk: {
+          id: 'team',
+          text: '# Unser Team\nAlena Scholz\nStephan Müller\nKlaus Becker\nFabian Holler',
+          item: { key: 't', metadata: { url: 'https://www.webmen.de/agentur-bremen/team' } },
+        },
+        score: 0.4,
+      },
+    ] as unknown as Parameters<typeof hubCandidates>[0]
+
+    const candidates = hubCandidates(ranked, ['zaehle', 'mitarbeiter'])
+    expect(candidates[0].url).toBe('https://www.webmen.de/agentur-bremen/team')
+    expect(candidates[0].namesQuery).toBe(true)
+  })
+
+  it('counts a page as naming another only when the whole entity matches', () => {
+    const detail = 'https://a.example/team/detail/anna-beispiel'
+    const section = 'https://a.example/blog'
+    expect(siblingMentions('Anna Beispiel und Bruno Muster', [detail])).toBe(1)
+    // Umlaut spellings differ between page and URL and must still match.
+    expect(siblingMentions('Stephan Müller', ['https://a.example/t/stephan-mueller'])).toBe(1)
+    expect(siblingMentions('Anna Schmidt arbeitet hier', [detail])).toBe(0)
+    // A single-word segment would otherwise name every page that says "Blog".
+    expect(siblingMentions('Unser Blog', [section])).toBe(0)
   })
 
   it('does not treat a shared documentation ancestor as an overview of the question', () => {

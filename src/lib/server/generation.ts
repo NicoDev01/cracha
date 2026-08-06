@@ -213,21 +213,64 @@ export async function* groundListEntries(
     .map((block) => ({ n: block.n, paddedText: paddedBlockText(block.text) }))
   const normalized = collection.length ? collection : allBlocks
 
-  // Line-buffered so streaming stays visible: a list entry can be verified the
-  // moment its line is complete.
+  // A run of list entries is held back until it ends, so the decision can be
+  // taken over the whole list rather than line by line. Production answered
+  // "zähle alle Mitarbeiter auf" with an intro and nothing else: retrieval had
+  // picked the wrong page as the set, and every entry was rejected one at a
+  // time with no way to notice. Prose still streams immediately.
   let lineBuffer = ''
-  const emit = function* (line: string, terminator: string): Generator<string> {
-    const grounded = groundListEntry(line, normalized)
-    if (grounded !== null) yield `${grounded}${terminator}`
+  interface PendingLine {
+    line: string
+    terminator: string
+    grounded: string | null
+    entry: boolean
+  }
+  let pending: PendingLine[] = []
+
+  const flush = function* (): Generator<string> {
+    if (!pending.length) return
+    const entries = pending.filter((item) => item.entry)
+    // Rejecting every single entry means the scope was wrong, not the answer.
+    const rejectedAll = entries.length > 0 && entries.every((item) => item.grounded === null)
+    if (rejectedAll) {
+      console.warn(JSON.stringify({ event: 'grounding_rejected_every_entry', entries: entries.length }))
+    }
+    const output = pending
+      .filter((item) => !item.entry || rejectedAll || item.grounded !== null)
+      .map((item) => `${!item.entry || rejectedAll ? item.line : item.grounded}${item.terminator}`)
+    pending = []
+    yield* output
+  }
+
+  const accept = function* (line: string, terminator: string): Generator<string> {
+    const isEntry = LIST_ITEM.test(line)
+    if (!isEntry && line.trim()) {
+      yield* flush()
+      yield `${line}${terminator}`
+      return
+    }
+    // A blank line inside a loose list belongs to the run; outside one it is
+    // ordinary output.
+    if (!isEntry && !pending.length) {
+      yield `${line}${terminator}`
+      return
+    }
+    pending.push({
+      line,
+      terminator,
+      grounded: isEntry ? groundListEntry(line, normalized) : line,
+      entry: isEntry,
+    })
   }
 
   for await (const delta of text) {
     lineBuffer += delta
     const lines = lineBuffer.split('\n')
     lineBuffer = lines.pop() ?? ''
-    for (const line of lines) yield* emit(line, '\n')
+    for (const line of lines) yield* accept(line, '\n')
   }
-  if (lineBuffer) yield* emit(lineBuffer, '')
+  if (lineBuffer) yield* accept(lineBuffer, '')
+  yield* flush()
 }
 
 async function openModelStream(input: {

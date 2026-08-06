@@ -242,6 +242,9 @@ const HUB_MIN_URL_MATCH = 0.5
 /** How much of a page has to read like list entries before its name may
  *  reclassify the question as an enumeration. */
 const HUB_MIN_LIST_DENSITY = 0.5
+/** How many other retrieved pages a page must name before it counts as their
+ *  overview. One is coincidence — any page may mention one other. */
+const HUB_MIN_SIBLING_MENTIONS = 2
 
 type ItemsApi = Pick<AiSearchInstance['items'], 'list' | 'get'>
 type RetrievalInstance = Pick<AiSearchInstance, 'search'> & { items?: ItemsApi }
@@ -420,18 +423,32 @@ export function hubCandidates(ranked: RankedChunk[], queryTokens: string[]): Hub
     )
   }
 
-  const seen = new Set<string>()
+  // One representative chunk per page: the highest ranked one it produced.
+  const pages = new Map<string, string>()
   for (const { chunk } of ranked) {
     const url = typeof chunk.item.metadata?.url === 'string' ? chunk.item.metadata.url : ''
-    if (!url || seen.has(url)) continue
-    seen.add(url)
+    if (!url || pages.has(url)) continue
+    pages.set(url, chunk.text.slice(0, 4_000))
+  }
+
+  for (const [url, text] of pages) {
+    const listLike = listDensity(text)
     const urlMatch = collectionPageScore(queryTokens, url)
-    if (urlMatch < HUB_MIN_URL_MATCH) continue
+    // A page that names the entries of other retrieved pages is their overview,
+    // whatever the URLs look like and whatever language the question used.
+    // "Zähle alle Mitarbeiter auf" shares no word with `/team`, and only this
+    // signal connects the two.
+    const mentions = siblingMentions(text, [...pages.keys()].filter((other) => other !== url))
+    if (urlMatch < HUB_MIN_URL_MATCH && mentions < HUB_MIN_SIBLING_MENTIONS) continue
     // The name alone is not enough: `/guide/queues` is named after "queue" but
     // answers "what is a queue" as prose. Only a page that reads like a list of
     // entries may turn a question into an enumeration.
-    const listLike = listDensity(chunk.text)
-    remember(url, 1.5 + urlMatch + listLike / 2, listLike >= HUB_MIN_LIST_DENSITY)
+    remember(
+      url,
+      1.5 + urlMatch + Math.min(mentions, 10) / 5 + listLike / 2,
+      listLike >= HUB_MIN_LIST_DENSITY
+        && (urlMatch >= HUB_MIN_URL_MATCH || mentions >= HUB_MIN_SIBLING_MENTIONS),
+    )
   }
 
   return [...candidates.values()].sort((left, right) => right.score - left.score)
@@ -706,6 +723,13 @@ function tokens(value: string): string[] {
   const all = [...new Set(
     value
       .toLocaleLowerCase()
+      // Both spellings must land on one form. A page writes "Stephan Müller"
+      // while its URL writes "stephan-mueller", and stripping the diaeresis
+      // alone leaves "muller", which matches neither.
+      .replace(/ä/gu, 'ae')
+      .replace(/ö/gu, 'oe')
+      .replace(/ü/gu, 'ue')
+      .replace(/ß/gu, 'ss')
       .normalize('NFKD')
       .replace(/\p{M}/gu, '')
       .match(/[\p{L}\p{N}]{3,}/gu) ?? [],
@@ -847,18 +871,50 @@ function listDensity(text: string): number {
 function collectionPageScore(queryTokens: string[], urlValue: string): number {
   if (!urlValue || !queryTokens.length) return 0
   try {
-    const pathSegments = new URL(urlValue).pathname
-      .split('/')
-      .map((segment) => decodeURIComponent(segment).trim())
-      .filter(Boolean)
-    const lastSegment = pathSegments.at(-1) ?? ''
+    const parsed = new URL(urlValue)
+    const lastSegment = urlEntity(parsed)
     if (!lastSegment) return 0
-    const segmentTokens = tokens(lastSegment.replace(/[-_.]+/g, ' '))
+    // The site's own name says nothing about which page is the overview.
+    // `/blog/author/webmen` matched "Webmen" perfectly on webmen.de and was
+    // picked as the authoritative list of employees.
+    const hostTokens = new Set(tokens(parsed.hostname.replace(/[.-]+/g, ' ')))
+    const segmentTokens = tokens(lastSegment).filter((token) => !hostTokens.has(token))
     if (!segmentTokens.length) return 0
     return tokenCoverage(segmentTokens, queryTokens.join(' '))
   } catch {
     return 0
   }
+}
+
+/** The last path segment as words: `/team/detail/anna-beispiel` -> "anna beispiel". */
+function urlEntity(parsed: URL): string {
+  const segments = parsed.pathname
+    .split('/')
+    .map((segment) => decodeURIComponent(segment).trim())
+    .filter(Boolean)
+  return (segments.at(-1) ?? '').replace(/\.[a-z0-9]{1,5}$/i, '').replace(/[-_.]+/g, ' ')
+}
+
+/**
+ * How many of the other retrieved pages this text names. A detail page is
+ * identified by the words in its URL, which is where a site puts the entity's
+ * name; two matches rule out coincidence.
+ */
+export function siblingMentions(text: string, otherUrls: string[]): number {
+  const present = new Set(tokens(text))
+  let mentions = 0
+  for (const url of otherUrls) {
+    let entityTokens: string[]
+    try {
+      entityTokens = tokens(urlEntity(new URL(url)))
+    } catch {
+      continue
+    }
+    // A single word matches far too easily; `/blog` would name every page.
+    if (entityTokens.length < 2) continue
+    if (entityTokens.every((token) => present.has(token))) mentions += 1
+  }
+  return mentions
 }
 
 function fuseSearchResults(
