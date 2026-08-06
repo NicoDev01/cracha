@@ -21,6 +21,11 @@ MARKDOWN_REFERENCE_LINK_RE = re.compile(r"\[([^\[\]\n]*)\]\[[^\]\n]*\]")
 # Indentation is horizontal only. `\s` would swallow the preceding blank line.
 MARKDOWN_REFERENCE_DEFINITION_RE = re.compile(r"(?m)^[ \t]{0,3}\[[^\]\n]+\]:[ \t]*\S+.*$")
 AUTOLINK_RE = re.compile(r"<((?:https?|mailto):[^>\s]+)>")
+# A link whose target never closes. GitHub's file listing produces them: the
+# cell holds `[message](url "title \(291 tests\)` and the line simply stops.
+# The well-formed patterns run first, so whatever is left here is broken — and
+# a broken link is still link syntax the index must not see.
+UNTERMINATED_LINK_RE = re.compile(r"(?m)\[([^\[\]\n]*)\]\([^\n]*$")
 EMPTY_LIST_ITEM_RE = re.compile(r"(?m)^[ \t]{0,3}(?:[-*+]|\d+[.)])[ \t]*$\n?")
 EMPTY_HEADING_RE = re.compile(r"(?m)^[ \t]{0,3}#{1,6}[ \t]*$\n?")
 # A fence runs to its closing marker or, if the page truncated mid-block, to the
@@ -40,6 +45,7 @@ def _strip_links_in_prose(markdown: str) -> str:
             break
         text = unwrapped
     text = MARKDOWN_REFERENCE_LINK_RE.sub(lambda match: match.group(1).strip(), text)
+    text = UNTERMINATED_LINK_RE.sub(lambda match: match.group(1).strip(), text)
     text = EMPTY_LIST_ITEM_RE.sub("", text)
     return EMPTY_HEADING_RE.sub("", text)
 
@@ -304,12 +310,18 @@ def drop_duplicate_table_of_contents(markdown: str) -> str:
 MARKDOWN_TABLE_BLOCK_RE = re.compile(r"(?m)^(?:[ \t]{0,3}\|.*\|[ \t]*\n?){2,}")
 
 
+def _table_cell(value: object) -> str:
+    # Structured extraction hands back the cell's markdown, links and all, and
+    # it reaches the index after normalisation has already run. A GitHub file
+    # listing arrived as a table of raw `[message](url)` cells — the exact link
+    # density that makes AI Search discard a document.
+    return " ".join(strip_markdown_links(str(value)).split()).replace("|", "\\|")
+
+
 def render_markdown_table(headers: list[str], rows: list[list[str]]) -> str:
     """Render a header and rows as a markdown table with a stable width."""
-    cleaned_rows = [
-        [" ".join(str(cell).split()).replace("|", "\\|") for cell in row] for row in rows
-    ]
-    cleaned_headers = [" ".join(str(cell).split()).replace("|", "\\|") for cell in headers]
+    cleaned_rows = [[_table_cell(cell) for cell in row] for row in rows]
+    cleaned_headers = [_table_cell(cell) for cell in headers]
     width = max(len(cleaned_headers), *(len(row) for row in cleaned_rows), 0)
     if width < 2:
         return ""

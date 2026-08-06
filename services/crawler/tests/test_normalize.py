@@ -345,3 +345,34 @@ def test_rendered_tables_pad_short_rows() -> None:
         "| 1 | 2 |  |",
         "| 3 | 4 | 5 |",
     ]
+
+
+def test_restored_table_cells_are_link_free() -> None:
+    # Structured extraction returns the cell's markdown, and restoration runs
+    # after normalisation — so the rendering has to strip links itself or the
+    # link density that AI Search rejects walks straight into the index.
+    markdown = "| Name | Letzte Änderung |\n| --- | --- |\n| a | b |\n"
+    tables = [
+        {
+            "headers": ["Name", "Letzte Änderung"],
+            "rows": [["[README.md](https://github.com/o/r/blob/main/README.md)", "Jul 15"]],
+        }
+    ]
+    restored = restore_tables(markdown, tables)
+
+    assert "](" not in restored
+    assert "| README.md | Jul 15 |" in restored
+
+
+def test_link_stripping_handles_a_link_that_never_closes() -> None:
+    # GitHub's file listing emits `[message](url "title` and the line stops.
+    # A regex that insists on the closing bracket leaves the syntax in place,
+    # which is the link density AI Search discards documents over.
+    broken = '|  | [test: add suite \(291 tests\)](https://github.com/o/r/commit/abc "test: add'
+    stripped = strip_markdown_links(broken)
+    assert "](" not in stripped
+    assert "test: add suite" in stripped
+
+    # An unrelated bracket at the end of a line is not a link.
+    prose = "Ein Array data[0] (siehe oben)"
+    assert strip_markdown_links(prose) == prose
