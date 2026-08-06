@@ -22,6 +22,7 @@ export interface ChatResponse {
   sources: Source[]
   metadata: {
     query_time: number
+    retrieval_time?: number
     tokens_used: number
     model_used: string
   }

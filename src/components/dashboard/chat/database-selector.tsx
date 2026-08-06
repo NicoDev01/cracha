@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { useRouter } from "next/navigation"
 import { Check, ChevronDown, Database, Calendar, FileText, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -17,7 +18,28 @@ import { getDatabases } from "@/stores/chat-store"
 import { useAuthStore } from "@/stores/auth-store"
 import type { Database as DatabaseType } from "@/types/chat"
 
+// The registry only ever writes these four states; anything else is a stale record.
+const STATUS_BADGE: Record<string, { label: string; className: string }> = {
+  active: {
+    label: 'Aktiv',
+    className: 'bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700/50',
+  },
+  crawling: {
+    label: 'Crawlt',
+    className: 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700/50',
+  },
+  pending: {
+    label: 'Wartet',
+    className: 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700/50',
+  },
+  failed: {
+    label: 'Fehler',
+    className: 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700/50',
+  },
+}
+
 export function DatabaseSelector() {
+  const router = useRouter()
   const { selectedDatabase, selectDatabase } = useHydratedChatStore()
   const { user } = useAuthStore()
   const [databases, setDatabases] = useState<DatabaseType[]>([])
@@ -198,14 +220,13 @@ export function DatabaseSelector() {
                   </div>
                 </div>
 
-                <div className="flex flex-col items-end gap-1 ml-2">
-                  <Badge
-                    variant="secondary"
-                    className="text-xs bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700/50"
-                  >
-                    Aktiv
-                  </Badge>
-                </div>
+                {STATUS_BADGE[database.status ?? ''] && (
+                  <div className="flex flex-col items-end gap-1 ml-2">
+                    <Badge variant="secondary" className={`text-xs ${STATUS_BADGE[database.status ?? ''].className}`}>
+                      {STATUS_BADGE[database.status ?? ''].label}
+                    </Badge>
+                  </div>
+                )}
               </div>
             </DropdownMenuItem>
           ))
@@ -217,7 +238,7 @@ export function DatabaseSelector() {
             variant="ghost"
             size="sm"
             className="w-full justify-start text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-            onClick={() => window.location.href = '/dashboard/crawl'}
+            onClick={() => router.push('/dashboard/crawl')}
           >
             <Database className="w-4 h-4 mr-2" />
             Neue Datenbank erstellen

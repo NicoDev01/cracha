@@ -12,11 +12,17 @@ interface RawSource {
   score?: number
 }
 
+interface Usage {
+  latency_ms?: number
+  retrieval_ms?: number
+  llm_tokens?: number
+}
+
 interface RAGWorkerResponse {
   answer?: string
   error?: string
   sources?: RawSource[]
-  usage?: { latency_ms?: number; llm_tokens?: number }
+  usage?: Usage
   model?: string
 }
 
@@ -26,7 +32,7 @@ interface StreamMeta {
 }
 
 interface StreamDone {
-  usage?: { latency_ms?: number; llm_tokens?: number }
+  usage?: Usage
   model?: string
 }
 
@@ -73,6 +79,7 @@ class ChatAPIClient {
       handlers.onDelta(dataBody.answer ?? 'Keine Antwort erhalten.')
       handlers.onDone({
         query_time: dataBody.usage?.latency_ms ?? 0,
+        retrieval_time: dataBody.usage?.retrieval_ms,
         tokens_used: dataBody.usage?.llm_tokens ?? 0,
         model_used: model,
       })
@@ -107,6 +114,7 @@ class ChatAPIClient {
         finished = true
         handlers.onDone({
           query_time: data.usage?.latency_ms ?? 0,
+          retrieval_time: data.usage?.retrieval_ms,
           tokens_used: data.usage?.llm_tokens ?? 0,
           model_used: currentModel,
         })

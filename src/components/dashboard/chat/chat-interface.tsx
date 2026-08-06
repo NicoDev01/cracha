@@ -10,9 +10,25 @@ import {
   Sparkles,
   Trash2,
 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { useHydratedChatStore } from '@/hooks/use-chat-store';
-import { getCitedSources, linkifyCitations, type IndexedSource } from '@/lib/chat/citations';
+import {
+  getCitedSources,
+  getUncitedSources,
+  linkifyCitations,
+  type IndexedSource,
+} from '@/lib/chat/citations';
 import type { Message as ChatMessage } from '@/types/chat';
 import {
   Conversation,
@@ -30,16 +46,33 @@ import {
 import { Response } from './response';
 import { Source, Sources, SourcesContent, SourcesTrigger } from './source';
 
-const exampleQuestions = [
-  'Fasse die wichtigsten Inhalte zusammen.',
-  'Welche zentralen Funktionen werden beschrieben?',
-  'Erkläre das Thema in einfachen Worten.',
-];
+// Answers are written in the language of the question, so the starter questions
+// decide which language a new user lands in. The chrome stays German.
+const exampleQuestions = {
+  de: [
+    'Fasse die wichtigsten Inhalte zusammen.',
+    'Welche zentralen Funktionen werden beschrieben?',
+    'Erkläre das Thema in einfachen Worten.',
+  ],
+  en: [
+    'Summarise the most important content.',
+    'Which core capabilities are described?',
+    'Explain the topic in simple terms.',
+  ],
+};
 
 const formatTime = (date: Date) => new Intl.DateTimeFormat('de-DE', {
   hour: '2-digit',
   minute: '2-digit',
 }).format(date);
+
+const formatDuration = (ms: number) => (ms >= 1_000
+  ? `${new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 }).format(ms / 1_000)} s`
+  : `${Math.round(ms)} ms`);
+
+// `google/gemini-3.5-flash + Cloudflare AI Search` is mostly routing detail the
+// reader cannot act on — the vendor prefix goes, the model name stays.
+const formatModel = (model: string) => model.replace(/(^|\s)[\w.-]+\//g, '$1');
 
 const getHostname = (url: string) => {
   try {
@@ -68,6 +101,49 @@ const groupSourcesByDomain = (sources: IndexedSource[]) => {
   return Array.from(groups, ([hostname, items]) => ({ hostname, items }));
 };
 
+const SourceRow = ({ index, source, muted = false }: IndexedSource & { muted?: boolean }) => (
+  <Source
+    href={source.url}
+    title={source.title}
+    className="rounded-none border-0 bg-transparent px-3 py-2.5 shadow-none hover:translate-y-0 hover:bg-brand-25 hover:shadow-none dark:bg-transparent dark:hover:bg-brand-500/10"
+  >
+    <span
+      className={`flex size-6 shrink-0 items-center justify-center rounded-md text-xs font-semibold ${muted
+        ? 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500'
+        : 'bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-400'}`}
+    >
+      {index}
+    </span>
+    <span className="min-w-0 flex-1">
+      <span className={`block truncate font-medium ${muted ? 'text-gray-500 dark:text-gray-400' : 'text-gray-800 dark:text-gray-100'}`}>
+        {source.title}
+      </span>
+      <span className="mt-0.5 block truncate font-mono text-[11px] text-gray-400">{getSourcePath(source.url)}</span>
+    </span>
+    <ExternalLink className="mt-1 size-3.5 shrink-0 text-gray-400" />
+  </Source>
+);
+
+const SourceGroup = ({ label, items, muted = false }: {
+  label: string;
+  items: IndexedSource[];
+  muted?: boolean;
+}) => (
+  <div className={`overflow-hidden rounded-xl border bg-white dark:bg-gray-800/60 ${muted
+    ? 'border-dashed border-gray-200 dark:border-gray-700'
+    : 'border-gray-200 dark:border-gray-700'}`}
+  >
+    <div className="border-b border-gray-100 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">
+      {label}
+    </div>
+    <div className="divide-y divide-gray-100 dark:divide-gray-700">
+      {items.map((entry) => (
+        <SourceRow key={entry.source.id} index={entry.index} source={entry.source} muted={muted} />
+      ))}
+    </div>
+  </div>
+);
+
 export function ChatInterface() {
   const {
     messages,
@@ -80,19 +156,32 @@ export function ChatInterface() {
   } = useHydratedChatStore();
   const [input, setInput] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [starters, setStarters] = useState(exampleQuestions.de);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     setError(null);
   }, [setError]);
 
+  // Reading `navigator` during render would desync server and client markup.
+  useEffect(() => {
+    if (!navigator.language.toLowerCase().startsWith('de')) setStarters(exampleQuestions.en);
+  }, []);
+
   useEffect(() => {
     if (!isLoading && !isStreaming && selectedDatabase) inputRef.current?.focus();
   }, [isLoading, isStreaming, selectedDatabase]);
 
-  const handleClearChat = () => {
-    if (window.confirm('Möchtest du wirklich alle Nachrichten löschen?')) clearChat();
-  };
+  // Announcing every streamed token would flood a screen reader, so only the
+  // state transitions are spoken. The answer itself is read on demand.
+  const lastMessage = messages[messages.length - 1];
+  const liveStatus = isLoading
+    ? 'Die Wissensbasis wird durchsucht.'
+    : isStreaming
+      ? 'Die Antwort wird erstellt.'
+      : lastMessage?.type === 'assistant' && !lastMessage.isStreaming
+        ? `Antwort fertig, ${lastMessage.sources?.length ?? 0} Quellen.`
+        : '';
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -122,20 +211,44 @@ export function ChatInterface() {
         <div className="flex shrink-0 items-center gap-2">
           <DatabaseSelector />
           {messages.length > 0 && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={handleClearChat}
-              className="rounded-xl text-gray-500 hover:bg-error-50 hover:text-error-600 dark:text-gray-400 dark:hover:bg-error-500/10"
-              aria-label="Unterhaltung löschen"
-              title="Unterhaltung löschen"
-            >
-              <Trash2 className="size-4" />
-            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="rounded-xl text-gray-500 hover:bg-error-50 hover:text-error-600 dark:text-gray-400 dark:hover:bg-error-500/10"
+                  aria-label="Unterhaltung löschen"
+                  title="Unterhaltung löschen"
+                >
+                  <Trash2 className="size-4" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Unterhaltung löschen?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {`Alle ${messages.length} Nachrichten dieser Unterhaltung werden entfernt. Das lässt sich nicht rückgängig machen.`}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={clearChat}
+                    className="bg-error-600 text-white hover:bg-error-700"
+                  >
+                    Löschen
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           )}
         </div>
       </header>
+
+      <p role="status" aria-live="polite" className="sr-only">
+        {liveStatus}
+      </p>
 
       <div className="flex min-h-0 flex-1 flex-col bg-gradient-to-b from-gray-25 to-white dark:from-gray-950 dark:to-gray-900">
         <Conversation className="min-h-0 flex-1 custom-scrollbar">
@@ -155,7 +268,7 @@ export function ChatInterface() {
                 </p>
                 {selectedDatabase && (
                   <div className="mt-6 grid w-full gap-2 sm:grid-cols-3">
-                    {exampleQuestions.map((question) => (
+                    {starters.map((question) => (
                       <button
                         key={question}
                         type="button"
@@ -179,9 +292,24 @@ export function ChatInterface() {
                   const citedSources = isUser
                     ? []
                     : getCitedSources(message.content, messageSources, !message.isStreaming);
+                  const uncitedSources = isUser
+                    ? []
+                    : getUncitedSources(messageSources, citedSources);
                   const renderedContent = isUser
                     ? message.content
                     : linkifyCitations(message.content, messageSources);
+                  const metadata = !isUser && !message.isStreaming ? message.metadata : undefined;
+                  const metaParts = metadata && metadata.query_time > 0
+                    ? [
+                        formatModel(metadata.model_used),
+                        metadata.retrieval_time
+                          ? `${formatDuration(metadata.query_time)} (davon ${formatDuration(metadata.retrieval_time)} Suche)`
+                          : formatDuration(metadata.query_time),
+                        messageSources.length > 0
+                          ? `${messageSources.length} ${messageSources.length === 1 ? 'Quelle' : 'Quellen'}`
+                          : null,
+                      ].filter(Boolean)
+                    : [];
                   return (
                     <Message
                       key={message.id}
@@ -211,7 +339,7 @@ export function ChatInterface() {
                             <div>
                               <Response>{renderedContent}</Response>
                               {message.isStreaming && (
-                                <span className="ml-1 inline-block h-4 w-0.5 animate-pulse rounded-full bg-brand-500 align-middle" aria-label="Antwort wird erstellt" />
+                                <span className="ml-1 inline-block h-4 w-0.5 animate-pulse rounded-full bg-brand-500 align-middle" aria-hidden="true" />
                               )}
                             </div>
                           )}
@@ -221,40 +349,22 @@ export function ChatInterface() {
                               <SourcesTrigger count={citedSources.length} />
                               <SourcesContent>
                                 {groupSourcesByDomain(citedSources).map((group) => (
-                                  <div key={group.hostname} className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800/60">
-                                    <div className="border-b border-gray-100 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">
-                                      {group.hostname}
-                                    </div>
-                                    <div className="divide-y divide-gray-100 dark:divide-gray-700">
-                                      {group.items.map(({ index, source }) => {
-                                        return (
-                                          <Source
-                                            key={source.id}
-                                            href={source.url}
-                                            title={source.title}
-                                            className="rounded-none border-0 bg-transparent px-3 py-2.5 shadow-none hover:translate-y-0 hover:bg-brand-25 hover:shadow-none dark:bg-transparent dark:hover:bg-brand-500/10"
-                                          >
-                                            <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-brand-50 text-xs font-semibold text-brand-600 dark:bg-brand-500/10 dark:text-brand-400">
-                                              {index}
-                                            </span>
-                                            <span className="min-w-0 flex-1">
-                                              <span className="block truncate font-medium text-gray-800 dark:text-gray-100">{source.title}</span>
-                                              <span className="mt-0.5 block truncate font-mono text-[11px] text-gray-400">{getSourcePath(source.url)}</span>
-                                            </span>
-                                            <ExternalLink className="mt-1 size-3.5 shrink-0 text-gray-400" />
-                                          </Source>
-                                        );
-                                      })}
-                                    </div>
-                                  </div>
+                                  <SourceGroup key={group.hostname} label={group.hostname} items={group.items} />
                                 ))}
+                                {uncitedSources.length > 0 && (
+                                  <SourceGroup
+                                    label={`Ebenfalls durchsucht, nicht zitiert (${uncitedSources.length})`}
+                                    items={uncitedSources}
+                                    muted
+                                  />
+                                )}
                               </SourcesContent>
                             </Sources>
                           )}
                         </MessageContent>
 
                         {!isUser && message.content && !message.isStreaming && (
-                          <div className="mt-1.5 flex items-center gap-1">
+                          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
                             <Button
                               type="button"
                               variant="ghost"
@@ -266,6 +376,14 @@ export function ChatInterface() {
                               {copiedId === message.id ? <Check className="mr-1 size-3.5 text-success-600" /> : <Copy className="mr-1 size-3.5" />}
                               {copiedId === message.id ? 'Kopiert' : 'Kopieren'}
                             </Button>
+                            {metaParts.length > 0 && (
+                              <span
+                                className="text-[11px] leading-5 text-gray-400 dark:text-gray-500"
+                                title={metadata?.model_used}
+                              >
+                                {metaParts.join(' · ')}
+                              </span>
+                            )}
                           </div>
                         )}
                       </div>
@@ -274,7 +392,7 @@ export function ChatInterface() {
                 })}
 
                 {isLoading && (
-                  <Message from="assistant" aria-live="polite">
+                  <Message from="assistant">
                     <div className="mt-6 flex size-8 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-400">
                       <Bot className="size-4" />
                     </div>

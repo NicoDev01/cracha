@@ -20,6 +20,17 @@ export function getCitedSources(content: string, sources: Source[], fallbackToAl
   return selected.map((index) => ({ index, source: sources[index - 1] }))
 }
 
+/**
+ * The sources retrieval returned that the answer never cited. Showing them keeps
+ * the retrieval honest: the reader sees what was searched, not only what was used.
+ */
+export function getUncitedSources(sources: Source[], cited: IndexedSource[]): IndexedSource[] {
+  const used = new Set(cited.map((entry) => entry.index))
+  return sources
+    .map((source, index) => ({ index: index + 1, source }))
+    .filter((entry) => !used.has(entry.index))
+}
+
 export function linkifyCitations(content: string, sources: Source[]): string {
   return content.replace(/\[(\d+(?:\s*,\s*\d+)*)\]/g, (original, group: string) => {
     const links = group.split(',').map((value) => {
