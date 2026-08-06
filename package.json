@@ -21,8 +21,6 @@
   "dependencies": {
     "@hookform/resolvers": "^5.2.1",
     "@icons-pack/react-simple-icons": "^13.7.0",
-    "@paper-design/shaders-react": "^0.0.46",
-    "@prisma/client": "^6.14.0",
     "@radix-ui/react-alert-dialog": "^1.1.14",
     "@radix-ui/react-avatar": "^1.1.10",
     "@radix-ui/react-collapsible": "^1.1.12",
