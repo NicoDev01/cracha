@@ -143,5 +143,24 @@ def test_link_stripping_leaves_prose_and_bare_urls_intact() -> None:
     assert strip_markdown_links("<https://example.com/feed>") == "https://example.com/feed"
 
 
+def test_link_stripping_leaves_fenced_code_verbatim() -> None:
+    # On a documentation site the link syntax inside a sample is the subject.
+    markdown = (
+        "Siehe [die Doku](https://example.com/doku).\n\n"
+        "```markdown\n"
+        "[Anker](#abschnitt) und ![Bild](/logo.svg)\n"
+        "```\n\n"
+        "Danach [weiter](https://example.com/mehr)."
+    )
+    stripped = strip_markdown_links(markdown)
+    assert "[Anker](#abschnitt) und ![Bild](/logo.svg)" in stripped
+    assert "Siehe die Doku." in stripped
+    assert "Danach weiter." in stripped
+
+    # A page truncated inside a fence must not lose its remaining content.
+    unclosed = "Text [a](/b)\n\n~~~\ncode [c](/d)\n"
+    assert strip_markdown_links(unclosed) == "Text a\n\n~~~\ncode [c](/d)\n"
+
+
 def test_normalize_markdown_strips_links_on_every_ingest_path() -> None:
     assert normalize_markdown("## [Klaus Becker ](https://example.com/k)") == "## Klaus Becker"

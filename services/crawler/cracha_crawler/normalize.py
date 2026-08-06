@@ -22,6 +22,25 @@ MARKDOWN_REFERENCE_DEFINITION_RE = re.compile(r"(?m)^[ \t]{0,3}\[[^\]\n]+\]:[ \t
 AUTOLINK_RE = re.compile(r"<((?:https?|mailto):[^>\s]+)>")
 EMPTY_LIST_ITEM_RE = re.compile(r"(?m)^[ \t]{0,3}(?:[-*+]|\d+[.)])[ \t]*$\n?")
 EMPTY_HEADING_RE = re.compile(r"(?m)^[ \t]{0,3}#{1,6}[ \t]*$\n?")
+# A fence runs to its closing marker or, if the page truncated mid-block, to the
+# end of the document.
+FENCED_CODE_RE = re.compile(r"(?ms)^[ \t]{0,3}(`{3,}|~{3,}).*?(?:^[ \t]{0,3}\1[ \t]*$|\Z)")
+
+
+def _strip_links_in_prose(markdown: str) -> str:
+
+    text = MARKDOWN_REFERENCE_DEFINITION_RE.sub("", markdown)
+    text = AUTOLINK_RE.sub(r"\1", text)
+    text = MARKDOWN_IMAGE_RE.sub(lambda match: match.group(1).strip(), text)
+    # `[![alt](image)](target)` needs a second pass once the image is gone.
+    for _ in range(3):
+        unwrapped = MARKDOWN_LINK_RE.sub(lambda match: match.group(1).strip(), text)
+        if unwrapped == text:
+            break
+        text = unwrapped
+    text = MARKDOWN_REFERENCE_LINK_RE.sub(lambda match: match.group(1).strip(), text)
+    text = EMPTY_LIST_ITEM_RE.sub("", text)
+    return EMPTY_HEADING_RE.sub("", text)
 
 
 def strip_markdown_links(markdown: str) -> str:
@@ -35,21 +54,20 @@ def strip_markdown_links(markdown: str) -> str:
     link syntax is gone, so collection pages must reach the index as plain
     text. Bare URLs are not affected and stay readable.
 
+    Fenced code blocks are left verbatim: on a documentation site the link
+    syntax inside a sample is the content being documented.
+
     Crawling is unaffected: link discovery reads the rendered DOM, not this
     markdown.
     """
-    text = MARKDOWN_REFERENCE_DEFINITION_RE.sub("", markdown)
-    text = AUTOLINK_RE.sub(r"\1", text)
-    text = MARKDOWN_IMAGE_RE.sub(lambda match: match.group(1).strip(), text)
-    # `[![alt](image)](target)` needs a second pass once the image is gone.
-    for _ in range(3):
-        unwrapped = MARKDOWN_LINK_RE.sub(lambda match: match.group(1).strip(), text)
-        if unwrapped == text:
-            break
-        text = unwrapped
-    text = MARKDOWN_REFERENCE_LINK_RE.sub(lambda match: match.group(1).strip(), text)
-    text = EMPTY_LIST_ITEM_RE.sub("", text)
-    return EMPTY_HEADING_RE.sub("", text)
+    segments: list[str] = []
+    position = 0
+    for fence in FENCED_CODE_RE.finditer(markdown):
+        segments.append(_strip_links_in_prose(markdown[position : fence.start()]))
+        segments.append(fence.group(0))
+        position = fence.end()
+    segments.append(_strip_links_in_prose(markdown[position:]))
+    return "".join(segments)
 
 
 def canonical_url(url: str, *, preserve_fragment: bool = False) -> str:
