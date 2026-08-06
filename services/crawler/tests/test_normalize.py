@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 from cracha_crawler.normalize import (
     canonical_url,
+    clean_code_fences,
     extract_published_at,
     matches_patterns,
     normalize_markdown,
@@ -215,3 +216,55 @@ def test_page_from_result_carries_the_publication_date() -> None:
 
     assert page is not None
     assert page.published_at == "2026-02-01T00:00:00+00:00"
+
+
+def test_code_fences_lose_the_duplicated_line_number_copy() -> None:
+    # laravel.com renders every sample twice: once through a line-number gutter
+    # that glues the number to the code and eats the spaces, once clean.
+    markdown = (
+        "```\n"
+        "1php artisanqueue:work--queue=high\n"
+        "2\n"
+        "3ProcessPodcast::dispatch();\n"
+        "php artisan queue:work --queue=high\n"
+        "\n"
+        "ProcessPodcast::dispatch();\n"
+        "```\n"
+    )
+    cleaned = clean_code_fences(markdown)
+
+    assert "php artisanqueue:work" not in cleaned
+    assert "php artisan queue:work --queue=high" in cleaned
+    assert "ProcessPodcast::dispatch();" in cleaned
+    # The gutter entry for a blank line of code leaves only its number behind.
+    assert "\n2\n" not in cleaned
+
+
+def test_code_fences_keep_a_sample_that_only_looks_numbered() -> None:
+    # Without an intact copy in the same fence, nothing may be dropped.
+    markdown = "```\n1st place goes to the winner\n2nd place is runner up\n```"
+    assert clean_code_fences(markdown) == markdown
+
+    numbered_list = "```\n1. erster Schritt\n2. zweiter Schritt\n```"
+    assert clean_code_fences(numbered_list) == numbered_list
+
+
+def test_code_fences_collapse_the_blank_line_flood() -> None:
+    # The highlighter emitted two blank lines between every line of code, which
+    # was more than half of a documentation page.
+    markdown = "```python\nfirst = 1\n\n\n\nsecond = 2\n\n\n```"
+    assert clean_code_fences(markdown) == "```python\nfirst = 1\n\nsecond = 2\n```"
+
+
+def test_code_fences_leave_prose_alone() -> None:
+    prose = "Ein Absatz.\n\n\n\nEin zweiter Absatz mit 1meiner Zahl.\n"
+    assert clean_code_fences(prose) == prose
+
+
+def test_normalize_markdown_cleans_fences_and_extra_blank_lines() -> None:
+    markdown = "# Titel\n\n\n\nEin Absatz.\n\n```\n1use App;\nuse App;\n```\n"
+    normalized = normalize_markdown(markdown)
+
+    assert "\n\n\n" not in normalized
+    assert "1use App;" not in normalized
+    assert "use App;" in normalized

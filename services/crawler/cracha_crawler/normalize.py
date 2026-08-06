@@ -157,6 +157,87 @@ def extract_published_at(html: str) -> str | None:
     return None
 
 
+# A syntax highlighter's line-number gutter, glued to the code because the
+# gutter is a separate element: "1use App\Jobs\ProcessPodcast;".
+LINE_NUMBER_PREFIX_RE = re.compile(r"^(\d{1,4})(\S.*)$")
+
+
+def _collapse_blank_runs(lines: list[str]) -> list[str]:
+    collapsed: list[str] = []
+    blank = 0
+    for line in lines:
+        if line.strip():
+            blank = 0
+            collapsed.append(line)
+            continue
+        blank += 1
+        if blank == 1:
+            collapsed.append("")
+    while collapsed and not collapsed[-1].strip():
+        collapsed.pop()
+    return collapsed
+
+
+def _clean_fence_body(body: str) -> str:
+    lines = body.splitlines()
+    numbered: list[tuple[str, str]] = []
+    bare_numbers: list[str] = []
+    plain: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        match = LINE_NUMBER_PREFIX_RE.match(stripped)
+        if match:
+            numbered.append((line, match.group(2)))
+        # A gutter entry for a blank line of code leaves the number alone.
+        elif stripped.isdigit():
+            bare_numbers.append(line)
+        elif stripped:
+            plain.append(line)
+
+    if numbered:
+        # Only drop the gutter copy when the clean copy is demonstrably there.
+        # Whitespace is compared away because the gutter rendering loses it:
+        # "1php artisanqueue:work--queue=high,default".
+        compact = {re.sub(r"\s+", "", line) for line in plain}
+        duplicated = sum(1 for _, code in numbered if re.sub(r"\s+", "", code) in compact)
+        if duplicated * 2 >= len(numbered):
+            # The bare numbers only go once the gutter itself is established;
+            # on their own they could be a numbered list inside a sample.
+            gutter = {line for line, _ in numbered} | set(bare_numbers)
+            lines = [line for line in lines if line not in gutter]
+
+    return "\n".join(_collapse_blank_runs(lines))
+
+
+def clean_code_fences(markdown: str) -> str:
+    """Remove a highlighter's duplicated, whitespace-stripped copy of a sample.
+
+    laravel.com renders every sample twice: once through a line-number gutter
+    that glues the number to the code and eats the spaces, once clean. Both end
+    up inside the same fence, and a chunk containing only the first copy makes
+    an answer reproduce broken commands. Nothing is dropped unless the intact
+    copy is present in the same fence.
+
+    Blank runs inside a fence collapse to one line. The highlighter emitted two
+    or three between every line of code, which was more than half the page.
+    """
+    segments: list[str] = []
+    position = 0
+    for fence in FENCED_CODE_RE.finditer(markdown):
+        segments.append(markdown[position : fence.start()])
+        lines = fence.group(0).splitlines()
+        if len(lines) < 3:
+            segments.append(fence.group(0))
+        else:
+            opener, *rest = lines
+            closing = rest.pop() if rest and rest[-1].strip().startswith(("```", "~~~")) else None
+            body = _clean_fence_body("\n".join(rest))
+            segments.append("\n".join([opener, body] + ([closing] if closing is not None else [])))
+        position = fence.end()
+    segments.append(markdown[position:])
+    return "".join(segments)
+
+
 def canonical_url(url: str, *, preserve_fragment: bool = False) -> str:
     parsed = urlsplit(url)
     path = parsed.path or "/"
@@ -175,9 +256,12 @@ def matches_patterns(url: str, includes: list[str], excludes: list[str]) -> bool
 def normalize_markdown(markdown: str) -> str:
     # Every ingest path funnels through here, so link stripping cannot be
     # forgotten by a caller that builds markdown some other way.
-    text = strip_markdown_links(markdown.replace("\x00", ""))
+    text = clean_code_fences(strip_markdown_links(markdown.replace("\x00", "")))
     text = re.sub(r"[ \t]+\n", "\n", text)
-    text = re.sub(r"\n{4,}", "\n\n\n", text)
+    # One blank line separates blocks in markdown; more is rendering noise that
+    # only costs index space. Fenced code was already normalised above and is
+    # not affected by a pattern this loose.
+    text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
 
 

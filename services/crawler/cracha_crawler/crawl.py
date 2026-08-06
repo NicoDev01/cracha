@@ -435,10 +435,11 @@ async def _crawl4ai_pages(
         "excluded_tags": ["nav", "footer", "aside", "script", "style", "noscript"],
         "remove_overlay_elements": True,
         "remove_consent_popups": True,
-        # A team tile, an API signature or a table row is a handful of words.
-        # At 20 the scraper discarded exactly the short, dense entries an
-        # enumerating question needs.
-        "word_count_threshold": 5,
+        # Measured against the real webmen team page and laravel.com/docs: the
+        # markdown is byte for byte identical at 5 and at 20, because the
+        # pruning content filter decides what survives, not this. Lowering it
+        # buys nothing, so it keeps its value.
+        "word_count_threshold": 20,
         "page_timeout": 30_000,
         "delay_before_return_html": 0.5,
         "wait_for_images": False,
