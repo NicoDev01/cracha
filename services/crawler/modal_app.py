@@ -80,20 +80,23 @@ async def finalize_index(
             database_id,
             user_id,
             active_keys,
-            attempts=900,
+            attempts=250,
             on_progress=report_progress,
         )
-        if not status.complete:
-            raise TimeoutError("AI Search indexing did not finish within 30 minutes")
+        # Only an empty index is a failure. AI Search leaving a handful of items
+        # in "running" is not: their chunks are searchable, and declaring the
+        # crawl failed threw away a knowledge base that worked.
+        if not status.complete and status.searchable_count < 1:
+            raise TimeoutError("AI Search produced no searchable content")
 
         result = {
             "success": True,
             "pages_count": len(active_keys),
             "skipped_count": skipped_count + submitted_count - len(active_keys),
             "chunks_count": status.chunks_count,
-            "indexed_pages": status.indexed_count,
-            "indexing_pending": 0,
-            "indexing_complete": True,
+            "indexed_pages": max(status.indexed_count, status.searchable_count),
+            "indexing_pending": 0 if status.complete else status.pending_count,
+            "indexing_complete": status.complete,
             "active_keys": active_keys,
         }
         await update_status(
@@ -105,7 +108,7 @@ async def finalize_index(
             result=result,
             progress={
                 "stage": "completed",
-                "current": status.indexed_count,
+                "current": max(status.indexed_count, status.searchable_count),
                 "total": len(active_keys),
                 "percent": 100,
                 "chunks_count": status.chunks_count,

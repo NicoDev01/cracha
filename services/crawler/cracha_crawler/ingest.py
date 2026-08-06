@@ -1,5 +1,6 @@
 import asyncio
 import os
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
@@ -10,6 +11,13 @@ from .models import Page
 ProgressCallback = Callable[[dict[str, object]], Awaitable[None]]
 INDEX_STATUS_ATTEMPTS = 15
 INDEX_STATUS_INTERVAL_SECONDS = 2
+INDEX_STATUS_MAX_INTERVAL_SECONDS = 15
+# AI Search sometimes leaves an item in "running" indefinitely although its
+# chunks are already searchable. Waiting out the whole budget for those turned a
+# finished crawl into a half-hour hang followed by a failure, while the pages
+# were answering questions the entire time. Progress resets this timer, so a
+# large knowledge base that is genuinely still indexing keeps its time.
+INDEX_STALL_SECONDS = 120
 
 
 @dataclass(frozen=True)
@@ -27,6 +35,7 @@ class IndexStatus:
     indexed_count: int
     pending_count: int
     complete: bool
+    searchable_count: int = 0
 
 
 class RagIngestClient:
@@ -114,8 +123,13 @@ class RagIngestClient:
                 active_keys,
                 on_progress,
                 attempts=attempts,
+                stall_seconds=INDEX_STALL_SECONDS,
             )
-            if status.complete:
+            # A knowledge base whose pages answer questions is finished, even if
+            # AI Search never flips the last few items to "completed". Leaving it
+            # in "crawling" until the budget ran out and then marking it failed
+            # discarded a working index.
+            if status.complete or status.searchable_count > 0:
                 await self._complete(
                     client, database_id, user_id, active_keys, status.chunks_count
                 )
@@ -149,6 +163,8 @@ class RagIngestClient:
         active_keys: list[str],
         on_progress: ProgressCallback | None = None,
         attempts: int = INDEX_STATUS_ATTEMPTS,
+        stall_seconds: float | None = None,
+        _monotonic: Callable[[], float] = time.monotonic,
     ) -> IndexStatus:
         payload = {
             "database_id": database_id,
@@ -162,6 +178,8 @@ class RagIngestClient:
             pending_count=len(active_keys),
             complete=False,
         )
+        last_change = _monotonic()
+        delay = float(INDEX_STATUS_INTERVAL_SECONDS)
         for attempt in range(attempts):
             response = await self._post(client, "/ingest/status", payload)
             status = response.json()
@@ -171,6 +189,10 @@ class RagIngestClient:
                 active_keys[:] = [key for key in active_keys if key not in failed_keys]
                 if not active_keys:
                     raise RuntimeError(f"AI Search indexing failed: {failures[0]}")
+                # Dropping the failed keys is progress; retry without spinning.
+                last_change = _monotonic()
+                if attempt + 1 < attempts:
+                    await asyncio.sleep(INDEX_STATUS_INTERVAL_SECONDS)
                 continue
             total = len(active_keys)
             pending = min(total, int(status.get("pending") or 0))
@@ -181,23 +203,37 @@ class RagIngestClient:
                 indexed_count=indexed,
                 pending_count=pending,
                 complete=bool(status.get("ready")),
+                searchable_count=int(status.get("searchable") or 0),
             )
             progress = (indexed, chunks_count)
-            if on_progress and progress != previous_progress:
-                await on_progress(
-                    {
-                        "stage": "indexing",
-                        "current": indexed,
-                        "total": total,
-                        "percent": round((indexed / max(1, total)) * 100),
-                        "chunks_count": chunks_count,
-                    }
-                )
+            if progress != previous_progress:
                 previous_progress = progress
+                last_change = _monotonic()
+                # Indexing is moving again, so react quickly once more.
+                delay = float(INDEX_STATUS_INTERVAL_SECONDS)
+                if on_progress:
+                    await on_progress(
+                        {
+                            "stage": "indexing",
+                            "current": indexed,
+                            "total": total,
+                            "percent": round((indexed / max(1, total)) * 100),
+                            "chunks_count": chunks_count,
+                        }
+                    )
             if latest.complete:
                 return latest
+            if stall_seconds is not None and _monotonic() - last_change >= stall_seconds:
+                print(
+                    f"[WARN] AI Search stopped progressing with {pending} item(s) pending; "
+                    f"{latest.searchable_count} of {total} are searchable."
+                )
+                return latest
             if attempt + 1 < attempts:
-                await asyncio.sleep(INDEX_STATUS_INTERVAL_SECONDS)
+                await asyncio.sleep(delay)
+                # Polling every two seconds for half an hour cost 900 full item
+                # listings and told us nothing the backoff does not.
+                delay = min(delay * 1.5, float(INDEX_STATUS_MAX_INTERVAL_SECONDS))
 
         # AI Search processes accepted uploads asynchronously. A still-running item is
         # not an ingestion failure and remains searchable as soon as Cloudflare finishes.

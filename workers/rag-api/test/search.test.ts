@@ -7,6 +7,7 @@ import {
   classifyQuestion,
   deleteInstanceIfExists,
   deleteStaleItems,
+  instanceConfigMatches,
   instanceIdFor,
   isExhaustiveQuestion,
   itemKeyFor,
@@ -314,6 +315,32 @@ describe('enumerating retrieval', () => {
     const result = await retrieve(instance, 'Wer sind die Teammitglieder von Webmen?', 8)
     // No hub, but the list budget still admits far more than the old eight blocks.
     expect(result.sources.length).toBeGreaterThan(8)
+  })
+})
+
+describe('instance configuration drift', () => {
+  const config = {
+    chunk_size: 800,
+    index_method: { vector: true, keyword: true },
+    custom_metadata: [{ field_name: 'url', data_type: 'text' }],
+  }
+
+  it('accepts a live instance that already matches, whatever the key order', () => {
+    expect(instanceConfigMatches({
+      unrelated: 'ignored',
+      index_method: { keyword: true, vector: true },
+      chunk_size: 800,
+      custom_metadata: [{ data_type: 'text', field_name: 'url' }],
+    }, config)).toBe(true)
+  })
+
+  it('detects drift in every field the configuration sets', () => {
+    expect(instanceConfigMatches({ ...config, chunk_size: 512 }, config)).toBe(false)
+    expect(instanceConfigMatches({ ...config, index_method: { vector: true, keyword: false } }, config)).toBe(false)
+    expect(instanceConfigMatches({ ...config, custom_metadata: [] }, config)).toBe(false)
+    // A missing field is drift, not a match.
+    expect(instanceConfigMatches({ chunk_size: 800 }, config)).toBe(false)
+    expect(instanceConfigMatches(null, config)).toBe(false)
   })
 })
 

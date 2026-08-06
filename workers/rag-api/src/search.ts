@@ -27,10 +27,28 @@ const INSTANCE_CONFIG = {
   ],
 }
 
+/** Key order must not decide equality, so objects are compared sorted. */
+function stableJson(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null'
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
+  return `{${Object.entries(value as Record<string, unknown>)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, entry]) => `${JSON.stringify(key)}:${stableJson(entry)}`)
+    .join(',')}}`
+}
+
+/**
+ * Compares every field the configuration sets, not a subset: an earlier guard
+ * checked only a few and let drift in max_num_results, score_threshold or
+ * reranking survive unnoticed.
+ */
+export function instanceConfigMatches(info: unknown, config: Record<string, unknown>): boolean {
+  if (!info || typeof info !== 'object') return false
+  const live = info as Record<string, unknown>
+  return Object.entries(config).every(([key, value]) => stableJson(live[key]) === stableJson(value))
+}
+
 async function configureInstance(instance: AiSearchInstance, id: string): Promise<void> {
-  // Unconditionally reapplied. The previous guard compared only a subset of the
-  // fields it sets, so drift in max_num_results, score_threshold or reranking
-  // was invisible and survived in production across several deployments.
   await instance.update({ id, ...INSTANCE_CONFIG })
 }
 
@@ -55,8 +73,11 @@ export async function ensureInstance(env: Env, databaseId: string): Promise<AiSe
   const existing = env.AI_SEARCH.get(id)
 
   try {
-    await existing.info()
-    await configureInstance(existing, id)
+    const info = await existing.info()
+    // Ingestion calls this once per batch. Rewriting an identical configuration
+    // while items are being indexed is at best wasted work against the same
+    // API that is doing the indexing.
+    if (!instanceConfigMatches(info, INSTANCE_CONFIG)) await configureInstance(existing, id)
     return existing
   } catch {
     try {

@@ -167,6 +167,7 @@ async function handleIndexStatus(request: Request, env: Env): Promise<Response> 
   const foundKeys = new Set<string>()
   const failures: string[] = []
   let pending = 0
+  let searchable = 0
   let chunksCount = 0
   const pageSize = 50
 
@@ -177,12 +178,14 @@ async function handleIndexStatus(request: Request, env: Env): Promise<Response> 
       foundKeys.add(item.key)
       const itemChunks = item.chunks_count ?? 0
       chunksCount += itemChunks
+      // Chunks are queryable as soon as they exist: a stalled "running" item
+      // was verified to be the top hit for text that only it contains. The item
+      // may still gain chunks though, so it stays pending.
+      if (item.status !== 'error' && itemChunks > 0) searchable += 1
       if (item.status === 'error') failures.push(`${item.key}: ${item.error ?? 'Indexierungsfehler'}`)
       else if (item.status === 'completed' || item.status === 'skipped') {
         if (itemChunks === 0) failures.push(`${item.key}: keine durchsuchbaren Inhalte erzeugt`)
       } else {
-        // queued/running/outdated items are not ready even if AI Search already
-        // reports provisional chunks for them.
         pending += 1
       }
     }
@@ -194,6 +197,9 @@ async function handleIndexStatus(request: Request, env: Env): Promise<Response> 
   return json(request, env, {
     ready: pending === 0 && failures.length === 0,
     pending,
+    // How much of the knowledge base already answers questions. A crawl that
+    // stalls on a few items is still usable and must not be reported as failed.
+    searchable,
     failures,
     chunks_count: chunksCount,
   })
