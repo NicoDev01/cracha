@@ -25,82 +25,23 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { StatusBadge } from "@/components/dashboard/common/StatusBadge"
 import { deleteDatabase } from "@/lib/api/database-api"
 import { apiFetch } from "@/lib/api/request"
+import {
+  databaseName,
+  databaseStatus,
+  formatDateTime,
+  formatNumber,
+  hostname,
+  pageCount,
+  sourceUrl,
+  STATUS_LABELS,
+} from "@/lib/databases"
 import { cn } from "@/lib/utils"
 import { useAuthStore } from "@/stores/auth-store"
 import { getDatabases } from "@/stores/chat-store"
 import type { Database } from "@/types/chat"
-
-const statusCopy: Record<string, string> = {
-  active: "Aktiv",
-  crawling: "Crawling",
-  pending: "Ausstehend",
-  error: "Fehler",
-  failed: "Fehler",
-  inactive: "Inaktiv",
-}
-
-function databaseName(database: Database) {
-  const name = database.name?.trim()
-  if (name && name !== database.id) return name
-  return database.id
-    .replace(/-[a-f0-9]{8}$/i, "")
-    .replace(/[-_]+/g, " ")
-    .trim() || database.id
-}
-
-function sourceUrl(database: Database) {
-  return database.source_url || database.url || ""
-}
-
-function hostname(url: string) {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "")
-  } catch {
-    return url || "–"
-  }
-}
-
-function formatDate(value?: string | Date) {
-  if (!value) return "–"
-  const date = value instanceof Date ? value : new Date(value)
-  if (Number.isNaN(date.getTime())) return "–"
-  return new Intl.DateTimeFormat("de-DE", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date)
-}
-
-function formatNumber(value?: number) {
-  return new Intl.NumberFormat("de-DE").format(value ?? 0)
-}
-
-function StatusBadge({ status }: { status?: Database["status"] }) {
-  const normalized = status ?? "pending"
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
-        normalized === "active" && "bg-success-50 text-success-700 dark:bg-success-500/10 dark:text-success-300",
-        (normalized === "crawling" || normalized === "pending") && "bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300",
-        (normalized === "error" || normalized === "failed") && "bg-error-50 text-error-700 dark:bg-error-500/10 dark:text-error-300",
-        normalized === "inactive" && "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300",
-      )}
-    >
-      <span
-        className={cn(
-          "size-1.5 rounded-full",
-          normalized === "active" && "bg-success-500",
-          (normalized === "crawling" || normalized === "pending") && "animate-pulse bg-brand-500",
-          (normalized === "error" || normalized === "failed") && "bg-error-500",
-          normalized === "inactive" && "bg-gray-400",
-        )}
-      />
-      {statusCopy[normalized] ?? "Unbekannt"}
-    </span>
-  )
-}
 
 export function DataDashboard() {
   const { user } = useAuthStore()
@@ -136,7 +77,7 @@ export function DataDashboard() {
     }
   }, [user])
 
-  const isCrawling = databases.some((database) => database.status === "crawling")
+  const isCrawling = databases.some((database) => databaseStatus(database) === "crawling")
 
   useEffect(() => {
     void loadDatabases()
@@ -160,7 +101,7 @@ export function DataDashboard() {
     if (!query) return databases
     return databases.filter((database) => {
       const url = sourceUrl(database)
-      return [databaseName(database), database.description, url, hostname(url), statusCopy[database.status ?? "pending"]]
+      return [databaseName(database), database.description, url, hostname(url), STATUS_LABELS[databaseStatus(database)]]
         .some((value) => value?.toLowerCase().includes(query))
     })
   }, [databases, searchQuery])
@@ -331,10 +272,10 @@ export function DataDashboard() {
                         </a>
                       ) : "–"}
                     </TableCell>
-                    <TableCell><StatusBadge status={database.status} /></TableCell>
-                    <TableCell className="text-right tabular-nums">{formatNumber(database.pages_count ?? database.document_count)}</TableCell>
+                    <TableCell><StatusBadge status={databaseStatus(database)} /></TableCell>
+                    <TableCell className="text-right tabular-nums">{formatNumber(pageCount(database))}</TableCell>
                     <TableCell className="text-right font-medium tabular-nums">{formatNumber(database.chunks_count)}</TableCell>
-                    <TableCell className="whitespace-nowrap text-gray-500 dark:text-gray-400">{formatDate(database.last_crawl)}</TableCell>
+                    <TableCell className="whitespace-nowrap text-gray-500 dark:text-gray-400">{formatDateTime(database.last_crawl)}</TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-1">
                         <Button
@@ -342,7 +283,7 @@ export function DataDashboard() {
                           variant="ghost"
                           size="icon"
                           onClick={() => void handleRecrawl(database)}
-                          disabled={isRecrawling || database.status === "crawling"}
+                          disabled={isRecrawling || databaseStatus(database) === "crawling"}
                           className="size-8 rounded-lg text-gray-500 hover:text-brand-600"
                           aria-label={`${databaseName(database)} erneut crawlen`}
                           title="Recrawl starten"

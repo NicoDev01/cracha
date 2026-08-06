@@ -12,31 +12,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/dashboard/common/StatusBadge"
 import { useHydratedChatStore } from "@/hooks/use-chat-store"
+import { databaseStatus, formatDate, formatNumber, pageCount } from "@/lib/databases"
 import { getDatabases } from "@/stores/chat-store"
 import { useAuthStore } from "@/stores/auth-store"
 import type { Database as DatabaseType } from "@/types/chat"
-
-// The registry only ever writes these four states; anything else is a stale record.
-const STATUS_BADGE: Record<string, { label: string; className: string }> = {
-  active: {
-    label: 'Aktiv',
-    className: 'bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700/50',
-  },
-  crawling: {
-    label: 'Crawlt',
-    className: 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700/50',
-  },
-  pending: {
-    label: 'Wartet',
-    className: 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700/50',
-  },
-  failed: {
-    label: 'Fehler',
-    className: 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700/50',
-  },
-}
 
 export function DatabaseSelector() {
   const router = useRouter()
@@ -88,30 +69,6 @@ export function DatabaseSelector() {
   }
 
   const selectedDb = databases.find(db => db.id === selectedDatabase)
-
-  const formatDate = (date: Date | string | undefined) => {
-    if (!date) return 'Nie'
-    
-    // Handle both Date objects and ISO strings
-    const dateObj = typeof date === 'string' ? new Date(date) : date
-    
-    // Check if the date is valid
-    if (isNaN(dateObj.getTime())) {
-      console.warn('Invalid date provided to formatDate:', date)
-      return 'Ungültiges Datum'
-    }
-    
-    return new Intl.DateTimeFormat('de-DE', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
-    }).format(dateObj)
-  }
-
-  const formatNumber = (num: number | undefined) => {
-    if (num === undefined || num === null) return '0'
-    return new Intl.NumberFormat('de-DE').format(num)
-  }
 
   return (
     <DropdownMenu modal={false}>
@@ -208,7 +165,7 @@ export function DatabaseSelector() {
                   <div className="flex items-center gap-3 text-xs text-gray-400 dark:text-gray-400">
                     <div className="flex items-center gap-1">
                       <FileText className="w-3 h-3" />
-                      <span>{formatNumber(database.document_count || 0)} Docs</span>
+                      <span>{formatNumber(pageCount(database))} Seiten</span>
                     </div>
 
                     {database.last_crawl && (
@@ -220,13 +177,9 @@ export function DatabaseSelector() {
                   </div>
                 </div>
 
-                {STATUS_BADGE[database.status ?? ''] && (
-                  <div className="flex flex-col items-end gap-1 ml-2">
-                    <Badge variant="secondary" className={`text-xs ${STATUS_BADGE[database.status ?? ''].className}`}>
-                      {STATUS_BADGE[database.status ?? ''].label}
-                    </Badge>
-                  </div>
-                )}
+                <div className="flex flex-col items-end gap-1 ml-2">
+                  <StatusBadge status={databaseStatus(database)} />
+                </div>
               </div>
             </DropdownMenuItem>
           ))
