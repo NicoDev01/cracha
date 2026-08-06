@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { groundListEntry, paddedBlockText, type ContextBlock, type GroundingBlock } from './generation'
+import {
+  groundListEntries,
+  groundListEntry,
+  paddedBlockText,
+  type ContextBlock,
+  type GroundingBlock,
+} from './generation'
 
 const teamPage: GroundingBlock = {
   n: 1,
@@ -21,6 +27,7 @@ describe('collection page restriction', () => {
     url: 'https://www.webmen.de/agentur-bremen/team',
     text: 'Stephan Müller\nKlaus Becker\nFabian Holler',
     collection: true,
+    authoritative: true,
   }
   const blogPost: ContextBlock = {
     n: 2,
@@ -29,25 +36,41 @@ describe('collection page restriction', () => {
     text: 'Lena Fellner hat den Beitrag verfasst. Auch Klaus Becker kommt vor.',
   }
 
-  function ground(line: string, context: ContextBlock[]): string | null {
-    const collection = context.filter((block) => block.collection)
-    const scope = (collection.length ? collection : context)
-      .map((block) => ({ n: block.n, paddedText: paddedBlockText(block.text) }))
-    return groundListEntry(line, scope)
+  // Exercises the production selection rather than a copy of it, so a change
+  // in which blocks may reject an entry cannot pass unnoticed.
+  async function ground(line: string, context: ContextBlock[]): Promise<string> {
+    async function* source() {
+      yield line
+    }
+    let output = ''
+    for await (const delta of groundListEntries(source(), context)) output += delta
+    return output
   }
 
-  it('drops entries that only appear outside the collection page', () => {
+  it('drops entries that only appear outside the collection page', async () => {
     // Production listed Lena Fellner and Sonja Ahrens as team members.
-    expect(ground('- Lena Fellner [2]', [overview, blogPost])).toBeNull()
+    expect(await ground('- Lena Fellner [2]', [overview, blogPost])).toBe('')
   })
 
-  it('keeps collection entries and points their citation at the overview', () => {
-    expect(ground('- Fabian Holler [8]', [overview, blogPost])).toBe('- Fabian Holler [1]')
-    expect(ground('- Klaus Becker [2]', [overview, blogPost])).toBe('- Klaus Becker [1]')
+  it('keeps collection entries and points their citation at the overview', async () => {
+    expect(await ground('- Fabian Holler [8]', [overview, blogPost])).toBe('- Fabian Holler [1]')
+    expect(await ground('- Klaus Becker [2]', [overview, blogPost])).toBe('- Klaus Becker [1]')
   })
 
-  it('uses every block when no collection page was identified', () => {
-    expect(ground('- Lena Fellner [2]', [blogPost])).toBe('- Lena Fellner [2]')
+  it('uses every block when no collection page was identified', async () => {
+    expect(await ground('- Lena Fellner [2]', [blogPost])).toBe('- Lena Fellner [2]')
+  })
+
+  it('keeps entries from other pages when the overview was cut short', async () => {
+    // The missing entries are missing from the context, not from the site.
+    // Deleting them would turn a truncated source into a wrong answer.
+    const partial: ContextBlock = { ...overview, truncated: true, authoritative: false }
+    expect(await ground('- Lena Fellner [2]', [partial, blogPost])).toBe('- Lena Fellner [2]')
+  })
+
+  it('keeps entries when the overview was only guessed from retrieval evidence', async () => {
+    const guessed: ContextBlock = { ...overview, authoritative: false }
+    expect(await ground('- Lena Fellner [2]', [guessed, blogPost])).toBe('- Lena Fellner [2]')
   })
 })
 

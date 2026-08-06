@@ -36,6 +36,9 @@ class Page(BaseModel):
     checksum: str
     crawled_at: str
     depth: int = 0
+    # The date the page itself states. Every page of a crawl shares one
+    # crawled_at, so "the newest article" is unanswerable without this.
+    published_at: str | None = None
 
 
 class CrawlResult(BaseModel):

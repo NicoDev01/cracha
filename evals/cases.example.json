@@ -1,7 +1,12 @@
 [
   {
-    "question": "Was ist das Hauptthema der Website?",
-    "required_source_url_contains": "/",
-    "notes": "Smoke-Test: Antwort muss mindestens eine gecrawlte Quelle enthalten."
+    "question": "Worum geht es auf dieser Website?",
+    "min_source_count": 1,
+    "notes": "Smoke-Test: jede Wissensbasis muss auf eine offene Frage Quellen liefern."
+  },
+  {
+    "question": "Wie kann man Kontakt aufnehmen?",
+    "min_source_count": 1,
+    "notes": "Zweite Formulierung, damit ein einzelner Glückstreffer nicht als Erfolg zählt."
   }
 ]

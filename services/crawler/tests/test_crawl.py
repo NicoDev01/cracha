@@ -1,5 +1,84 @@
+import textwrap
+
 from cracha_crawler import crawl
 from cracha_crawler.models import CrawlRequest, Page
+
+
+def html_page(body: str) -> Page | None:
+    document = f"<html><head><title>Preise</title></head><body><main>{body}</main></body></html>"
+    page, _links = _html_page_of(document)
+    return page
+
+
+def _html_page_of(document: str) -> tuple[Page | None, list[str]]:
+    return crawl._html_page(
+        document.encode("utf-8"), "https://example.com/preise", 0, request()
+    )
+
+
+FILLER = "<p>" + ("Ausführliche Beschreibung des Angebots. " * 12) + "</p>"
+
+
+def test_tables_survive_as_markdown_tables() -> None:
+    # Prices, versions and comparison matrices are what a table holds, and they
+    # were dropped wholesale: the extractor never looked at table elements.
+    page = html_page(
+        FILLER
+        + """
+        <table>
+          <tr><th>Paket</th><th>Preis</th></tr>
+          <tr><td>Basis</td><td>19 EUR</td></tr>
+          <tr><td>Pro</td><td>49 EUR</td></tr>
+        </table>
+        """
+    )
+
+    assert page is not None
+    assert "| Paket | Preis |" in page.markdown
+    assert "| --- | --- |" in page.markdown
+    assert "| Basis | 19 EUR |" in page.markdown
+    assert "| Pro | 49 EUR |" in page.markdown
+    # The cell text must appear once, not again as loose paragraphs.
+    assert page.markdown.count("19 EUR") == 1
+
+
+def test_layout_tables_degrade_to_plain_lines() -> None:
+    page = html_page(FILLER + "<table><tr><td>Nur eine Spalte</td></tr></table>")
+
+    assert page is not None
+    assert "Nur eine Spalte" in page.markdown
+    assert "|" not in page.markdown
+
+
+def test_code_samples_keep_their_line_breaks() -> None:
+    page = html_page(
+        FILLER
+        + "<pre><code>php artisan queue:work\nphp artisan migrate</code></pre>"
+    )
+
+    assert page is not None
+    assert "```\nphp artisan queue:work\nphp artisan migrate\n```" in page.markdown
+
+
+def test_publication_date_is_read_from_the_page() -> None:
+    document = textwrap.dedent(
+        """
+        <html><head><title>Beitrag</title>
+        <meta property="article:published_time" content="2026-03-14T09:30:00+01:00">
+        </head><body><main>{filler}</main></body></html>
+        """
+    ).format(filler=FILLER)
+    page, _links = _html_page_of(document)
+
+    assert page is not None
+    assert page.published_at == "2026-03-14T09:30:00+01:00"
+
+
+def test_pages_without_a_date_report_none() -> None:
+    page = html_page(FILLER)
+
+    assert page is not None
+    assert page.published_at is None
 
 
 def request() -> CrawlRequest:

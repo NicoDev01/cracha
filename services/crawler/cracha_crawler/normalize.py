@@ -70,6 +70,93 @@ def strip_markdown_links(markdown: str) -> str:
     return "".join(segments)
 
 
+# Publication dates live in a handful of well-established places. Anything
+# else is prose and would be guesswork.
+_META_DATE_RE = re.compile(
+    r"<meta\b[^>]*?\b(?:property|name|itemprop)\s*=\s*['\"]"
+    r"(article:published_time|article:modified_time|og:published_time|datePublished"
+    r"|dateModified|pubdate|publish[-_]?date|date)['\"][^>]*?>",
+    re.IGNORECASE,
+)
+_META_CONTENT_RE = re.compile(r"\bcontent\s*=\s*['\"]([^'\"]+)['\"]", re.IGNORECASE)
+_TIME_TAG_RE = re.compile(
+    r"<time\b[^>]*?\bdatetime\s*=\s*['\"]([^'\"]+)['\"]", re.IGNORECASE
+)
+_JSON_LD_DATE_RE = re.compile(
+    r"\"(?:datePublished|dateCreated|dateModified)\"\s*:\s*\"([^\"]+)\"", re.IGNORECASE
+)
+_ISO_DATE_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})")
+# Ordered by trustworthiness: an explicit publication date beats a modification
+# date, which beats whatever the first <time> element happens to hold.
+_DATE_PRIORITY = (
+    "article:published_time",
+    "og:published_time",
+    "datepublished",
+    "pubdate",
+    "publish-date",
+    "publish_date",
+    "publishdate",
+    "date",
+    "article:modified_time",
+    "datemodified",
+    "datecreated",
+)
+
+
+def _normalize_date(value: str) -> str | None:
+    """Return an ISO 8601 timestamp, or None if the value is not a date.
+
+    The declared offset is kept as written; rewriting it to UTC would move the
+    stated moment. A date without a time is anchored at midnight UTC so AI
+    Search can store it as a datetime and comparisons stay meaningful.
+    """
+    text = value.strip()
+    match = _ISO_DATE_RE.match(text)
+    if not match:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        try:
+            parsed = datetime(int(match.group(1)), int(match.group(2)), int(match.group(3)))
+        except ValueError:
+            return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.isoformat()
+
+
+def extract_published_at(html: str) -> str | None:
+    """Read the publication date a page declares, if it declares one.
+
+    Absent is a valid answer: dating a page by guesswork would rank sources by
+    a number nobody wrote.
+    """
+    if not html:
+        return None
+    found: dict[str, str] = {}
+    for tag in _META_DATE_RE.finditer(html):
+        content = _META_CONTENT_RE.search(tag.group(0))
+        if not content:
+            continue
+        normalized = _normalize_date(content.group(1))
+        if normalized:
+            found.setdefault(tag.group(1).lower(), normalized)
+    for key in _DATE_PRIORITY:
+        if key in found:
+            return found[key]
+
+    for match in _JSON_LD_DATE_RE.finditer(html):
+        normalized = _normalize_date(match.group(1))
+        if normalized:
+            return normalized
+    for match in _TIME_TAG_RE.finditer(html):
+        normalized = _normalize_date(match.group(1))
+        if normalized:
+            return normalized
+    return None
+
+
 def canonical_url(url: str, *, preserve_fragment: bool = False) -> str:
     parsed = urlsplit(url)
     path = parsed.path or "/"
@@ -155,4 +242,5 @@ def page_from_result(result: object, includes: list[str], excludes: list[str]) -
         checksum=checksum,
         crawled_at=datetime.now(UTC).isoformat(),
         depth=int(metadata.get("depth", 0) or 0),
+        published_at=extract_published_at(str(getattr(result, "html", "") or "")),
     )

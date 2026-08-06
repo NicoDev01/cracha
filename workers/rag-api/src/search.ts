@@ -23,6 +23,9 @@ const INSTANCE_CONFIG = {
     { field_name: 'title', data_type: 'text' as const },
     { field_name: 'checksum', data_type: 'text' as const },
     { field_name: 'crawled_at', data_type: 'datetime' as const },
+    // The date the page states, not the date we fetched it. "Newest release"
+    // is unanswerable without it, because every page is crawled at once.
+    { field_name: 'published_at', data_type: 'datetime' as const },
     { field_name: 'depth', data_type: 'number' as const },
   ],
 }
@@ -180,6 +183,9 @@ export async function uploadPages(
           title: page.title,
           checksum: page.checksum,
           crawled_at: page.crawled_at,
+          // Absent on pages that state no date. Omitted rather than defaulted,
+          // so a missing date can never masquerade as a real one.
+          ...(page.published_at ? { published_at: page.published_at } : {}),
           // The Items API transports custom metadata as strings and casts it
           // according to the instance schema during indexing.
           depth: String(page.depth ?? 0),
@@ -227,8 +233,15 @@ const HUB_MIN_DESCENDANTS = 3
 const HUB_MAX_PROBES = 3
 /** 10 x 50 items covers the crawler's 500-page ceiling. */
 const HUB_MAX_SCAN_PAGES = 10
-const HUB_MAX_CHUNKS = 60
-const HUB_MAX_CHARACTERS = 30_000
+/** The chunks API rejects anything above 100 outright. */
+const HUB_MAX_CHUNKS = 100
+const HUB_MAX_CHARACTERS = 45_000
+/** A page whose URL names the queried entity is a collection page candidate
+ *  even when the site keeps detail pages as siblings rather than children. */
+const HUB_MIN_URL_MATCH = 0.5
+/** How much of a page has to read like list entries before its name may
+ *  reclassify the question as an enumeration. */
+const HUB_MIN_LIST_DENSITY = 0.5
 
 type ItemsApi = Pick<AiSearchInstance['items'], 'list' | 'get'>
 type RetrievalInstance = Pick<AiSearchInstance, 'search'> & { items?: ItemsApi }
@@ -238,12 +251,23 @@ interface HubPage {
   title: string
   key: string
   text: string
+  /** The page did not fit the budget, so the entries in it are a prefix. */
+  truncated: boolean
 }
 
 export interface AncestorCandidate {
   url: string
   descendants: number
   depth: number
+}
+
+export interface HubCandidate {
+  url: string
+  /** Higher goes first. Mixes URL-hierarchy and content evidence. */
+  score: number
+  /** The URL itself is named after the queried entity, e.g. `/team` for "who
+   *  is in the team". Strong enough to reclassify the question. */
+  namesQuery: boolean
 }
 
 /**
@@ -297,15 +321,30 @@ export function appendWithoutOverlap(accumulated: string, next: string): string 
   return `${accumulated}\n${next}`
 }
 
-async function readItemText(items: ItemsApi, itemId: string): Promise<string> {
+/**
+ * Truncation is reported, never silent. An answer built from a cut-off
+ * collection page is incomplete, and the prompt forbids hedging about
+ * completeness — so the only way to stay honest is to know it happened.
+ */
+async function readItemText(
+  items: ItemsApi,
+  itemId: string,
+): Promise<{ text: string; truncated: boolean }> {
   const response = await items.get(itemId).chunks({ limit: HUB_MAX_CHUNKS })
   const ordered = [...response.result].sort((left, right) => left.start_byte - right.start_byte)
   let text = ''
+  let consumed = 0
   for (const chunk of ordered) {
-    text = appendWithoutOverlap(text, chunk.text)
     if (text.length >= HUB_MAX_CHARACTERS) break
+    text = appendWithoutOverlap(text, chunk.text)
+    consumed += 1
   }
-  return text.slice(0, HUB_MAX_CHARACTERS)
+  return {
+    text: text.slice(0, HUB_MAX_CHARACTERS),
+    // Either the character budget cut the text, or the page has more chunks
+    // than one request returns.
+    truncated: text.length > HUB_MAX_CHARACTERS || consumed < ordered.length || ordered.length >= HUB_MAX_CHUNKS,
+  }
 }
 
 /**
@@ -342,18 +381,77 @@ async function findItemByUrl(
   return null
 }
 
-async function resolveHubPage(
-  instance: RetrievalInstance,
-  ranked: RankedChunk[],
-): Promise<HubPage | null> {
-  const items = instance.items
-  if (!items) return null
-
+/**
+ * Two independent kinds of evidence, because sites organise collections in two
+ * ways. Hierarchical sites put the entries below the overview
+ * (`/team` -> `/team/detail/x`), which the ancestor analysis finds. Flat sites
+ * put them beside it (`/team`, `/anna-beispiel`), where the only signal is that
+ * a retrieved page's own URL names what was asked for. Ignoring the second kind
+ * left every flat site without a complete list.
+ */
+export function hubCandidates(ranked: RankedChunk[], queryTokens: string[]): HubCandidate[] {
   const urls = ranked
     .map(({ chunk }) => (typeof chunk.item.metadata?.url === 'string' ? chunk.item.metadata.url : ''))
     .filter(Boolean)
 
-  const candidates = ancestorCandidates(urls).slice(0, HUB_MAX_PROBES)
+  // The two kinds of evidence add up rather than compete. On webmen.de the
+  // author archive `/blog/author/webmen` matched the word "Webmen" as well as
+  // the team page matched "Teammitglieder"; only the team page was also the
+  // parent of the retrieved detail pages, and that is what decides it.
+  const candidates = new Map<string, HubCandidate>()
+  const remember = (url: string, score: number, namesQuery: boolean) => {
+    const current = candidates.get(url)
+    candidates.set(url, {
+      url,
+      score: (current?.score ?? 0) + score,
+      namesQuery: (current?.namesQuery ?? false) || namesQuery,
+    })
+  }
+
+  for (const ancestor of ancestorCandidates(urls)) {
+    const named = collectionPageScore(queryTokens, ancestor.url) >= HUB_MIN_URL_MATCH
+    // Depth ranks the specific collection before the broad section landing
+    // page; a matching name outranks both. Shared ancestry never reclassifies
+    // the question, so this candidate cannot claim `namesQuery`.
+    remember(
+      ancestor.url,
+      1 + ancestor.depth / 100 + Math.min(ancestor.descendants, 20) / 1_000 + (named ? 1 : 0),
+      false,
+    )
+  }
+
+  const seen = new Set<string>()
+  for (const { chunk } of ranked) {
+    const url = typeof chunk.item.metadata?.url === 'string' ? chunk.item.metadata.url : ''
+    if (!url || seen.has(url)) continue
+    seen.add(url)
+    const urlMatch = collectionPageScore(queryTokens, url)
+    if (urlMatch < HUB_MIN_URL_MATCH) continue
+    // The name alone is not enough: `/guide/queues` is named after "queue" but
+    // answers "what is a queue" as prose. Only a page that reads like a list of
+    // entries may turn a question into an enumeration.
+    const listLike = listDensity(chunk.text)
+    remember(url, 1.5 + urlMatch + listLike / 2, listLike >= HUB_MIN_LIST_DENSITY)
+  }
+
+  return [...candidates.values()].sort((left, right) => right.score - left.score)
+}
+
+async function resolveHubPage(
+  instance: RetrievalInstance,
+  ranked: RankedChunk[],
+  queryTokens: string[],
+  requireNamed: boolean,
+): Promise<HubPage | null> {
+  const items = instance.items
+  if (!items) return null
+
+  // When the wording never asked for a set, the only justification for reading
+  // a page whole is the page that supplied the evidence. Falling through to an
+  // unrelated ancestor answered "what is a queue" with the docs index.
+  const candidates = hubCandidates(ranked, queryTokens)
+    .filter((candidate) => !requireNamed || candidate.namesQuery)
+    .slice(0, HUB_MAX_PROBES)
   for (const candidate of candidates) {
     const key = await itemKeyFor(candidate.url)
     try {
@@ -362,18 +460,24 @@ async function resolveHubPage(
         console.log(JSON.stringify({ event: 'hub_probe_miss', url: candidate.url, key }))
         continue
       }
-      const text = await readItemText(items, info.id)
+      const { text, truncated } = await readItemText(items, info.id)
       if (!text.trim()) {
         console.log(JSON.stringify({ event: 'hub_probe_empty', url: candidate.url, item_id: info.id }))
         continue
       }
       const metadata = info.metadata ?? {}
-      console.log(JSON.stringify({ event: 'hub_resolved', url: candidate.url, characters: text.length }))
+      console.log(JSON.stringify({
+        event: 'hub_resolved',
+        url: candidate.url,
+        characters: text.length,
+        truncated,
+      }))
       return {
         url: candidate.url,
         title: typeof metadata.title === 'string' ? metadata.title : candidate.url,
         key,
         text,
+        truncated,
       }
     } catch (error) {
       // A swallowed failure here is indistinguishable from "no collection page
@@ -388,7 +492,7 @@ async function resolveHubPage(
   console.log(JSON.stringify({
     event: 'hub_unresolved',
     candidates: candidates.map((candidate) => candidate.url),
-    distinct_urls: new Set(urls).size,
+    ranked_chunks: ranked.length,
   }))
   return null
 }
@@ -445,11 +549,24 @@ export async function retrieve(
   }
 
   const rankedChunks = fuseSearchResults(successfulResults, question, intent)
-  // Only enumerating questions pay the two extra item lookups.
-  const hub = intent.list ? await resolveHubPage(instance, rankedChunks) : null
+  const queryTokens = tokens(question)
+  // Phrasing is not a reliable signal across languages, so the results get a
+  // vote: when a page whose URL names the queried entity is among them, the
+  // question behaves like an enumeration whatever words it used.
+  const evidence = hubCandidates(rankedChunks, queryTokens)
+  // Only the "a retrieved page is named after what was asked" signal may
+  // escalate. Shared ancestry alone is not enough: every documentation page
+  // shares an ancestor, and that must not turn a definition question into an
+  // enumeration.
+  const effectiveIntent: QuestionIntent = intent.list
+    ? intent
+    : { ...intent, list: evidence.some((candidate) => candidate.namesQuery) }
+  const hub = effectiveIntent.list
+    ? await resolveHubPage(instance, rankedChunks, queryTokens, !intent.explicitList)
+    : null
   const searchQuery = [...new Set(successfulResults.map((result) => result.search_query).filter(Boolean))].join(' | ')
 
-  return { ...packContext(rankedChunks, hub, intent, topK), searchQuery }
+  return { ...packContext(rankedChunks, hub, effectiveIntent, topK), searchQuery }
 }
 
 export function packContext(
@@ -460,7 +577,7 @@ export function packContext(
 ): { context: string; blocks: ContextBlock[]; sources: Source[] } {
   // An enumerating answer is only as complete as the context allows. The budget
   // is sized so one full collection page fits alongside supporting detail pages.
-  const contextBudget = intent.list ? 48_000 : 20_000
+  const contextBudget = intent.list ? 64_000 : 24_000
   const maxSources = intent.list ? Math.max(topK, 12) : topK
   const maxChunkCharacters = intent.list ? 9_000 : 6_500
   const maxChunksPerSource = intent.exhaustive ? 3 : 2
@@ -484,9 +601,22 @@ export function packContext(
   // The collection page goes in whole and first. Splitting it across ranked
   // chunks is what previously truncated a 34-entry list to eight entries.
   if (hub) {
-    const text = hub.text.slice(0, Math.min(HUB_MAX_CHARACTERS, contextBudget))
+    const limit = Math.min(HUB_MAX_CHARACTERS, contextBudget)
+    const text = hub.text.slice(0, limit)
+    const truncated = hub.truncated || text.length < hub.text.length
     const sourceNumber = addSource(hub.url, hub.title, hub.url, text, 1, `hub-${hub.key}`)
-    blocks.push({ n: sourceNumber, title: hub.title, url: hub.url, text, collection: true })
+    blocks.push({
+      n: sourceNumber,
+      title: hub.title,
+      url: hub.url,
+      text,
+      collection: true,
+      truncated,
+      // A cut-off page cannot define the full set, and neither can a page the
+      // wording never asked for. In both cases entries from other sources are
+      // kept rather than rejected.
+      authoritative: intent.explicitList && !truncated,
+    })
     chunksPerSource.set(hub.url, maxChunksPerSource)
     contextCharacters += text.length
   }
@@ -520,12 +650,14 @@ export function packContext(
   return {
     context: blocks
       .map((block) => {
-        const label = block.collection
-          // Reads as prose, because the model quotes this label back at the
-          // reader. An all-caps marker turned up verbatim in answers.
-          ? `[${block.n}] ${block.title} (vollständige Übersicht aller Einträge)`
-          : `[${block.n}] ${block.title}`
-        return `${label}\nURL: ${block.url || 'unbekannt'}\n${block.text}`
+        // Machine-shaped metadata on its own line. A natural-language
+        // parenthetical after the title was quoted verbatim into an answer, and
+        // key: value lines are also language-neutral, which a German label was
+        // not once the knowledge base could be in any language.
+        const kind = block.collection
+          ? `\nsource_type: ${block.truncated ? 'collection_page_partial' : 'collection_page_complete'}`
+          : ''
+        return `[${block.n}] ${block.title}\nURL: ${block.url || 'unknown'}${kind}\n${block.text}`
       })
       .join('\n\n---\n\n'),
     blocks,
@@ -545,32 +677,71 @@ interface RankedChunk {
   score: number
 }
 
+/**
+ * Function words carry no retrieval signal but do dilute every coverage score,
+ * and a knowledge base can be crawled in any language. The list stays small on
+ * purpose: only words that are function words in their language and unlikely to
+ * be a searched term in another. Words like `where`, `each`, `with`, `list` or
+ * `has` are deliberately absent: on a documentation knowledge base they are API
+ * names, and losing the one token that identifies the page is far worse than
+ * the mild dilution of keeping a function word.
+ */
 const QUERY_STOP_WORDS = new Set([
-  'aber', 'alle', 'allen', 'aller', 'alles', 'auch', 'bitte', 'das', 'dass', 'dem', 'den',
-  'der', 'die', 'ein', 'eine', 'einer', 'eines', 'für', 'hat', 'haben', 'hier', 'ich', 'ist',
-  'mit', 'nach', 'oder', 'sind', 'und', 'vom', 'von', 'warum', 'was', 'welche', 'welcher',
-  'welches', 'wer', 'wie', 'wird', 'wurde', 'the', 'what', 'which', 'who', 'with', 'please',
+  // German
+  'aber', 'alle', 'allen', 'aller', 'alles', 'auch', 'bitte', 'dass', 'dem', 'den',
+  'der', 'die', 'diese', 'dieser', 'ein', 'eine', 'einer', 'eines', 'für', 'ich',
+  'ist', 'mich', 'mir', 'möchte', 'oder', 'sich', 'sind', 'und', 'vom', 'von',
+  'warum', 'welche', 'welchem', 'welchen', 'welcher', 'welches', 'wer', 'wie',
+  'wird', 'wurde',
+  // English
+  'about', 'and', 'are', 'does', 'please', 'tell', 'the', 'their', 'these', 'they',
+  'those', 'want', 'were', 'what', 'which', 'who', 'whom', 'why', 'you', 'your',
+  // French / Spanish / Italian / Portuguese / Dutch
+  'aux', 'como', 'cual', 'cuales', 'dans', 'della', 'delle', 'des', 'een', 'est',
+  'het', 'las', 'los', 'para', 'por', 'pour', 'quais', 'quale', 'quali', 'quelles',
+  'quels', 'que', 'qui', 'sont', 'sur', 'una', 'une', 'voor', 'welk', 'welke',
 ])
 
 function tokens(value: string): string[] {
-  return [...new Set(
+  const all = [...new Set(
     value
-      .toLocaleLowerCase('de')
+      .toLocaleLowerCase()
       .normalize('NFKD')
       .replace(/\p{M}/gu, '')
       .match(/[\p{L}\p{N}]{3,}/gu) ?? [],
-  )].filter((token) => !QUERY_STOP_WORDS.has(token))
+  )]
+  const meaningful = all.filter((token) => !QUERY_STOP_WORDS.has(token))
+  // "Was ist das?" is all function words. An empty token list would score every
+  // candidate at zero, so the unfiltered form is better than nothing.
+  return meaningful.length ? meaningful : all
 }
 
+/** Trigram sets are rebuilt for the same tokens across dozens of chunks, and
+ *  the Worker pays for that in CPU time it does not have. */
+const trigramCache = new Map<string, Set<string>>()
+
 function trigrams(value: string): Set<string> {
+  const cached = trigramCache.get(value)
+  if (cached) return cached
   const padded = `  ${value}  `
   const grams = new Set<string>()
   for (let index = 0; index <= padded.length - 3; index += 1) grams.add(padded.slice(index, index + 3))
+  // Bounded so a long-running isolate cannot accumulate every token it ever saw.
+  if (trigramCache.size > 4_000) trigramCache.clear()
+  trigramCache.set(value, grams)
   return grams
 }
 
 function fuzzyTokenScore(left: string, right: string): number {
   if (left === right) return 1
+  // Compounds and inflections: "team" inside "teammitglieder", "command"
+  // inside "commands", "plan" inside "plans". Trigram overlap divides by the
+  // longer word, so it scored `/team` against "Teammitglieder" at 0.2 and the
+  // team page was not recognised as the overview at all.
+  const [shorter, longer] = left.length <= right.length ? [left, right] : [right, left]
+  if (shorter.length >= 4 && longer.includes(shorter)) {
+    return longer.startsWith(shorter) ? 0.9 : 0.75
+  }
   const leftGrams = trigrams(left)
   const rightGrams = trigrams(right)
   let intersection = 0
@@ -594,18 +765,46 @@ function tokenCoverage(queryTokens: string[], content: string): number {
   return matched / queryTokens.length
 }
 
-const EXHAUSTIVE_PATTERN = /\b(alle|allen|aller|alles|vollständig\w*|vollstaendig\w*|sämtlich\w*|saemtlich\w*|gesamte?[nsmr]?|komplette?[nsmr]?|every|all|complete|entire)\b/iu
+const EXHAUSTIVE_PATTERN = /\b(alle|allen|aller|alles|vollständig\w*|vollstaendig\w*|sämtlich\w*|saemtlich\w*|gesamte?[nsmr]?|komplette?[nsmr]?|jede[nsmr]?|every|all|complete|entire|full|tous|toutes|complet\w*|entier\w*|todos|todas|completo\w*|tutti|tutte|volledig\w*)\b/iu
 
 // An enumerating question rarely says "alle". "Wer sind die Teammitglieder?"
 // needs the same collection page as "nenne mir alle Mitglieder". Missing that
 // is what capped answers at a handful of entries.
-const LIST_PATTERN = /^\s*(wer|welche[nsrm]?|who|which)\b|\b(liste|auflistung|übersicht|uebersicht|overview|nenne|nennen|zeige?|aufzählung|aufzaehlung|list)\b|\w*(mitglieder|mitarbeiter|mitarbeitende|mitarbeiterinnen|team|teams|personen|ansprechpartner|kontakte|standorte|leistungen|services|produkte|kunden|referenzen|partner|autoren|mitglied)\w*\b/iu
+//
+// Three independent signals: a selective interrogative, a listing verb, or a
+// plural entity noun. The vocabulary spans the languages a crawled site is
+// likely to be in and the technical nouns a repository or docs site is asked
+// about — but wording alone is never the last word, because no word list
+// covers every language. Retrieval evidence can escalate a question that none
+// of these patterns matched (see `hubCandidates`).
+const LIST_PATTERN = new RegExp(
+  '^\\s*(wer|welche[nsrm]?|who|which|quels?|quelles|qui|qui[eé]n(es)?|cu[aá]l(es)?|chi|quali|quem|quais)\\b'
+  + '|\\b(liste|auflistung|übersicht|uebersicht|overview|nenne|nennen|zeige?|aufzählung|aufzaehlung'
+  + '|list|enumerate|lista|listado|elenco|panoramica|aper[çc]u|resumen|vis[aã]o|overzicht)\\b'
+  + '|\\w*(mitglieder|mitarbeiter|mitarbeitende|mitarbeiterinnen|team|teams|personen|ansprechpartner'
+  + '|kontakte|standorte|leistungen|services|produkte|kunden|referenzen|partner|autoren|mitglied'
+  + '|members|employees|staff|people|contacts|locations|offices|products|customers|clients'
+  + '|references|authors|plans|tiers|features|options|endpoints|commands|methods|functions'
+  + '|parameters|arguments|dependencies|modules|packages|classes|events|hooks|courses|programs'
+  + '|studieng[aä]nge|kurse|fakult[aä]ten|professoren|dozenten|departments|faculties'
+  + '|categories|kategorien|themen|topics|schritte|steps|voraussetzungen|requirements'
+  + '|preise|prices|pricing|tarife)\\w*\\b',
+  'iu',
+)
+
+/** "Newest release", "letzte Änderung": rank by the date the page states. */
+const RECENCY_PATTERN = /\b(neueste[nsrm]?|neuste[nsrm]?|aktuellste[nsrm]?|j[uü]ngste[nsrm]?|letzte[nsrm]?|latest|newest|recent|current|dernier\w*|derni[eè]re\w*|[uú]ltim\w*|recente\w*|nieuwste)\b/iu
 
 export interface QuestionIntent {
   /** The answer is a set of entities, so recall over one page matters most. */
   list: boolean
+  /** The wording itself asked for a set. Weaker evidence-based escalation must
+   *  not claim the same authority, because it can misread the question. */
+  explicitList: boolean
   /** The question additionally demands completeness. */
   exhaustive: boolean
+  /** The answer depends on which source is newest. */
+  recency: boolean
 }
 
 export interface ContextBlock {
@@ -613,13 +812,18 @@ export interface ContextBlock {
   title: string
   url: string
   text: string
-  /** Set on the collection page: it defines the authoritative set of entries. */
+  /** Set on the collection page: it defines the scope of the set of entries. */
   collection?: boolean
+  /** The collection page did not fit, so it does not define the full set. */
+  truncated?: boolean
+  /** Entries outside this block may be rejected as not belonging to the set. */
+  authoritative?: boolean
 }
 
 export function classifyQuestion(question: string): QuestionIntent {
   const exhaustive = EXHAUSTIVE_PATTERN.test(question)
-  return { exhaustive, list: exhaustive || LIST_PATTERN.test(question) }
+  const list = exhaustive || LIST_PATTERN.test(question)
+  return { exhaustive, list, explicitList: list, recency: RECENCY_PATTERN.test(question) }
 }
 
 export function isExhaustiveQuestion(question: string): boolean {
@@ -633,8 +837,15 @@ function listDensity(text: string): number {
   return Math.min(1, listLike / lines.length)
 }
 
+/**
+ * How much of the URL's own name the question asked for — not the reverse.
+ * A path segment is one or two words, so requiring it to cover a whole
+ * question scored `/team` at 0.33 for "Wer sind die Teammitglieder von Webmen?"
+ * and never recognised it. Asking whether the question contains what the page
+ * is named after is the question a collection page has to answer.
+ */
 function collectionPageScore(queryTokens: string[], urlValue: string): number {
-  if (!urlValue) return 0
+  if (!urlValue || !queryTokens.length) return 0
   try {
     const pathSegments = new URL(urlValue).pathname
       .split('/')
@@ -642,7 +853,9 @@ function collectionPageScore(queryTokens: string[], urlValue: string): number {
       .filter(Boolean)
     const lastSegment = pathSegments.at(-1) ?? ''
     if (!lastSegment) return 0
-    return tokenCoverage(queryTokens, lastSegment.replace(/[-_]+/g, ' '))
+    const segmentTokens = tokens(lastSegment.replace(/[-_.]+/g, ' '))
+    if (!segmentTokens.length) return 0
+    return tokenCoverage(segmentTokens, queryTokens.join(' '))
   } catch {
     return 0
   }
@@ -669,6 +882,7 @@ function fuseSearchResults(
   // Enumeration and collection-page signals apply to every list question, not
   // just the ones that happen to contain the word "alle".
   const exhaustive = intent.list
+  const recencyScore = intent.recency ? publishedAtRanking([...candidates.values()]) : null
   return [...candidates.values()]
     .map(({ chunk, rankSignal, appearances }) => {
       const metadata = chunk.item.metadata ?? {}
@@ -682,12 +896,43 @@ function fuseSearchResults(
       // queried entity (for example /team), while detail pages end in a name.
       // Prefer that aggregate source before individual records.
       const aggregateScore = exhaustive ? collectionPageScore(queryTokens, url) : 0
+      const freshness = recencyScore?.get(url) ?? 0
       return {
         chunk,
-        score: 0.46 * rankScore + 0.24 * sourceScore + 0.08 * bodyScore + 0.08 * enumerationScore + 0.14 * aggregateScore,
+        score: 0.46 * rankScore + 0.24 * sourceScore + 0.08 * bodyScore
+          + 0.08 * enumerationScore + 0.14 * aggregateScore + 0.12 * freshness,
       }
     })
     .sort((left, right) => right.score - left.score)
+}
+
+/**
+ * Relative, not absolute: "the newest release" means newest among what the
+ * site published, and an archive from 2019 should still win if nothing is more
+ * recent. Pages without a stated date score zero rather than "old", because an
+ * absent date is not evidence of age.
+ */
+export function publishedAtRanking(
+  candidates: Array<{ chunk: SearchChunk }>,
+): Map<string, number> {
+  const timestamps = new Map<string, number>()
+  for (const { chunk } of candidates) {
+    const metadata = chunk.item.metadata ?? {}
+    const url = typeof metadata.url === 'string' ? metadata.url : ''
+    const published = metadata.published_at
+    if (!url || typeof published !== 'string') continue
+    const time = Date.parse(published)
+    if (Number.isFinite(time)) timestamps.set(url, Math.max(timestamps.get(url) ?? -Infinity, time))
+  }
+  if (timestamps.size < 2) return new Map()
+
+  const values = [...timestamps.values()]
+  const oldest = Math.min(...values)
+  const newest = Math.max(...values)
+  if (newest === oldest) return new Map()
+  return new Map(
+    [...timestamps.entries()].map(([url, time]) => [url, (time - oldest) / (newest - oldest)]),
+  )
 }
 
 function textOverlap(left: string, right: string): number {

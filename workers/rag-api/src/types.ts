@@ -29,6 +29,8 @@ export interface IngestPage {
   checksum: string
   crawled_at: string
   depth?: number
+  /** The date the page states it was published, when it states one. */
+  published_at?: string
 }
 
 export interface QueryBody {
@@ -58,6 +60,9 @@ export interface ContextBlock {
   title: string
   url: string
   text: string
+  collection?: boolean
+  truncated?: boolean
+  authoritative?: boolean
 }
 
 export interface RetrievalResponse {

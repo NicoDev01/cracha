@@ -13,6 +13,7 @@ from defusedxml import ElementTree as ET
 from .models import CrawlRequest, CrawlType, Page
 from .normalize import (
     canonical_url,
+    extract_published_at,
     matches_patterns,
     normalize_markdown,
     page_from_result,
@@ -177,6 +178,65 @@ async def _sitemap_urls(url: str, limit: int) -> list[str]:
     return urls
 
 
+MAX_TABLE_ROWS = 400
+BLOCK_XPATH = (
+    ".//h1|.//h2|.//h3|.//h4|.//h5|.//h6|.//p|.//li|.//pre|.//blockquote|.//table|.//dt|.//dd"
+)
+
+
+def _markdown_table(table) -> str:
+    """Render an HTML table as a markdown table.
+
+    Dropping tables lost exactly the content people ask about most precisely:
+    prices, versions, limits, comparisons. A single-column table is layout, not
+    data, so it degrades to plain lines instead of a one-column table.
+    """
+    rows: list[list[str]] = []
+    for row in table.xpath(".//tr")[:MAX_TABLE_ROWS]:
+        cells = [
+            " ".join(cell.text_content().split()).replace("|", "\\|")
+            for cell in row.xpath("./th|./td")
+        ]
+        if any(cells):
+            rows.append(cells)
+    if not rows:
+        return ""
+    width = max(len(row) for row in rows)
+    if width < 2:
+        return "\n".join(row[0] for row in rows if row and row[0])
+    padded = [row + [""] * (width - len(row)) for row in rows]
+    header, *body = padded
+    lines = [
+        "| " + " | ".join(header) + " |",
+        "| " + " | ".join(["---"] * width) + " |",
+    ]
+    lines.extend("| " + " | ".join(row) + " |" for row in body)
+    return "\n".join(lines)
+
+
+def _block_markdown(element) -> str:
+    tag = element.tag.lower() if isinstance(element.tag, str) else ""
+    if tag == "table":
+        return _markdown_table(element)
+    if tag == "pre":
+        # Collapsing whitespace here turned every code sample into one
+        # unreadable line, which is the worst possible form for a docs crawl.
+        code = element.text_content().strip("\n").rstrip()
+        return f"```\n{code}\n```" if code.strip() else ""
+    text = " ".join(element.text_content().split())
+    if not text:
+        return ""
+    if len(tag) == 2 and tag[0] == "h" and tag[1].isdigit():
+        return f"{'#' * int(tag[1])} {text}"
+    if tag == "li":
+        return f"- {text}"
+    if tag == "dt":
+        return f"**{text}**"
+    if tag == "blockquote":
+        return f"> {text}"
+    return text
+
+
 def _html_page(
     content: bytes, url: str, depth: int, request: CrawlRequest
 ) -> tuple[Page | None, list[str]]:
@@ -185,6 +245,8 @@ def _html_page(
     document = html.fromstring(content, base_url=url)
     title = " ".join(document.xpath("//title[1]//text()") or [url]).strip()[:500]
     links = [canonical_url(urljoin(url, href)) for href in document.xpath("//a[@href]/@href")]
+    # Read before the JSON-LD script tags are dropped below.
+    published_at = extract_published_at(content.decode("utf-8", errors="ignore"))
     for element in document.xpath("//script|//style|//noscript|//nav|//footer|//aside"):
         element.drop_tree()
     roots = (
@@ -195,18 +257,17 @@ def _html_page(
     )
     root = roots[0]
     lines: list[str] = []
-    for element in root.xpath(".//h1|.//h2|.//h3|.//h4|.//p|.//li|.//pre|.//blockquote"):
-        text = " ".join(element.text_content().split())
-        if not text:
+    consumed: set = set()
+    for element in root.xpath(BLOCK_XPATH):
+        if element in consumed:
             continue
-        tag = element.tag.lower()
-        if tag.startswith("h") and len(tag) == 2 and tag[1].isdigit():
-            text = f"{'#' * int(tag[1])} {text}"
-        elif tag == "li":
-            text = f"- {text}"
-        elif tag == "blockquote":
-            text = f"> {text}"
-        lines.append(text)
+        block = _block_markdown(element)
+        if element.tag == "table":
+            # Cells hold paragraphs and list items of their own; emitting those
+            # again would repeat the whole table as loose text.
+            consumed.update(element.iter())
+        if block:
+            lines.append(block)
     markdown = truncate_utf8(normalize_markdown("\n\n".join(lines)))
     page_url = canonical_url(url)
     if len(markdown) < 200 or not matches_patterns(
@@ -220,6 +281,7 @@ def _html_page(
         checksum=hashlib.sha256(markdown.encode("utf-8")).hexdigest(),
         crawled_at=datetime.now(UTC).isoformat(),
         depth=depth,
+        published_at=published_at,
     ), links
 
 
@@ -373,7 +435,10 @@ async def _crawl4ai_pages(
         "excluded_tags": ["nav", "footer", "aside", "script", "style", "noscript"],
         "remove_overlay_elements": True,
         "remove_consent_popups": True,
-        "word_count_threshold": 20,
+        # A team tile, an API signature or a table row is a handful of words.
+        # At 20 the scraper discarded exactly the short, dense entries an
+        # enumerating question needs.
+        "word_count_threshold": 5,
         "page_timeout": 30_000,
         "delay_before_return_html": 0.5,
         "wait_for_images": False,

@@ -7,11 +7,13 @@ import {
   classifyQuestion,
   deleteInstanceIfExists,
   deleteStaleItems,
+  hubCandidates,
   instanceConfigMatches,
   instanceIdFor,
   isExhaustiveQuestion,
   itemKeyFor,
   needsUpload,
+  publishedAtRanking,
   retrieve,
   uploadPages,
 } from '../src/search'
@@ -172,8 +174,38 @@ describe('question intent', () => {
   })
 
   it('separates completeness from list intent', () => {
-    expect(classifyQuestion('Wer ist im Team?')).toEqual({ list: true, exhaustive: false })
-    expect(classifyQuestion('Nenne alle Mitglieder')).toEqual({ list: true, exhaustive: true })
+    expect(classifyQuestion('Wer ist im Team?')).toMatchObject({ list: true, exhaustive: false })
+    expect(classifyQuestion('Nenne alle Mitglieder')).toMatchObject({ list: true, exhaustive: true })
+  })
+
+  it('recognises enumerations in the other languages a site may be written in', () => {
+    for (const question of [
+      'Which commands does the CLI provide?',
+      'List all configuration options',
+      'Show me every endpoint',
+      'Quels sont les services proposés ?',
+      '¿Cuáles son todos los productos?',
+      'Quali sono i membri del team?',
+      'Geef een overzicht van de partners',
+    ]) {
+      expect(classifyQuestion(question).list, question).toBe(true)
+    }
+  })
+
+  it('keeps definition questions off the enumerating path in any language', () => {
+    for (const question of [
+      'What is dependency injection?',
+      'How do I install the package?',
+      'Comment configurer le cache ?',
+    ]) {
+      expect(classifyQuestion(question).list, question).toBe(false)
+    }
+  })
+
+  it('detects questions whose answer depends on which source is newest', () => {
+    expect(classifyQuestion('Was ist der neueste Blogbeitrag?').recency).toBe(true)
+    expect(classifyQuestion('What is the latest release?').recency).toBe(true)
+    expect(classifyQuestion('Wer ist im Team?').recency).toBe(false)
   })
 })
 
@@ -206,6 +238,70 @@ describe('collection page detection', () => {
     expect(appendWithoutOverlap('', 'Anna')).toBe('Anna')
     // Unrelated chunks stay separated instead of being spliced together.
     expect(appendWithoutOverlap('Erster Absatz', 'Zweiter Absatz')).toBe('Erster Absatz\nZweiter Absatz')
+  })
+
+  it('finds the overview of a flat site, where no detail page is its child', () => {
+    // Plenty of sites keep every page one level deep. Ancestor analysis alone
+    // returns nothing here, and those sites never got a complete list.
+    const ranked = [
+      'https://hochschule.example/anna-beispiel',
+      'https://hochschule.example/bruno-muster',
+      'https://hochschule.example/carla-probe',
+    ].map((url, index) => ({
+      chunk: { id: `c${index}`, text: 'Forscht zu verteilten Systemen.', item: { key: url, metadata: { url } } },
+      score: 1 - index / 100,
+    })).concat([{
+      chunk: {
+        id: 'overview',
+        text: '# Team\n- Anna Beispiel\n- Bruno Muster\n- Carla Probe\n- Dora Test',
+        item: { key: 'team', metadata: { url: 'https://hochschule.example/team' } },
+      },
+      score: 0.4,
+    }]) as unknown as Parameters<typeof hubCandidates>[0]
+
+    const candidates = hubCandidates(ranked, ['team'])
+    expect(candidates[0].url).toBe('https://hochschule.example/team')
+    expect(candidates[0].namesQuery).toBe(true)
+  })
+
+  it('does not treat a shared documentation ancestor as an overview of the question', () => {
+    // Every page of a docs site shares an ancestor. Escalating on that alone
+    // would turn "What is a queue?" into an enumeration of the docs index.
+    const ranked = Array.from({ length: 4 }, (_, index) => ({
+      chunk: {
+        id: `c${index}`,
+        text: 'Queues delay time consuming tasks.',
+        item: { key: `k${index}`, metadata: { url: `https://laravel.com/docs/13.x/page-${index}` } },
+      },
+      score: 1,
+    })) as unknown as Parameters<typeof hubCandidates>[0]
+
+    expect(hubCandidates(ranked, ['queue', 'delay']).every((candidate) => !candidate.namesQuery)).toBe(true)
+  })
+})
+
+describe('recency ranking', () => {
+  const chunkWith = (url: string, publishedAt?: string) => ({
+    chunk: { id: url, text: '', item: { key: url, metadata: { url, ...(publishedAt ? { published_at: publishedAt } : {}) } } },
+  }) as unknown as Parameters<typeof publishedAtRanking>[0][number]
+
+  it('ranks sources relative to each other, newest first', () => {
+    const ranking = publishedAtRanking([
+      chunkWith('https://a.example/alt', '2019-01-01T00:00:00+00:00'),
+      chunkWith('https://a.example/neu', '2026-05-01T00:00:00+00:00'),
+      chunkWith('https://a.example/mitte', '2022-09-01T00:00:00+00:00'),
+    ])
+    expect(ranking.get('https://a.example/neu')).toBe(1)
+    expect(ranking.get('https://a.example/alt')).toBe(0)
+    expect(ranking.get('https://a.example/mitte')).toBeGreaterThan(0)
+    expect(ranking.get('https://a.example/mitte')).toBeLessThan(1)
+  })
+
+  it('stays neutral when the pages state no dates', () => {
+    // An undated page must not be treated as old; that would rank by an
+    // assumption nobody wrote on the page.
+    expect(publishedAtRanking([chunkWith('https://a.example/x'), chunkWith('https://a.example/y')]).size).toBe(0)
+    expect(publishedAtRanking([chunkWith('https://a.example/x', '2024-01-01T00:00:00+00:00')]).size).toBe(0)
   })
 })
 
@@ -315,6 +411,94 @@ describe('enumerating retrieval', () => {
     const result = await retrieve(instance, 'Wer sind die Teammitglieder von Webmen?', 8)
     // No hub, but the list budget still admits far more than the old eight blocks.
     expect(result.sources.length).toBeGreaterThan(8)
+  })
+
+  it('marks a collection page that did not fit as partial', async () => {
+    // Silently cutting the overview produced a confidently incomplete list,
+    // because the prompt forbids hedging about completeness.
+    const instance = {
+      search: async () => ({ search_query: 'team webmen', chunks }),
+      items: {
+        list: async ({ per_page: perPage, page }: { per_page?: number; page?: number }) => ({
+          result: page === 1 ? [{ id: 'team-item', key: await itemKeyFor(TEAM_URL), status: 'completed', metadata: { url: TEAM_URL, title: 'Team' } }] : [],
+          result_info: { count: 1, page: page ?? 1, per_page: perPage ?? 50, total_count: 1 },
+        }),
+        get: () => ({
+          chunks: async () => ({
+            result: [
+              { id: 'a', text: 'A'.repeat(30_000), start_byte: 0, end_byte: 30_000 },
+              { id: 'b', text: 'B'.repeat(30_000), start_byte: 29_000, end_byte: 59_000 },
+            ],
+            result_info: { count: 2, total: 2, limit: 120, offset: 0 },
+          }),
+        }),
+      },
+    } as unknown as Parameters<typeof retrieve>[0]
+
+    const result = await retrieve(instance, 'Wer sind die Teammitglieder von Webmen?', 8)
+    expect(result.context).toContain('source_type: collection_page_partial')
+    expect(result.blocks[0].truncated).toBe(true)
+    // A partial page cannot define the full set, so nothing may be rejected
+    // for being absent from it.
+    expect(result.blocks[0].authoritative).toBe(false)
+  })
+})
+
+describe('evidence-based enumeration', () => {
+  const OVERVIEW = 'https://hochschule.example/leadership'
+  const names = ['Anna Beispiel', 'Bruno Muster', 'Carla Probe', 'Dora Test', 'Emil Sanders']
+
+  function instance(): Parameters<typeof retrieve>[0] {
+    const chunks = [
+      ...names.slice(0, 3).map((name, index) => ({
+        id: `d${index}`,
+        type: 'text',
+        score: 0.9,
+        text: `${name} arbeitet an der Hochschule.`,
+        item: { key: `d${index}`, metadata: { url: `https://hochschule.example/person-${index}`, title: name } },
+      })),
+      {
+        id: 'overview',
+        type: 'text',
+        score: 0.3,
+        text: names.join('\n'),
+        item: { key: 'overview', metadata: { url: OVERVIEW, title: 'Leadership' } },
+      },
+    ]
+    return {
+      search: async () => ({ search_query: 'leadership', chunks }),
+      items: {
+        list: async ({ per_page: perPage, page }: { per_page?: number; page?: number }) => ({
+          result: page === 1 || perPage === 10
+            ? [{ id: 'overview-item', key: await itemKeyFor(OVERVIEW), status: 'completed', metadata: { url: OVERVIEW, title: 'Leadership' } }]
+            : [],
+          result_info: { count: 1, page: page ?? 1, per_page: perPage ?? 50, total_count: 1 },
+        }),
+        get: () => ({
+          chunks: async () => ({
+            result: [{ id: 'o1', text: `# Leadership\n${names.join('\n')}`, start_byte: 0, end_byte: 200 }],
+            result_info: { count: 1, total: 1, limit: 120, offset: 0 },
+          }),
+        }),
+      },
+    } as unknown as Parameters<typeof retrieve>[0]
+  }
+
+  it('reads the overview whole even when no word list recognised the question', async () => {
+    // No word list covers every language. When a retrieved page is named after
+    // what was asked, the results themselves say this is an enumeration.
+    const question = 'Tell me about the leadership at this university'
+    expect(classifyQuestion(question).list).toBe(false)
+
+    const result = await retrieve(instance(), question, 8)
+    expect(result.sources[0].url).toBe(OVERVIEW)
+    for (const name of names) expect(result.context, name).toContain(name)
+  })
+
+  it('does not let that weaker signal reject entries from other pages', async () => {
+    const result = await retrieve(instance(), 'Tell me about the leadership at this university', 8)
+    expect(result.blocks[0].collection).toBe(true)
+    expect(result.blocks[0].authoritative).toBe(false)
   })
 })
 

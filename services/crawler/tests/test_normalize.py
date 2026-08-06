@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 from cracha_crawler.normalize import (
     canonical_url,
+    extract_published_at,
     matches_patterns,
     normalize_markdown,
     page_from_result,
@@ -170,3 +171,47 @@ def test_link_stripping_leaves_fenced_code_verbatim() -> None:
 
 def test_normalize_markdown_strips_links_on_every_ingest_path() -> None:
     assert normalize_markdown("## [Klaus Becker ](https://example.com/k)") == "## Klaus Becker"
+
+
+def test_publication_date_prefers_the_stated_publication_over_a_modification() -> None:
+    html = (
+        '<meta property="article:modified_time" content="2026-07-01T10:00:00Z">'
+        '<meta property="article:published_time" content="2026-03-14T09:30:00+01:00">'
+    )
+    assert extract_published_at(html) == "2026-03-14T09:30:00+01:00"
+
+
+def test_publication_date_falls_back_to_json_ld_and_time_elements() -> None:
+    assert extract_published_at(
+        '<script type="application/ld+json">{"@type":"Article",'
+        '"datePublished":"2025-11-02"}</script>'
+    ) == "2025-11-02T00:00:00+00:00"
+    assert extract_published_at('<time datetime="2024-01-05">5. Januar</time>') == (
+        "2024-01-05T00:00:00+00:00"
+    )
+
+
+def test_pages_that_state_no_date_get_none() -> None:
+    # Guessing a date would rank sources by a number nobody wrote.
+    assert extract_published_at("<p>Veröffentlicht im Frühjahr</p>") is None
+    assert extract_published_at('<meta name="date" content="demnächst">') is None
+    assert extract_published_at("") is None
+
+
+def test_page_from_result_carries_the_publication_date() -> None:
+    result = SimpleNamespace(
+        success=True,
+        status_code=200,
+        url="https://example.com/blog/eintrag",
+        html='<meta property="article:published_time" content="2026-02-01T00:00:00Z">',
+        markdown=SimpleNamespace(
+            fit_markdown="# Eintrag\n\n" + "Ein ausführlicher Absatz zum Thema. " * 12,
+            raw_markdown="",
+        ),
+        metadata={"title": "Eintrag"},
+    )
+
+    page = page_from_result(result, [], [])
+
+    assert page is not None
+    assert page.published_at == "2026-02-01T00:00:00+00:00"

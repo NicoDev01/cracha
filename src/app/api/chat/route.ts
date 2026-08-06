@@ -16,7 +16,15 @@ interface ChatBody {
 
 interface RetrievalResponse {
   context?: string
-  blocks?: Array<{ n: number; title: string; url: string; text: string }>
+  blocks?: Array<{
+    n: number
+    title: string
+    url: string
+    text: string
+    collection?: boolean
+    truncated?: boolean
+    authoritative?: boolean
+  }>
   sources?: Array<{ id: string; title: string; url: string; snippet: string; score: number; chunk_index: string }>
   usage?: { latency_ms?: number }
   error?: string

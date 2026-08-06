@@ -39,6 +39,8 @@ function validPage(value: unknown): value is IngestPage {
       page.markdown &&
       page.checksum &&
       page.crawled_at &&
+      // Optional, but a non-string would be indexed as a datetime and fail.
+      (page.published_at === undefined || page.published_at === null || typeof page.published_at === 'string') &&
       new TextEncoder().encode(page.markdown).byteLength <= 3_750_000,
   )
 }
