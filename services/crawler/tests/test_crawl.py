@@ -1,5 +1,7 @@
 import textwrap
 
+import httpx
+
 from cracha_crawler import crawl
 from cracha_crawler.models import CrawlRequest, Page
 
@@ -147,3 +149,132 @@ async def test_successful_browser_result_skips_fallback(monkeypatch) -> None:
 
     assert pages == [browser_page]
     assert skipped == 1
+
+
+def _sitemap(*urls: str) -> bytes:
+    entries = "".join(f"<url><loc>{url}</loc></url>" for url in urls)
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        f'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{entries}</urlset>'
+    ).encode()
+
+
+def _sitemap_index(*urls: str) -> bytes:
+    entries = "".join(f"<sitemap><loc>{url}</loc></sitemap>" for url in urls)
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        f'<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{entries}</sitemapindex>'
+    ).encode()
+
+
+def serve(monkeypatch, files: dict[str, bytes]) -> None:
+    """Route every sitemap and robots.txt download to an in-memory site."""
+
+    async def allow_url(_url: str) -> None:
+        return None
+
+    async def download(_client, url: str) -> tuple[bytes, str]:
+        if url not in files:
+            raise httpx.HTTPError(f"404 for {url}")
+        return files[url], url
+
+    monkeypatch.setattr(crawl, "assert_public_url", allow_url)
+    monkeypatch.setattr(crawl, "_safe_download", download)
+
+
+async def test_analysis_counts_pages_from_the_conventional_sitemap(monkeypatch) -> None:
+    serve(monkeypatch, {
+        "https://example.com/sitemap.xml": _sitemap(
+            "https://example.com/",
+            "https://example.com/about",
+            "https://example.com/contact",
+        ),
+    })
+
+    analysis = await crawl.analyze_site("https://example.com")
+
+    assert analysis.total_pages == 3
+    assert analysis.sitemap_url == "https://example.com/sitemap.xml"
+    assert analysis.truncated is False
+
+
+async def test_analysis_uses_the_sitemap_named_in_robots_txt(monkeypatch) -> None:
+    serve(monkeypatch, {
+        "https://example.com/robots.txt": b"User-agent: *\nSitemap: https://example.com/custom.xml\n",
+        "https://example.com/custom.xml": _sitemap(
+            "https://example.com/a", "https://example.com/b"
+        ),
+    })
+
+    analysis = await crawl.analyze_site("https://example.com")
+
+    assert analysis.total_pages == 2
+    assert analysis.sitemap_url == "https://example.com/custom.xml"
+
+
+async def test_analysis_walks_a_sitemap_index(monkeypatch) -> None:
+    serve(monkeypatch, {
+        "https://example.com/sitemap.xml": _sitemap_index(
+            "https://example.com/posts.xml", "https://example.com/pages.xml"
+        ),
+        "https://example.com/posts.xml": _sitemap(
+            "https://example.com/post-1", "https://example.com/post-2"
+        ),
+        "https://example.com/pages.xml": _sitemap("https://example.com/imprint"),
+    })
+
+    analysis = await crawl.analyze_site("https://example.com")
+
+    assert analysis.total_pages == 3
+
+
+async def test_analysis_reports_no_total_when_the_site_has_no_sitemap(monkeypatch) -> None:
+    serve(monkeypatch, {"https://example.com/robots.txt": b"User-agent: *\nDisallow:\n"})
+
+    analysis = await crawl.analyze_site("https://example.com")
+
+    # Guessing a number here would be worse than admitting it is unknowable.
+    assert analysis.total_pages is None
+    assert analysis.sitemap_url is None
+
+
+async def test_analysis_ignores_entries_pointing_at_other_hosts(monkeypatch) -> None:
+    serve(monkeypatch, {
+        "https://example.com/sitemap.xml": _sitemap(
+            "https://example.com/kept",
+            "https://cdn.other.com/dropped",
+        ),
+    })
+
+    analysis = await crawl.analyze_site("https://example.com")
+
+    assert analysis.total_pages == 1
+
+
+async def test_analysis_counts_each_page_once(monkeypatch) -> None:
+    serve(monkeypatch, {
+        "https://example.com/sitemap.xml": _sitemap_index(
+            "https://example.com/a.xml", "https://example.com/b.xml"
+        ),
+        "https://example.com/a.xml": _sitemap("https://example.com/shared"),
+        "https://example.com/b.xml": _sitemap(
+            "https://example.com/shared", "https://example.com/unique"
+        ),
+    })
+
+    analysis = await crawl.analyze_site("https://example.com")
+
+    assert analysis.total_pages == 2
+
+
+async def test_a_supplied_sitemap_url_is_used_directly(monkeypatch) -> None:
+    serve(monkeypatch, {
+        "https://example.com/custom/sitemap.xml": _sitemap(
+            "https://example.com/one", "https://example.com/two"
+        ),
+    })
+
+    urls, used = await crawl.sitemap_page_urls("https://example.com/custom/sitemap.xml", 100)
+
+    assert urls == ["https://example.com/one", "https://example.com/two"]
+    assert used == "https://example.com/custom/sitemap.xml"

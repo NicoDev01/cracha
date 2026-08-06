@@ -10,7 +10,7 @@ from urllib.parse import urljoin, urlsplit, urlunsplit
 import httpx
 from defusedxml import ElementTree as ET
 
-from .models import CrawlRequest, CrawlType, Page
+from .models import CrawlRequest, CrawlType, Page, SiteAnalysis
 from .normalize import (
     canonical_url,
     extract_published_at,
@@ -25,6 +25,17 @@ from .security import assert_public_url
 MAX_SITEMAP_BYTES = 2_000_000
 MAX_REDIRECTS = 5
 USER_AGENT = "CraChaBot/1.0"
+# Probed in order once robots.txt names no sitemap.
+SITEMAP_PATHS = (
+    "/sitemap.xml",
+    "/sitemap_index.xml",
+    "/sitemap-index.xml",
+    "/wp-sitemap.xml",
+    "/sitemap/sitemap.xml",
+)
+# Counting stops here. Well past any knowledge base we would build, and the
+# result is reported as truncated rather than as a total.
+ANALYSIS_URL_LIMIT = 25_000
 MIN_BROWSER_TIMEOUT_SECONDS = 60
 MAX_BROWSER_TIMEOUT_SECONDS = 900
 ProgressCallback = Callable[[dict[str, object]], Awaitable[None]]
@@ -146,37 +157,127 @@ async def _robots_allowed(
     return rules is None or rules.can_fetch(USER_AGENT, url)
 
 
-async def _sitemap_urls(url: str, limit: int) -> list[str]:
-    source_host = urlsplit(url).hostname
+async def _robots_sitemaps(client: httpx.AsyncClient, origin: str) -> list[str]:
+    """The `Sitemap:` lines of robots.txt — the site's own answer to what exists.
+
+    `_robots_allowed` already downloads and parses this file for its rules and
+    discards these lines, which are the most reliable pointer a site gives.
+    """
+    try:
+        content, _ = await _safe_download(client, f"{origin}/robots.txt")
+    except (httpx.HTTPError, ValueError, OSError):
+        return []
+    rules = robotparser.RobotFileParser()
+    rules.parse(content.decode("utf-8", errors="replace").splitlines())
+    return list(rules.site_maps() or [])
+
+
+async def _walk_sitemaps(
+    client: httpx.AsyncClient,
+    roots: list[str],
+    source_host: str | None,
+    limit: int,
+    *,
+    strict: bool,
+) -> tuple[list[str], str | None]:
+    """Breadth-first over sitemaps and sitemap indexes.
+
+    `strict` re-raises download and parse failures, which is what an explicitly
+    supplied sitemap URL needs. Discovery instead moves on to the next candidate,
+    because probing conventional locations means most of them will 404.
+
+    Returns the page URLs and the sitemap that first yielded any.
+    """
     urls: list[str] = []
-    pending = deque([(url, 0)])
+    seen: set[str] = set()
+    origin_sitemap: str | None = None
+    pending = deque((root, 0) for root in roots)
     visited: set[str] = set()
-    async with httpx.AsyncClient(timeout=30) as client:
-        while pending and len(urls) < limit:
-            sitemap_url, depth = pending.popleft()
-            sitemap_url = canonical_url(sitemap_url)
-            if sitemap_url in visited or depth > 3:
-                continue
-            visited.add(sitemap_url)
+
+    while pending and len(urls) < limit:
+        sitemap_url, depth = pending.popleft()
+        sitemap_url = canonical_url(sitemap_url)
+        if sitemap_url in visited or depth > 3:
+            continue
+        visited.add(sitemap_url)
+        try:
             content, final_url = await _safe_download(client, sitemap_url)
             if urlsplit(final_url).hostname != source_host:
                 raise ValueError("Sitemap redirects must remain on the source host.")
             root = ET.fromstring(content)
-            is_index = root.tag.endswith("sitemapindex")
-            for element in root.iter():
-                if not element.tag.endswith("loc") or not element.text:
-                    continue
-                candidate = canonical_url(element.text.strip())
-                if urlsplit(candidate).hostname != source_host:
-                    continue
+        except (httpx.HTTPError, ValueError, OSError, ET.ParseError):
+            if strict:
+                raise
+            continue
+
+        before = len(urls)
+        is_index = root.tag.endswith("sitemapindex")
+        for element in root.iter():
+            if not element.tag.endswith("loc") or not element.text:
+                continue
+            candidate = canonical_url(element.text.strip())
+            if urlsplit(candidate).hostname != source_host or candidate in seen:
+                continue
+            try:
+                # A single unroutable entry should cost that entry, not the crawl.
                 await assert_public_url(candidate)
-                if is_index:
-                    pending.append((candidate, depth + 1))
-                elif candidate not in urls:
-                    urls.append(candidate)
-                if len(urls) >= limit:
-                    break
-    return urls
+            except Exception:
+                continue
+            if is_index:
+                pending.append((candidate, depth + 1))
+            else:
+                seen.add(candidate)
+                urls.append(candidate)
+            if len(urls) >= limit:
+                break
+        if origin_sitemap is None and len(urls) > before:
+            origin_sitemap = sitemap_url
+
+    return urls, origin_sitemap
+
+
+async def sitemap_page_urls(url: str, limit: int) -> tuple[list[str], str | None]:
+    """Page URLs the site itself declares.
+
+    Accepts a sitemap URL directly, or any page of the site — then robots.txt
+    and the conventional locations are consulted, because nobody knows their own
+    sitemap URL by heart.
+    """
+    source_host = urlsplit(url).hostname
+    parsed = urlsplit(url)
+    origin = urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        urls, used = await _walk_sitemaps(client, [url], source_host, limit, strict=False)
+        if urls:
+            return urls, used
+
+        candidates = await _robots_sitemaps(client, origin)
+        candidates.extend(f"{origin}{path}" for path in SITEMAP_PATHS)
+        roots = [
+            candidate
+            for candidate in dict.fromkeys(candidates)
+            if urlsplit(candidate).hostname == source_host and candidate != url
+        ]
+        return await _walk_sitemaps(client, roots, source_host, limit, strict=False)
+
+
+async def analyze_site(url: str) -> SiteAnalysis:
+    """How many pages the site declares, without crawling any of them.
+
+    Only a sitemap can answer this up front. Link-following discovers a page
+    when it finds a link to it, so without a sitemap the total is knowable only
+    once the crawl has finished — `total_pages` is then None rather than a guess.
+    """
+    await assert_public_url(url)
+    urls, sitemap_url = await sitemap_page_urls(url, ANALYSIS_URL_LIMIT)
+    if not urls:
+        return SiteAnalysis(total_pages=None, sitemap_url=None, truncated=False)
+    return SiteAnalysis(
+        total_pages=len(urls),
+        sitemap_url=sitemap_url,
+        truncated=len(urls) >= ANALYSIS_URL_LIMIT,
+    )
 
 
 MAX_TABLE_ROWS = 400
@@ -285,7 +386,7 @@ async def _http_fallback_pages(
     start_url = canonical_url(str(request.url))
     source_host = urlsplit(start_url).hostname
     initial_urls = (
-        await _sitemap_urls(start_url, request.limit)
+        (await sitemap_page_urls(start_url, request.limit))[0] or [start_url]
         if request.type is CrawlType.SITEMAP
         else [start_url]
     )
@@ -607,7 +708,9 @@ async def _crawl4ai_pages(
                 if len(pages_by_url) >= request.limit:
                     break
         elif request.type is CrawlType.SITEMAP:
-            urls = await _sitemap_urls(start_url, request.limit)
+            urls, _ = await sitemap_page_urls(start_url, request.limit)
+            if not urls:
+                raise ValueError("No sitemap was found for this site.")
             expected_total = max(1, len(urls))
             results = await crawler.arun_many(urls=urls, config=config)
             await consume(results)

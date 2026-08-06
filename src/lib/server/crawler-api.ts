@@ -44,6 +44,45 @@ export function resolveCrawlSettings(
   })!
 }
 
+export interface SiteAnalysis {
+  total_pages: number | null
+  sitemap_url: string | null
+  truncated: boolean
+}
+
+/**
+ * Reads the site's sitemaps and reports how many pages it declares. Nothing is
+ * crawled or indexed, so this stays cheap enough to run on every keystroke-free
+ * button press.
+ */
+export async function analyzeSite(url: string): Promise<SiteAnalysis> {
+  const sourceUrl = new URL(url)
+  if (!['http:', 'https:'].includes(sourceUrl.protocol)) throw new Error('Ungültige URL.')
+
+  const env = getWorkerEnv()
+  if (!env.MODAL_CRAWLER_URL || !env.CRAWLER_API_SECRET) {
+    throw new Error('Crawler-Service ist nicht konfiguriert.')
+  }
+
+  const response = await fetch(`${env.MODAL_CRAWLER_URL.replace(/\/$/, '')}/analyze`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${env.CRAWLER_API_SECRET}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ url: sourceUrl.toString() }),
+  })
+
+  const result = (await response.json().catch(() => ({}))) as Partial<SiteAnalysis> & { detail?: string }
+  if (!response.ok) throw new Error(result.detail ?? `Analyse fehlgeschlagen (${response.status}).`)
+
+  return {
+    total_pages: typeof result.total_pages === 'number' ? result.total_pages : null,
+    sitemap_url: typeof result.sitemap_url === 'string' ? result.sitemap_url : null,
+    truncated: result.truncated === true,
+  }
+}
+
 export async function enqueueCrawl(input: CrawlInput, userId: string) {
   const sourceUrl = new URL(input.url)
   if (!['http:', 'https:'].includes(sourceUrl.protocol)) throw new Error('Ungültige Crawl-URL.')

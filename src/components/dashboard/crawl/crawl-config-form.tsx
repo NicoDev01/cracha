@@ -1,12 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
-import { ChevronDown, File, Globe2, ListTree, Loader2, Play, Settings2 } from "lucide-react"
+import { ChevronDown, File, Globe2, ListTree, Loader2, Play, Search, Settings2 } from "lucide-react"
 import { toast } from "sonner"
 
+import { apiFetch } from "@/lib/api/request"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
@@ -30,9 +31,27 @@ const crawlConfigSchema = z.object({
   include_patterns: z.string().optional(),
   exclude_domains: z.string().optional(),
   respect_robots_txt: z.boolean(),
+  crawl_all: z.boolean(),
 })
 
 type CrawlFormValues = z.infer<typeof crawlConfigSchema>
+
+/** Mirrors the crawler's own ceiling (`CrawlRequest.limit`, le=500). */
+const MAX_PAGES_PER_CRAWL = 500
+
+type AnalysisState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "error"; message: string }
+  | { status: "done"; total: number | null; sitemapUrl: string | null; truncated: boolean }
+
+function isCrawlableUrl(value: string) {
+  try {
+    return ["http:", "https:"].includes(new URL(value).protocol)
+  } catch {
+    return false
+  }
+}
 
 const modes = [
   { value: "single" as const, label: "Einzelne Seite", icon: File },
@@ -52,6 +71,7 @@ function slugifyDatabaseName(value: string) {
 
 export function CrawlConfigForm({ onStarted }: { onStarted?: () => void }) {
   const [showAdvanced, setShowAdvanced] = useState(false)
+  const [analysis, setAnalysis] = useState<AnalysisState>({ status: "idle" })
   const { startCrawl, isRunning } = useCrawlStore()
   const { user } = useAuthStore()
 
@@ -66,10 +86,56 @@ export function CrawlConfigForm({ onStarted }: { onStarted?: () => void }) {
       include_patterns: "",
       exclude_domains: "",
       respect_robots_txt: true,
+      crawl_all: false,
     },
   })
 
   const crawlType = form.watch("type")
+  const url = form.watch("url")
+  const crawlAll = form.watch("crawl_all")
+
+  // A count belongs to the URL it was measured for; editing the URL invalidates it.
+  useEffect(() => {
+    setAnalysis({ status: "idle" })
+    form.setValue("crawl_all", false)
+  }, [url, form])
+
+  const discovered = analysis.status === "done" ? analysis.total : null
+  const cappedTotal = discovered === null ? 0 : Math.min(discovered, MAX_PAGES_PER_CRAWL)
+
+  const handleAnalyze = async () => {
+    if (!isCrawlableUrl(url)) {
+      form.setError("url", { message: "Bitte gib zuerst eine gültige URL ein." })
+      return
+    }
+    setAnalysis({ status: "loading" })
+    try {
+      const response = await apiFetch("/api/admin/crawl/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      })
+      const result = (await response.json().catch(() => ({}))) as {
+        success?: boolean
+        analysis?: { total_pages: number | null; sitemap_url: string | null; truncated: boolean }
+        error?: string
+      }
+      if (!response.ok || !result.success || !result.analysis) {
+        throw new Error(result.error ?? "Die Website konnte nicht analysiert werden.")
+      }
+      setAnalysis({
+        status: "done",
+        total: result.analysis.total_pages,
+        sitemapUrl: result.analysis.sitemap_url,
+        truncated: result.analysis.truncated,
+      })
+    } catch (error) {
+      setAnalysis({
+        status: "error",
+        message: error instanceof Error ? error.message : "Die Website konnte nicht analysiert werden.",
+      })
+    }
+  }
 
   const onSubmit = async (values: CrawlFormValues) => {
     if (!user?.id) {
@@ -77,12 +143,18 @@ export function CrawlConfigForm({ onStarted }: { onStarted?: () => void }) {
       return
     }
 
+    const { crawl_all, ...rest } = values
+    // With a page list from the sitemap, following links would be the weaker
+    // choice: it reaches only what is linked.
+    const useSitemap = crawl_all && discovered !== null
+
     const config: CrawlConfig = {
-      ...values,
+      ...rest,
+      type: values.type === "single" ? "single" : useSitemap ? "sitemap" : values.type,
       tenant_id: `${slugifyDatabaseName(values.name)}-${user.id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 8)}`,
       user_id: user.id,
       max_depth: values.type === "single" ? 1 : values.max_depth,
-      limit: values.type === "single" ? 1 : values.limit,
+      limit: values.type === "single" ? 1 : useSitemap ? cappedTotal : values.limit,
     }
 
     try {
@@ -120,6 +192,77 @@ export function CrawlConfigForm({ onStarted }: { onStarted?: () => void }) {
             </FormItem>
           )}
         />
+
+        {crawlType !== "single" && (
+          <div className="space-y-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleAnalyze}
+              disabled={isRunning || analysis.status === "loading" || !isCrawlableUrl(url)}
+              className="h-9 gap-2 rounded-xl"
+            >
+              {analysis.status === "loading" ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" />}
+              {analysis.status === "loading" ? "Analysiere Website" : "Website analysieren"}
+            </Button>
+
+            {analysis.status === "error" && (
+              <p className="rounded-xl border border-error-200 bg-error-50 px-3 py-2 text-sm text-error-700 dark:border-error-800 dark:bg-error-500/10 dark:text-error-300">
+                {analysis.message}
+              </p>
+            )}
+
+            {analysis.status === "done" && discovered === null && (
+              <p className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-800/40 dark:text-gray-300">
+                Keine Sitemap gefunden. Die Gesamtzahl der Seiten lässt sich vorab nicht bestimmen —
+                sie steht erst fest, wenn der Crawl keine neuen Links mehr findet. Stelle Seitenanzahl
+                und Tiefe unten selbst ein.
+              </p>
+            )}
+
+            {analysis.status === "done" && discovered !== null && (
+              <div className="space-y-3 rounded-xl border border-brand-200 bg-brand-50/70 p-3 dark:border-brand-800 dark:bg-brand-500/10">
+                <p className="text-sm text-gray-700 dark:text-gray-200">
+                  <span className="font-semibold tabular-nums text-brand-700 dark:text-brand-300">
+                    {new Intl.NumberFormat("de-DE").format(discovered)}
+                  </span>
+                  {discovered === 1 ? " Seite" : " Seiten"} in der Sitemap gefunden
+                  {analysis.truncated && " (Zählung abgebrochen, es sind mehr)"}.
+                </p>
+
+                <FormField
+                  control={form.control}
+                  name="crawl_all"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center justify-between gap-4 rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900">
+                      <div className="min-w-0">
+                        <FormLabel>
+                          {`Alle ${new Intl.NumberFormat("de-DE").format(cappedTotal)} Seiten der Sitemap crawlen`}
+                        </FormLabel>
+                        <FormDescription>
+                          {discovered > MAX_PAGES_PER_CRAWL
+                            ? `Pro Crawl sind derzeit ${MAX_PAGES_PER_CRAWL} Seiten möglich — ${new Intl.NumberFormat("de-DE").format(discovered - MAX_PAGES_PER_CRAWL)} bleiben außen vor.`
+                            : "Erfasst auch Seiten, auf die nichts verlinkt. Eine Sitemap darf unvollständig sein — führt die Website mehr Seiten, findet „Ganze Website“ über die Links mehr."}
+                        </FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          disabled={isRunning}
+                          onCheckedChange={(checked) => {
+                            field.onChange(checked)
+                            if (checked) form.setValue("limit", cappedTotal)
+                          }}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
+          </div>
+        )}
 
         <FormField
           control={form.control}
@@ -175,7 +318,8 @@ export function CrawlConfigForm({ onStarted }: { onStarted?: () => void }) {
           )}
         />
 
-        {crawlType !== "single" && (
+        {/* Both sliders are meaningless once the exact page list is known. */}
+        {crawlType !== "single" && !crawlAll && (
           <div className={cn("grid gap-5 rounded-xl border border-gray-200 bg-gray-50/60 p-4 dark:border-gray-700 dark:bg-gray-800/30", crawlType === "recursive" && "sm:grid-cols-2 sm:gap-7")}>
             <FormField
               control={form.control}

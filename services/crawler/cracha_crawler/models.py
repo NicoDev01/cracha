@@ -41,6 +41,22 @@ class Page(BaseModel):
     published_at: str | None = None
 
 
+class AnalyzeRequest(BaseModel):
+    url: HttpUrl
+
+
+class SiteAnalysis(BaseModel):
+    """What a site declares about itself before anything is crawled.
+
+    `total_pages` is None when no sitemap exists: the number is then only
+    knowable once a link-following crawl has run out of new links.
+    """
+
+    total_pages: int | None = None
+    sitemap_url: str | None = None
+    truncated: bool = False
+
+
 class CrawlResult(BaseModel):
     success: bool
     job_id: str | None = None

@@ -1,3 +1,4 @@
+import asyncio
 import hmac
 import os
 import uuid
@@ -6,11 +7,12 @@ from typing import Annotated
 
 import modal
 
-from cracha_crawler.crawl import crawl_pages
+from cracha_crawler.crawl import analyze_site, crawl_pages
 from cracha_crawler.ingest import RagIngestClient
-from cracha_crawler.models import CrawlRequest
+from cracha_crawler.models import AnalyzeRequest, CrawlRequest, SiteAnalysis
 
 APP_NAME = "cracha-crawler"
+ANALYZE_TIMEOUT_SECONDS = 120
 image = (
     modal.Image.debian_slim(python_version="3.12")
     .apt_install("curl")
@@ -262,7 +264,9 @@ async def process_crawl(payload: dict, job_id: str) -> dict:
             raise
 
 
-@app.function(image=image, secrets=[runtime_secret], timeout=60)
+# 180s so a sitemap index spanning many files still fits; /analyze bounds its
+# own work below, every other endpoint returns in well under a second.
+@app.function(image=image, secrets=[runtime_secret], timeout=180)
 @modal.concurrent(max_inputs=50)
 @modal.asgi_app()
 def api():
@@ -286,6 +290,18 @@ def api():
     @web.get("/health")
     async def health() -> dict:
         return {"status": "healthy", "service": APP_NAME}
+
+    @web.post("/analyze", dependencies=[Depends(authorize)])
+    async def analyze(request: AnalyzeRequest) -> SiteAnalysis:
+        """Reads sitemaps only — no page is fetched and nothing is indexed."""
+        try:
+            async with asyncio.timeout(ANALYZE_TIMEOUT_SECONDS):
+                return await analyze_site(str(request.url))
+        except Exception as error:
+            print(f"[ANALYZE] {request.url} failed: {type(error).__name__}: {error}")
+            raise HTTPException(
+                status_code=502, detail="Die Website konnte nicht analysiert werden."
+            ) from error
 
     @web.post("/crawl", dependencies=[Depends(authorize)])
     async def start_crawl(request: CrawlRequest) -> dict:
