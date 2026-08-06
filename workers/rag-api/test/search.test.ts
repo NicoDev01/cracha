@@ -10,8 +10,11 @@ import {
   instanceIdFor,
   isExhaustiveQuestion,
   itemKeyFor,
+  needsUpload,
   retrieve,
+  uploadPages,
 } from '../src/search'
+import type { IngestPage } from '../src/types'
 
 describe('deterministic identifiers', () => {
   it('creates a valid, stable AI Search instance id', async () => {
@@ -311,6 +314,60 @@ describe('enumerating retrieval', () => {
     const result = await retrieve(instance, 'Wer sind die Teammitglieder von Webmen?', 8)
     // No hub, but the list budget still admits far more than the old eight blocks.
     expect(result.sources.length).toBeGreaterThan(8)
+  })
+})
+
+describe('unchanged page upload', () => {
+  const page = (overrides: Partial<IngestPage> = {}): IngestPage => ({
+    url: 'https://example.com/team',
+    title: 'Unser Team',
+    markdown: '## Klaus Becker',
+    checksum: 'abc',
+    crawled_at: '2026-08-06T12:00:00Z',
+    depth: 1,
+    ...overrides,
+  })
+  const indexed = { checksum: 'abc', title: 'Unser Team', status: 'completed', chunks: 2 }
+
+  it('skips a page that is already indexed unchanged', () => {
+    expect(needsUpload(page(), indexed)).toBe(false)
+  })
+
+  it('uploads when the text or the title changed', () => {
+    expect(needsUpload(page({ checksum: 'def' }), indexed)).toBe(true)
+    // The title is part of the uploaded document, so it is not covered by the
+    // page checksum and has to be compared separately.
+    expect(needsUpload(page({ title: 'Team' }), indexed)).toBe(true)
+  })
+
+  it('always uploads what is missing or was never indexed properly', () => {
+    expect(needsUpload(page(), undefined)).toBe(true)
+    expect(needsUpload(page(), { ...indexed, chunks: 0 })).toBe(true)
+    expect(needsUpload(page(), { ...indexed, status: 'error' })).toBe(true)
+    expect(needsUpload(page(), { ...indexed, status: 'running' })).toBe(true)
+  })
+
+  it('uploads only the changed pages of a re-crawl', async () => {
+    const uploaded: string[] = []
+    const unchanged = page()
+    const changed = page({ url: 'https://example.com/blog', title: 'Blog', checksum: 'xyz' })
+    const instance = {
+      items: {
+        list: async () => ({
+          result: [
+            { id: '1', key: await itemKeyFor(unchanged.url), status: 'completed' as const, chunks_count: 2, metadata: { checksum: 'abc', title: 'Unser Team' } },
+            { id: '2', key: await itemKeyFor(changed.url), status: 'completed' as const, chunks_count: 3, metadata: { checksum: 'old', title: 'Blog' } },
+          ],
+          result_info: { count: 2, page: 1, per_page: 50, total_count: 2 },
+        }),
+        upload: async (key: string) => { uploaded.push(key) },
+      },
+    } as unknown as Pick<AiSearchInstance, 'items'>
+
+    const keys = await uploadPages(instance, [unchanged, changed])
+    expect(keys).toEqual([await itemKeyFor(unchanged.url), await itemKeyFor(changed.url)])
+    // Both stay active so the stale-item cleanup keeps them.
+    expect(uploaded).toEqual([await itemKeyFor(changed.url)])
   })
 })
 

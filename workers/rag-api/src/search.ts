@@ -89,13 +89,67 @@ export async function ensureInstance(env: Env, databaseId: string): Promise<AiSe
   }
 }
 
+interface IndexedItem {
+  checksum: string
+  title: string
+  status: string
+  chunks: number
+}
+
+/** 20 x 50 covers the crawler's 500-page ceiling with room to spare. */
+const ITEM_SCAN_PAGES = 20
+
+async function indexedItemsByKey(
+  items: Pick<AiSearchInstance['items'], 'list'>,
+): Promise<Map<string, IndexedItem>> {
+  const byKey = new Map<string, IndexedItem>()
+  const pageSize = 50
+  for (let page = 1; page <= ITEM_SCAN_PAGES; page += 1) {
+    const response = await items.list({ page, per_page: pageSize })
+    for (const item of response.result) {
+      const metadata = item.metadata ?? {}
+      byKey.set(item.key, {
+        checksum: typeof metadata.checksum === 'string' ? metadata.checksum : '',
+        title: typeof metadata.title === 'string' ? metadata.title : '',
+        status: item.status,
+        chunks: item.chunks_count ?? 0,
+      })
+    }
+    const totalCount = response.result_info?.total_count ?? response.result.length
+    if (page * pageSize >= totalCount) break
+  }
+  return byKey
+}
+
+/**
+ * Re-embedding a page whose text has not changed cannot improve the index and
+ * is what made a re-crawl cost as much as the first one. The checksum covers
+ * the markdown and the title is part of the uploaded document, so both must
+ * match. An item that never produced chunks is always re-uploaded.
+ */
+export function needsUpload(page: IngestPage, current: IndexedItem | undefined): boolean {
+  if (!current) return true
+  if (current.status !== 'completed' || current.chunks < 1) return true
+  return current.checksum !== page.checksum || current.title !== page.title
+}
+
 export async function uploadPages(
-  instance: AiSearchInstance,
+  instance: Pick<AiSearchInstance, 'items'>,
   pages: IngestPage[],
 ): Promise<string[]> {
+  // Skipping is an optimisation, never a precondition: if the listing fails,
+  // every page is uploaded exactly as before.
+  const existing = await indexedItemsByKey(instance.items).catch((error) => {
+    console.log(JSON.stringify({
+      event: 'item_index_unavailable',
+      error: error instanceof Error ? error.message : 'unknown',
+    }))
+    return new Map<string, IndexedItem>()
+  })
   return Promise.all(
     pages.map(async (page) => {
       const key = await itemKeyFor(page.url)
+      if (!needsUpload(page, existing.get(key))) return key
       const content = `# ${page.title}\n\nQuelle: ${page.url}\n\n${page.markdown.trim()}`
       // Queue the item instead of holding a Worker request open while the
       // managed embedding/indexing pipeline runs (often longer than 30 s).

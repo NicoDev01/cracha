@@ -3,6 +3,11 @@ import { NextResponse, type NextRequest } from 'next/server'
 
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request })
+  // A prefetch is speculative and discards the refreshed cookie anyway, so
+  // verifying the session for it only burns CPU. A burst of them competing
+  // with the real request is what pushed the Worker over its limit.
+  if (request.headers.get('next-router-prefetch') === '1') return response
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
     ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY

@@ -122,26 +122,33 @@ export function DataDashboard() {
 
     try {
       if (showLoading) setIsLoading(true)
-      setError(null)
       setDatabases(await getDatabases())
+      setError(null)
     } catch (loadError) {
-      const message = loadError instanceof Error ? loadError.message : "Fehler beim Laden der Datenbanken"
-      setError(message)
-      if (showLoading) setDatabases([])
+      // A dropped background refresh keeps the last known list. Clearing it and
+      // surfacing the raw fetch error made one failed poll during a crawl look
+      // like the whole dashboard had broken.
+      if (!showLoading) return
+      setError(loadError instanceof Error ? loadError.message : "Fehler beim Laden der Datenbanken")
+      setDatabases([])
     } finally {
       if (showLoading) setIsLoading(false)
     }
   }, [user])
+
+  const isCrawling = databases.some((database) => database.status === "crawling")
 
   useEffect(() => {
     void loadDatabases()
   }, [loadDatabases])
 
   useEffect(() => {
-    if (!databases.some((database) => database.status === "crawling")) return
+    if (!isCrawling) return
+    // Keyed on the boolean, not on the array: every poll produced a new array,
+    // which tore the interval down and rebuilt it on each response.
     const timer = window.setInterval(() => void loadDatabases(false), 10_000)
     return () => window.clearInterval(timer)
-  }, [databases, loadDatabases])
+  }, [isCrawling, loadDatabases])
 
   useEffect(() => {
     const currentIds = new Set(databases.map((database) => database.id))

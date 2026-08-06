@@ -93,6 +93,11 @@ const AppSidebar: React.FC = () => {
             nav.path && (
               <Link
                 href={nav.path}
+                // Every dashboard route renders dynamically behind auth, and
+                // Next does not cache prefetches of dynamic routes. Prefetching
+                // them re-ran a full server render per link on every re-render,
+                // which is what exhausted the Worker CPU budget during a crawl.
+                prefetch={false}
                 className={`menu-item group ${isActive(nav.path) ? "menu-item-active" : "menu-item-inactive"
                   }`}
               >
@@ -124,6 +129,7 @@ const AppSidebar: React.FC = () => {
                     <li key={subItem.name}>
                       <Link
                         href={subItem.path}
+                        prefetch={false}
                         className={`menu-dropdown-item ${
                           isActive(subItem.path)
                             ? "menu-dropdown-item-active"
