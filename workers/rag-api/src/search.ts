@@ -521,7 +521,9 @@ export function packContext(
     context: blocks
       .map((block) => {
         const label = block.collection
-          ? `[${block.n}] ${block.title} (ÜBERSICHTSSEITE — maßgebliche vollständige Liste)`
+          // Reads as prose, because the model quotes this label back at the
+          // reader. An all-caps marker turned up verbatim in answers.
+          ? `[${block.n}] ${block.title} (vollständige Übersicht aller Einträge)`
           : `[${block.n}] ${block.title}`
         return `${label}\nURL: ${block.url || 'unbekannt'}\n${block.text}`
       })
