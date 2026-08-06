@@ -229,6 +229,8 @@ export function CrawlConfigForm({ onStarted }: { onStarted?: () => void }) {
                   </span>
                   {discovered === 1 ? " Seite" : " Seiten"} in der Sitemap gefunden
                   {analysis.truncated && " (Zählung abgebrochen, es sind mehr)"}.
+                  {discovered > MAX_PAGES_PER_CRAWL
+                    && ` Ein Crawl erfasst derzeit höchstens ${MAX_PAGES_PER_CRAWL} davon.`}
                 </p>
 
                 <FormField
