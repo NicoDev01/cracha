@@ -226,18 +226,33 @@ describe('enumerating retrieval', () => {
   // Every detail page outranks the collection page, exactly as in production.
   const chunks = Array.from({ length: 32 }, (_, index) => detailChunk(index))
 
-  function instanceWithTeamPage() {
+  function instanceWithTeamPage(options: { metadataFilter?: boolean } = {}) {
     const teamKeyPromise = itemKeyFor(TEAM_URL)
+    const supportsFilter = options.metadataFilter !== false
+    const teamItem = async () => ({
+      id: 'team-item',
+      key: await teamKeyPromise,
+      status: 'completed' as const,
+      metadata: { url: TEAM_URL, title: 'Team | Webmen' },
+    })
     return {
       search: async () => ({ search_query: 'team webmen', chunks }),
       items: {
-        list: async ({ search }: { search?: string }) => {
-          const teamKey = await teamKeyPromise
+        list: async ({ metadata_filter: metadataFilter, per_page: perPage, page }: { metadata_filter?: string; per_page?: number; page?: number }) => {
+          // The real Items API rejects anything above 50.
+          if ((perPage ?? 0) > 50) throw new Error('Too big: expected number to be <=50')
+          if (metadataFilter !== undefined) {
+            if (!supportsFilter) throw new Error('metadata filter pattern exceeds maximum length')
+            const wanted = (JSON.parse(metadataFilter) as { url?: string }).url
+            return {
+              result: wanted === TEAM_URL ? [await teamItem()] : [],
+              result_info: { count: 1, page: 1, per_page: perPage ?? 10, total_count: 1 },
+            }
+          }
+          // Unfiltered scan fallback.
           return {
-            result: search === teamKey
-              ? [{ id: 'team-item', key: teamKey, status: 'completed' as const, metadata: { url: TEAM_URL, title: 'Team | Webmen' } }]
-              : [],
-            result_info: { count: 1, page: 1, per_page: 5, total_count: 1 },
+            result: page === 1 ? [await teamItem()] : [],
+            result_info: { count: 1, page: page ?? 1, per_page: perPage ?? 50, total_count: 1 },
           }
         },
         get: (itemId: string) => ({
@@ -264,6 +279,18 @@ describe('enumerating retrieval', () => {
     }
     // The overlapping chunk boundary must not duplicate entries.
     expect(result.context.split('Person Nummer 17').length - 1).toBe(1)
+  })
+
+  it('falls back to a bounded key scan when metadata filtering is rejected', async () => {
+    // Production hit exactly this: the Items API refused the filter and the
+    // swallowed error was indistinguishable from "no collection page exists".
+    const result = await retrieve(
+      instanceWithTeamPage({ metadataFilter: false }),
+      'Wer sind die Teammitglieder von Webmen?',
+      8,
+    )
+    expect(result.sources[0].url).toBe(TEAM_URL)
+    expect(result.context).toContain(names[33])
   })
 
   it('does not probe for a collection page on ordinary questions', async () => {

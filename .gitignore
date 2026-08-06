@@ -34,6 +34,11 @@ yarn-error.log*
 .env*
 .env.local
 
+# Wrangler local secrets. Only the .example files belong in the repository.
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+
 # vercel
 .vercel
 
@@ -122,3 +127,6 @@ storybook-static
 tmp/
 temp/
 graphify-out/
+
+# Temporaere lokale Diagnose-Konfiguration
+workers/rag-api/wrangler.dev.jsonc

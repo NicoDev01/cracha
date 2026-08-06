@@ -27,22 +27,10 @@ const INSTANCE_CONFIG = {
   ],
 }
 
-async function configureInstance(
-  instance: AiSearchInstance,
-  id: string,
-  info?: AiSearchInstanceInfo,
-): Promise<void> {
-  const current = info ?? (await instance.info())
-  if (
-    current.index_method?.keyword === true &&
-    current.embedding_model === INSTANCE_CONFIG.embedding_model &&
-    current.score_threshold === INSTANCE_CONFIG.score_threshold &&
-    current.indexing_options?.keyword_tokenizer === INSTANCE_CONFIG.indexing_options.keyword_tokenizer &&
-    current.chunk_size === INSTANCE_CONFIG.chunk_size &&
-    current.chunk_overlap === INSTANCE_CONFIG.chunk_overlap &&
-    current.custom_metadata?.some((field) => field.field_name === 'url')
-  ) return
-
+async function configureInstance(instance: AiSearchInstance, id: string): Promise<void> {
+  // Unconditionally reapplied. The previous guard compared only a subset of the
+  // fields it sets, so drift in max_num_results, score_threshold or reranking
+  // was invisible and survived in production across several deployments.
   await instance.update({ id, ...INSTANCE_CONFIG })
 }
 
@@ -67,8 +55,8 @@ export async function ensureInstance(env: Env, databaseId: string): Promise<AiSe
   const existing = env.AI_SEARCH.get(id)
 
   try {
-    const info = await existing.info()
-    await configureInstance(existing, id, info)
+    await existing.info()
+    await configureInstance(existing, id)
     return existing
   } catch {
     try {
@@ -162,6 +150,8 @@ export async function deleteInstanceIfExists(
 
 const HUB_MIN_DESCENDANTS = 3
 const HUB_MAX_PROBES = 3
+/** 10 x 50 items covers the crawler's 500-page ceiling. */
+const HUB_MAX_SCAN_PAGES = 10
 const HUB_MAX_CHUNKS = 60
 const HUB_MAX_CHARACTERS = 30_000
 
@@ -243,6 +233,40 @@ async function readItemText(items: ItemsApi, itemId: string): Promise<string> {
   return text.slice(0, HUB_MAX_CHARACTERS)
 }
 
+/**
+ * The Items API rejects our `page-<sha256>.md` keys when passed as `search`:
+ * it compiles the term into a metadata filter pattern and refuses it. Look the
+ * item up by its indexed `url` metadata instead, and fall back to a bounded
+ * key scan when metadata filtering is unavailable.
+ */
+async function findItemByUrl(
+  items: ItemsApi,
+  key: string,
+  url: string,
+): Promise<AiSearchItemInfo | null> {
+  try {
+    const filtered = await items.list({ metadata_filter: JSON.stringify({ url }), per_page: 10 })
+    const match = filtered.result.find((item) => item.key === key)
+    if (match) return match
+  } catch (error) {
+    console.log(JSON.stringify({
+      event: 'hub_metadata_filter_unavailable',
+      error: error instanceof Error ? error.message : 'unknown',
+    }))
+  }
+
+  // The Items API caps per_page at 50; a larger value is rejected outright.
+  const pageSize = 50
+  for (let page = 1; page <= HUB_MAX_SCAN_PAGES; page += 1) {
+    const listed = await items.list({ page, per_page: pageSize })
+    const match = listed.result.find((item) => item.key === key)
+    if (match) return match
+    const totalCount = listed.result_info?.total_count ?? listed.result.length
+    if (page * pageSize >= totalCount) break
+  }
+  return null
+}
+
 async function resolveHubPage(
   instance: RetrievalInstance,
   ranked: RankedChunk[],
@@ -254,25 +278,43 @@ async function resolveHubPage(
     .map(({ chunk }) => (typeof chunk.item.metadata?.url === 'string' ? chunk.item.metadata.url : ''))
     .filter(Boolean)
 
-  for (const candidate of ancestorCandidates(urls).slice(0, HUB_MAX_PROBES)) {
+  const candidates = ancestorCandidates(urls).slice(0, HUB_MAX_PROBES)
+  for (const candidate of candidates) {
     const key = await itemKeyFor(candidate.url)
     try {
-      const listed = await items.list({ search: key, per_page: 5 })
-      const info = listed.result.find((item) => item.key === key)
-      if (!info) continue
+      const info = await findItemByUrl(items, key, candidate.url)
+      if (!info) {
+        console.log(JSON.stringify({ event: 'hub_probe_miss', url: candidate.url, key }))
+        continue
+      }
       const text = await readItemText(items, info.id)
-      if (!text.trim()) continue
+      if (!text.trim()) {
+        console.log(JSON.stringify({ event: 'hub_probe_empty', url: candidate.url, item_id: info.id }))
+        continue
+      }
       const metadata = info.metadata ?? {}
+      console.log(JSON.stringify({ event: 'hub_resolved', url: candidate.url, characters: text.length }))
       return {
         url: candidate.url,
         title: typeof metadata.title === 'string' ? metadata.title : candidate.url,
         key,
         text,
       }
-    } catch {
-      continue
+    } catch (error) {
+      // A swallowed failure here is indistinguishable from "no collection page
+      // exists", which is exactly what made this hard to diagnose in production.
+      console.log(JSON.stringify({
+        event: 'hub_probe_failed',
+        url: candidate.url,
+        error: error instanceof Error ? error.message : 'unknown',
+      }))
     }
   }
+  console.log(JSON.stringify({
+    event: 'hub_unresolved',
+    candidates: candidates.map((candidate) => candidate.url),
+    distinct_urls: new Set(urls).size,
+  }))
   return null
 }
 
