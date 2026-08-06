@@ -3,10 +3,13 @@ from types import SimpleNamespace
 from cracha_crawler.normalize import (
     canonical_url,
     clean_code_fences,
+    drop_duplicate_table_of_contents,
     extract_published_at,
     matches_patterns,
     normalize_markdown,
     page_from_result,
+    render_markdown_table,
+    restore_tables,
     strip_markdown_links,
     truncate_utf8,
 )
@@ -268,3 +271,77 @@ def test_normalize_markdown_cleans_fences_and_extra_blank_lines() -> None:
     assert "\n\n\n" not in normalized
     assert "1use App;" not in normalized
     assert "use App;" in normalized
+
+
+def test_duplicate_table_of_contents_is_dropped() -> None:
+    # laravel.com/docs repeats 63 section names as a list before the first
+    # paragraph. A chunk of nothing but section names answers no question.
+    sections = ["Introduction", "Creating Jobs", "Job Middleware", "Dispatching", "Testing"]
+    markdown = (
+        "# Queues\n"
+        + "".join(f"  * {name}\n" for name in sections)
+        + "\n"
+        + "".join(f"## {name}\n\nEin Absatz zu {name}.\n\n" for name in sections)
+    )
+    cleaned = drop_duplicate_table_of_contents(markdown)
+
+    for name in sections:
+        # Exactly once: as the heading the list was copying.
+        assert cleaned.count(name) == 2, name  # heading + prose mention
+        assert f"  * {name}" not in cleaned
+    assert "## Introduction" in cleaned
+
+
+def test_lists_that_are_not_a_table_of_contents_survive() -> None:
+    # The webmen reference page filters by topic; those entries are content.
+    markdown = (
+        "# Referenzen\n\n"
+        "  * Überblick\n  * Software\n  * Konzeption\n  * Design\n  * SEO\n\n"
+        "## Ein Einblick\n\nText.\n"
+    )
+    assert drop_duplicate_table_of_contents(markdown) == markdown
+
+    # Too few entries to be navigation, even though they match headings.
+    short = "* Alpha\n* Beta\n\n## Alpha\n\n## Beta\n"
+    assert drop_duplicate_table_of_contents(short) == short
+
+
+def test_mangled_table_rows_are_restored_from_structured_extraction() -> None:
+    # A cell holding only a same-page anchor vanishes from the generated
+    # markdown, leaving a number with nothing to say what it counts.
+    markdown = (
+        "## Limits\n\n"
+        "| Feature | Workers Free | Workers Paid |\n"
+        "| --- | --- | --- |\n"
+        "| 100,000/day | No limit |\n"
+        "| 10 ms | 5 min |\n\n"
+        "Danach folgt Text.\n"
+    )
+    tables = [
+        {
+            "headers": ["Feature", "Workers Free", "Workers Paid"],
+            "rows": [["Requests", "100,000/day", "No limit"], ["CPU time", "10 ms", "5 min"]],
+        }
+    ]
+    restored = restore_tables(markdown, tables)
+
+    assert "| Requests | 100,000/day | No limit |" in restored
+    assert "| CPU time | 10 ms | 5 min |" in restored
+    assert "Danach folgt Text." in restored
+
+
+def test_tables_without_a_counterpart_are_left_alone() -> None:
+    markdown = "| Jahr | Umsatz |\n| --- | --- |\n| 2025 | 12 |\n"
+    other = [{"headers": ["Ganz", "Anders"], "rows": [["a", "b"]]}]
+    assert restore_tables(markdown, None) == markdown
+    assert restore_tables(markdown, other) == markdown
+
+
+def test_rendered_tables_pad_short_rows() -> None:
+    rendered = render_markdown_table(["A", "B", "C"], [["1", "2"], ["3", "4", "5"]])
+    assert rendered.splitlines() == [
+        "| A | B | C |",
+        "| --- | --- | --- |",
+        "| 1 | 2 |  |",
+        "| 3 | 4 | 5 |",
+    ]

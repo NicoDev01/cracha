@@ -17,6 +17,7 @@ from .normalize import (
     matches_patterns,
     normalize_markdown,
     page_from_result,
+    render_markdown_table,
     truncate_utf8,
 )
 from .security import assert_public_url
@@ -201,17 +202,10 @@ def _markdown_table(table) -> str:
             rows.append(cells)
     if not rows:
         return ""
-    width = max(len(row) for row in rows)
-    if width < 2:
+    if max(len(row) for row in rows) < 2:
         return "\n".join(row[0] for row in rows if row and row[0])
-    padded = [row + [""] * (width - len(row)) for row in rows]
-    header, *body = padded
-    lines = [
-        "| " + " | ".join(header) + " |",
-        "| " + " | ".join(["---"] * width) + " |",
-    ]
-    lines.extend("| " + " | ".join(row) + " |" for row in body)
-    return "\n".join(lines)
+    header, *body = rows
+    return render_markdown_table(header, body)
 
 
 def _block_markdown(element) -> str:
@@ -440,6 +434,10 @@ async def _crawl4ai_pages(
         # pruning content filter decides what survives, not this. Lowering it
         # buys nothing, so it keeps its value.
         "word_count_threshold": 20,
+        # Structured tables are what repairs the rows the markdown generator
+        # mangles; 5 admits ordinary documentation tables that the stricter
+        # default score treats as layout.
+        "table_score_threshold": 5,
         "page_timeout": 30_000,
         "delay_before_return_html": 0.5,
         "wait_for_images": False,

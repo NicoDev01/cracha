@@ -1,6 +1,7 @@
 import fnmatch
 import hashlib
 import re
+from collections import deque
 from datetime import UTC, datetime
 from urllib.parse import urlsplit, urlunsplit
 
@@ -238,6 +239,141 @@ def clean_code_fences(markdown: str) -> str:
     return "".join(segments)
 
 
+HEADING_RE = re.compile(r"(?m)^[ \t]{0,3}(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$")
+LIST_ITEM_RE = re.compile(r"^[ \t]*(?:[-*+]|\d+[.)])[ \t]+(.+?)[ \t]*$")
+# A table of contents is a run of entries, not a pair of them.
+MIN_CONTENTS_ENTRIES = 5
+# Nearly all of them must be headings; a stray entry that links elsewhere is
+# normal in a table of contents.
+MIN_CONTENTS_MATCH = 0.8
+
+
+def _comparable(value: str) -> str:
+    return re.sub(r"[^0-9a-z]+", " ", value.casefold()).strip()
+
+
+def drop_duplicate_table_of_contents(markdown: str) -> str:
+    """Remove an in-page table of contents whose entries are headings below it.
+
+    Documentation pages carry one on every page: laravel.com/docs repeats 63
+    section names as a list before the first paragraph. A chunk made of nothing
+    but section names matches many questions and answers none of them.
+
+    Only a run whose entries are headings of the same document is dropped, so
+    the text is still there — as the headings it was copying.
+    """
+    headings = {
+        _comparable(match.group(2)) for match in HEADING_RE.finditer(markdown)
+    }
+    if not headings:
+        return markdown
+
+    lines = markdown.splitlines(keepends=True)
+    kept: list[str] = []
+    run: list[tuple[str, str]] = []
+
+    def flush() -> None:
+        if not run:
+            return
+        entries = [text for _, text in run if text]
+        matched = sum(1 for text in entries if _comparable(text) in headings)
+        is_contents = (
+            len(entries) >= MIN_CONTENTS_ENTRIES
+            and matched >= MIN_CONTENTS_MATCH * len(entries)
+        )
+        if not is_contents:
+            kept.extend(line for line, _ in run)
+        run.clear()
+
+    for line in lines:
+        match = LIST_ITEM_RE.match(line.rstrip("\r\n"))
+        if match:
+            # Long entries are prose, not navigation.
+            run.append((line, match.group(1) if len(match.group(1)) <= 120 else ""))
+            continue
+        if not line.strip() and run:
+            # A blank line inside a loose list does not end the run.
+            run.append((line, ""))
+            continue
+        flush()
+        kept.append(line)
+    flush()
+    return "".join(kept)
+
+
+MARKDOWN_TABLE_BLOCK_RE = re.compile(r"(?m)^(?:[ \t]{0,3}\|.*\|[ \t]*\n?){2,}")
+
+
+def render_markdown_table(headers: list[str], rows: list[list[str]]) -> str:
+    """Render a header and rows as a markdown table with a stable width."""
+    cleaned_rows = [
+        [" ".join(str(cell).split()).replace("|", "\\|") for cell in row] for row in rows
+    ]
+    cleaned_headers = [" ".join(str(cell).split()).replace("|", "\\|") for cell in headers]
+    width = max(len(cleaned_headers), *(len(row) for row in cleaned_rows), 0)
+    if width < 2:
+        return ""
+    padded = [
+        row + [""] * (width - len(row))
+        for row in [cleaned_headers, *cleaned_rows]
+    ]
+    header, *body = padded
+    lines = ["| " + " | ".join(header) + " |", "| " + " | ".join(["---"] * width) + " |"]
+    lines.extend("| " + " | ".join(row) + " |" for row in body)
+    return "\n".join(lines)
+
+
+def _table_cells(line: str) -> list[str]:
+    stripped = line.strip()
+    if not stripped.startswith("|"):
+        return []
+    return [cell.strip() for cell in stripped.strip("|").split("|")]
+
+
+def restore_tables(markdown: str, tables: list[dict] | None) -> str:
+    """Replace mangled markdown tables with Crawl4AI's structured extraction.
+
+    A cell whose only content is a same-page anchor, `<a href="#daily-requests">
+    Requests</a>`, disappears from the generated markdown, leaving the row
+    "| 100,000/day | No limit |" — a number with nothing to say what it counts.
+    Docs tables label their rows that way constantly. The structured extractor
+    reads the cell text and keeps it.
+
+    Tables are matched by their header row, so a block that has no counterpart
+    is left exactly as it was.
+    """
+    if not tables:
+        return markdown
+
+    by_headers: dict[tuple[str, ...], deque[dict]] = {}
+    for table in tables:
+        headers = tuple(_comparable(str(cell)) for cell in table.get("headers") or [])
+        if not headers or not table.get("rows"):
+            continue
+        by_headers.setdefault(headers, deque()).append(table)
+    if not by_headers:
+        return markdown
+
+    def replace(match: re.Match[str]) -> str:
+        block = match.group(0)
+        lines = [line for line in block.splitlines() if line.strip()]
+        if len(lines) < 2:
+            return block
+        headers = tuple(_comparable(cell) for cell in _table_cells(lines[0]))
+        queue = by_headers.get(headers)
+        if not queue:
+            return block
+        rendered = render_markdown_table(queue[0]["headers"], queue[0]["rows"])
+        if not rendered:
+            return block
+        queue.popleft()
+        if not queue:
+            by_headers.pop(headers, None)
+        return f"{rendered}\n"
+
+    return MARKDOWN_TABLE_BLOCK_RE.sub(replace, markdown)
+
+
 def canonical_url(url: str, *, preserve_fragment: bool = False) -> str:
     parsed = urlsplit(url)
     path = parsed.path or "/"
@@ -257,6 +393,7 @@ def normalize_markdown(markdown: str) -> str:
     # Every ingest path funnels through here, so link stripping cannot be
     # forgotten by a caller that builds markdown some other way.
     text = clean_code_fences(strip_markdown_links(markdown.replace("\x00", "")))
+    text = drop_duplicate_table_of_contents(text)
     text = re.sub(r"[ \t]+\n", "\n", text)
     # One blank line separates blocks in markdown; more is rendering noise that
     # only costs index space. Fenced code was already normalised above and is
@@ -314,7 +451,7 @@ def page_from_result(result: object, includes: list[str], excludes: list[str]) -
     markdown = fit_markdown if _is_indexable(fit_markdown) else raw_markdown
     if not _is_indexable(markdown):
         return None
-    markdown = truncate_utf8(markdown)
+    markdown = truncate_utf8(restore_tables(markdown, getattr(result, "tables", None)))
 
     metadata = getattr(result, "metadata", None) or {}
     title = str(metadata.get("title") or url)[:500]
