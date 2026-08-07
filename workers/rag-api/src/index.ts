@@ -1,5 +1,10 @@
 import { authenticateIngest, authenticateQuery } from './auth'
-import { readRetrievalCache, retrievalCacheKey, writeRetrievalCache } from './cache'
+import {
+  deleteRetrievalCache,
+  readRetrievalCache,
+  retrievalCacheKey,
+  writeRetrievalCache,
+} from './cache'
 import { databaseForIngest, databaseForUser, removeFromUserIndex, saveDatabase } from './database'
 import { assertText, HttpError, json, readJson } from './http'
 import { deleteInstanceIfExists, deleteStaleItems, ensureInstance, instanceIdFor, retrieve, uploadPages } from './search'
@@ -143,7 +148,7 @@ async function handleComplete(request: Request, env: Env): Promise<Response> {
   const deleted = await deleteStaleItems(instance, new Set(body.active_keys))
   // The crawler calls this endpoint only after every retained item has produced
   // searchable chunks. The supplied count is therefore the committed index state.
-  let chunksCount = Number.isFinite(body.chunks_count)
+  const chunksCount = Number.isFinite(body.chunks_count)
     ? Math.max(0, Math.floor(Number(body.chunks_count)))
     : database.chunks_count ?? 0
   const now = new Date().toISOString()
@@ -242,11 +247,12 @@ async function handleDelete(request: Request, env: Env, databaseId: string): Pro
 
   await deleteInstanceIfExists(env.AI_SEARCH, instanceId)
 
-  await Promise.all([
+  const [, , purgedCacheEntries] = await Promise.all([
     env.DATABASE_REGISTRY.delete(databaseId),
     removeFromUserIndex(env, userId, databaseId),
+    deleteRetrievalCache(env, databaseId),
   ])
-  return json(request, env, { success: true })
+  return json(request, env, { success: true, purged_cache_entries: purgedCacheEntries })
 }
 
 async function route(request: Request, env: Env): Promise<Response> {

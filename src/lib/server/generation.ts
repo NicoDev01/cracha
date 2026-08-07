@@ -14,7 +14,42 @@ export interface StreamingGenerationResult {
 }
 
 const GEMINI_MODEL = 'google/gemini-3.5-flash'
-const LLAMA_FALLBACK_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast'
+/**
+ * The standby has to survive the same prompt as the primary. Its predecessor,
+ * `@cf/meta/llama-3.3-70b-instruct-fp8-fast`, holds 24 000 tokens, while an
+ * enumerating question builds roughly 30 000 — so every time it stood in, it
+ * answered from a prompt that had been cut off, and the tail of a long list
+ * simply never arrived. Scout holds 131 000.
+ */
+const FALLBACK_MODEL = '@cf/meta/llama-4-scout-17b-16e-instruct'
+
+/**
+ * The source context is already sized to the model's limit before history is
+ * added, and nothing used to trim it: twelve turns of up to 2 000 characters
+ * pushed the sources out of the window on exactly the long conversations where
+ * the sources matter most. The newest turns survive, because those are the ones
+ * a follow-up question refers back to.
+ */
+const HISTORY_BUDGET_CHARACTERS = 6_000
+
+export function trimHistory<T extends { content: string }>(
+  history: T[],
+  budget = HISTORY_BUDGET_CHARACTERS,
+): T[] {
+  const kept: T[] = []
+  let used = 0
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    const message = history[index]
+    // A turn is kept whole or not at all. Half an earlier answer reads like the
+    // model contradicting itself.
+    if (used + message.content.length > budget) break
+    used += message.content.length
+    kept.unshift(message)
+  }
+  // The immediately preceding turn decides what "and the address?" refers to.
+  // Losing it to the budget would be worse than exceeding the budget once.
+  return kept.length ? kept : history.slice(-1)
+}
 
 // Written in English because the knowledge base can be in any language and a
 // German instruction set biased the model towards German phrasing on English
@@ -291,7 +326,7 @@ async function openModelStream(input: {
     const stream = await runModel(input.model, {
       systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
       contents: [
-        ...input.history.map((message) => ({
+        ...trimHistory(input.history).map((message) => ({
           role: message.role === 'assistant' ? 'model' as const : 'user' as const,
           parts: [{ text: message.content }],
         })),
@@ -314,7 +349,7 @@ async function openModelStream(input: {
   const stream = await runModel(input.model, {
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
-      ...input.history,
+      ...trimHistory(input.history),
       {
         role: 'user',
         content: `Frage:\n${input.question}\n\nQuellenkontext:\n${input.context}`,
@@ -353,20 +388,20 @@ export async function streamGroundedAnswer(input: Parameters<typeof openModelStr
       text: await prepareTextStream({ ...input, model: primaryModel }),
     }
   } catch (error) {
-    if (primaryModel === LLAMA_FALLBACK_MODEL) throw error
+    if (primaryModel === FALLBACK_MODEL) throw error
     console.warn(JSON.stringify({
       event: 'primary_streaming_model_failed',
       model: primaryModel,
-      fallback_model: LLAMA_FALLBACK_MODEL,
+      fallback_model: FALLBACK_MODEL,
       error: error instanceof Error ? error.message : 'unknown',
     }))
     // A flag, not a suffix on the model name. The suffix reached the reader as
     // `(fallback: primary-model-error)` and forced the interface to parse a
     // string to learn something the server already knew.
     return {
-      model: LLAMA_FALLBACK_MODEL,
+      model: FALLBACK_MODEL,
       fallback: true,
-      text: await prepareTextStream({ ...input, model: LLAMA_FALLBACK_MODEL }),
+      text: await prepareTextStream({ ...input, model: FALLBACK_MODEL }),
     }
   }
 }

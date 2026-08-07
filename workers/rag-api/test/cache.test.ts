@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { readRetrievalCache, retrievalCacheKey, writeRetrievalCache } from '../src/cache'
+import {
+  deleteRetrievalCache,
+  readRetrievalCache,
+  retrievalCacheKey,
+  writeRetrievalCache,
+} from '../src/cache'
 import type { CachedRetrieval } from '../src/cache'
 import type { DatabaseRecord, Env } from '../src/types'
 
@@ -47,6 +52,14 @@ function memoryEnv(): Env & { store: Map<string, string> } {
       put: async (key: string, value: string) => {
         store.set(key, value)
       },
+      delete: async (key: string) => {
+        store.delete(key)
+      },
+      list: async ({ prefix = '' }: { prefix?: string } = {}) => ({
+        keys: [...store.keys()].filter((key) => key.startsWith(prefix)).map((name) => ({ name })),
+        list_complete: true,
+        cursor: undefined,
+      }),
     } as unknown as KVNamespace,
   }
 }
@@ -108,6 +121,35 @@ describe('retrieval cache', () => {
   it('answers a miss with null rather than throwing', async () => {
     const env = memoryEnv()
     expect(await readRetrievalCache(env, 'qcache:absent')).toBeNull()
+  })
+
+  it('is emptied when the knowledge base is deleted', async () => {
+    // Without this the crawled source text of a deleted base stayed readable
+    // until the TTL ran out — a day after someone pressed delete.
+    const env = memoryEnv()
+    for (const question of ['Wer ist im Team?', 'Was kostet eine Website?']) {
+      await writeRetrievalCache(env, await retrievalCacheKey(database, question, 8, []), result)
+    }
+    const other = { ...database, id: 'laravel-1' }
+    await writeRetrievalCache(env, await retrievalCacheKey(other, 'Wie migriere ich?', 8, []), result)
+    env.store.set(database.id, JSON.stringify(database))
+
+    expect(await deleteRetrievalCache(env, database.id)).toBe(2)
+    // The record itself and another base's cache are untouched.
+    expect([...env.store.keys()].filter((key) => key.startsWith(`qcache:${database.id}:`))).toEqual([])
+    expect([...env.store.keys()].some((key) => key.startsWith('qcache:laravel-1:'))).toBe(true)
+    expect(env.store.has(database.id)).toBe(true)
+  })
+
+  it('does not fail a delete when the purge cannot run', async () => {
+    const env = memoryEnv()
+    env.DATABASE_REGISTRY = {
+      list: async () => {
+        throw new Error('KV unavailable')
+      },
+    } as unknown as KVNamespace
+
+    expect(await deleteRetrievalCache(env, database.id)).toBe(0)
   })
 
   it('falls through to a real search when KV is unavailable', async () => {

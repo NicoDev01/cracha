@@ -10,6 +10,7 @@ import modal
 from cracha_crawler.crawl import analyze_site, crawl_pages
 from cracha_crawler.ingest import RagIngestClient
 from cracha_crawler.models import AnalyzeRequest, CrawlRequest, SiteAnalysis
+from cracha_crawler.status import stale_job_ids
 
 APP_NAME = "cracha-crawler"
 ANALYZE_TIMEOUT_SECONDS = 120
@@ -38,6 +39,25 @@ async def update_status(job_id: str, **changes) -> dict:
     updated = {**current, **changes, "updated_at": datetime.now(UTC).isoformat()}
     await crawl_statuses.put.aio(job_id, updated)
     return updated
+
+
+async def prune_crawl_statuses() -> int:
+    """Drop status records nobody will read again.
+
+    Opportunistic on purpose: a crawl that cannot tidy up is still a crawl that
+    ran, so every failure here is logged and swallowed.
+    """
+    try:
+        items = [entry async for entry in crawl_statuses.items.aio()]
+        stale = stale_job_ids(items)
+        for job_id in stale:
+            await crawl_statuses.pop.aio(job_id, None)
+    except Exception as error:
+        print(f"[PRUNE] crawl status cleanup failed: {type(error).__name__}: {error}")
+        return 0
+    if stale:
+        print(f"[PRUNE] removed {len(stale)} of {len(items)} crawl status records")
+    return len(stale)
 
 
 @app.function(
@@ -146,6 +166,9 @@ async def finalize_index(
 async def process_crawl(payload: dict, job_id: str) -> dict:
     request = CrawlRequest.model_validate(payload)
     ingest_client = RagIngestClient()
+    # Here rather than in the endpoint: this function is already long-running,
+    # so the cleanup costs the caller nothing.
+    await prune_crawl_statuses()
 
     async def report_progress(progress: dict[str, object]) -> None:
         result = {}

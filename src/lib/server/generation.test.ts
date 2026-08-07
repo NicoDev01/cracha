@@ -4,9 +4,48 @@ import {
   groundListEntries,
   groundListEntry,
   paddedBlockText,
+  trimHistory,
   type ContextBlock,
   type GroundingBlock,
 } from './generation'
+
+describe('conversation history budget', () => {
+  const turn = (content: string) => ({ role: 'user' as const, content })
+
+  it('keeps a short conversation whole', () => {
+    const history = [turn('Wer ist im Team?'), turn('Und die Adresse?')]
+    expect(trimHistory(history, 6_000)).toEqual(history)
+  })
+
+  it('drops the oldest turns first', () => {
+    // The sources are already sized to the model's window before history is
+    // added, so the overflow has to come off somewhere — and the newest turn is
+    // what a follow-up question refers back to.
+    const history = [turn('A'.repeat(4_000)), turn('B'.repeat(4_000)), turn('C'.repeat(1_000))]
+    const kept = trimHistory(history, 6_000)
+
+    expect(kept).toHaveLength(2)
+    expect(kept[0].content[0]).toBe('B')
+    expect(kept[1].content[0]).toBe('C')
+  })
+
+  it('never cuts a turn in half', () => {
+    const history = [turn('A'.repeat(4_000)), turn('B'.repeat(4_000))]
+    for (const message of trimHistory(history, 6_000)) {
+      expect(message.content).toHaveLength(4_000)
+    }
+  })
+
+  it('keeps the preceding turn even when it alone exceeds the budget', () => {
+    // Without it, "und die Adresse?" refers to nothing at all.
+    const history = [turn('X'.repeat(9_000))]
+    expect(trimHistory(history, 6_000)).toHaveLength(1)
+  })
+
+  it('handles an empty conversation', () => {
+    expect(trimHistory([], 6_000)).toEqual([])
+  })
+})
 
 const teamPage: GroundingBlock = {
   n: 1,

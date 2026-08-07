@@ -43,7 +43,43 @@ export async function retrievalCacheKey(
     topK,
     messages.map((message) => [message.role, message.content]),
   ])
-  return `qcache:${database.id}:${await digest(`${indexVersion(database)}|${shape}`)}`
+  return `qcache:${cachePrefix(database.id)}${await digest(`${indexVersion(database)}|${shape}`)}`
+}
+
+function cachePrefix(databaseId: string): string {
+  return `${databaseId}:`
+}
+
+/**
+ * Deleting a knowledge base has to take its cached source text with it. The TTL
+ * alone would have kept the crawled content of a deleted base readable for
+ * another day, which is not what "löschen" means to the person who clicked it.
+ */
+export async function deleteRetrievalCache(env: Env, databaseId: string): Promise<number> {
+  const prefix = `qcache:${cachePrefix(databaseId)}`
+  let deleted = 0
+  let cursor: string | undefined
+  try {
+    // Bounded: a knowledge base cannot hold more entries than a day of asking
+    // produces, and an unbounded loop here would block the delete response.
+    for (let page = 0; page < 20; page += 1) {
+      const listed = await env.DATABASE_REGISTRY.list({ prefix, cursor, limit: 1_000 })
+      await Promise.all(listed.keys.map((key) => env.DATABASE_REGISTRY.delete(key.name)))
+      deleted += listed.keys.length
+      if (listed.list_complete) break
+      cursor = listed.cursor
+      if (!cursor) break
+    }
+  } catch (error) {
+    // The knowledge base itself is already gone; the leftovers expire on their
+    // own. Failing the delete over them would be the worse outcome.
+    console.log(JSON.stringify({
+      event: 'retrieval_cache_purge_failed',
+      database_id: databaseId,
+      error: error instanceof Error ? error.message : 'unknown',
+    }))
+  }
+  return deleted
 }
 
 export async function readRetrievalCache(env: Env, key: string): Promise<CachedRetrieval | null> {
