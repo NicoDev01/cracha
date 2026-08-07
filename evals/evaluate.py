@@ -25,11 +25,13 @@ def normalize(value: str) -> str:
 
 LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(.*)$")
 CITATION_MARKER = re.compile(r"\[\d+\]")
+INTEGER = re.compile(r"\b(\d{1,6})\b")
 ANSWER_FIELDS = (
     "answer_min_list_items",
     "answer_required_terms",
     "answer_forbidden_terms",
     "answer_must_cite",
+    "answer_total_matches_list",
 )
 
 
@@ -49,6 +51,35 @@ def list_items(answer: str) -> list[str]:
         if body:
             items.append(body)
     return items
+
+
+def contradicting_totals(answer: str, item_count: int) -> list[int]:
+    """Counts the answer claims in prose that its own list does not support.
+
+    A model that announces "47 members" and then names 34 has contradicted
+    itself in the same breath, and no assertion about the list alone sees it.
+    Only the sentences framing the list are read: a number elsewhere in the
+    answer is a price, a year or a version, not a count of the entries.
+    """
+    lines = answer.splitlines()
+    positions = [index for index, line in enumerate(lines) if LIST_ITEM.match(line)]
+    if not positions or item_count < 1:
+        return []
+
+    framing = [
+        line
+        for index, line in enumerate(lines)
+        if line.strip() and not LIST_ITEM.match(line)
+        and (index < positions[0] or index > positions[-1])
+    ]
+    claimed = {
+        int(match)
+        for line in framing
+        for match in INTEGER.findall(CITATION_MARKER.sub("", line))
+        # Below two it is prose ("one of them"), above six digits a serial.
+        if 2 <= int(match) <= 100_000
+    }
+    return sorted(claimed - {item_count})
 
 
 def query(endpoint: str, token: str, database_id: str, user_id: str, question: str) -> dict:
@@ -138,6 +169,12 @@ def evaluate_answer(case: dict, answer: str) -> list[str]:
 
     if case.get("answer_must_cite") and not CITATION_MARKER.search(answer):
         reasons.append("answer carries no citation marker")
+
+    if case.get("answer_total_matches_list"):
+        listed = len({normalize(item) for item in list_items(answer)})
+        wrong = contradicting_totals(answer, listed)
+        if wrong:
+            reasons.append(f"answer claims {wrong} but lists {listed} items")
 
     if not answer.strip():
         reasons.append("empty answer")

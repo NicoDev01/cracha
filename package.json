@@ -16,7 +16,8 @@
     "rag:test": "npm --prefix workers/rag-api test",
     "rag:deploy": "npm --prefix workers/rag-api run deploy",
     "crawler:test": "python -m pytest services/crawler/tests",
-    "check": "npm run type-check && npm run test && npm run rag:typecheck && npm run rag:test"
+    "check": "npm run type-check && npm run test && npm run rag:typecheck && npm run rag:test",
+    "evals:test": "python -m pytest evals -q"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.1",

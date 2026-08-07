@@ -67,6 +67,7 @@ etwa eine Firmenseite, eine Doku-Seite und eine Hochschulseite.
 | `answer_required_terms` | Begriffe, die in der Antwort stehen müssen — nicht nur im Kontext. |
 | `answer_forbidden_terms` | Begriffe, die in der Antwort nicht stehen dürfen. |
 | `answer_must_cite` | Die Antwort muss mindestens einen Quellenmarker `[n]` tragen. |
+| `answer_total_matches_list` | Eine genannte Gesamtzahl muss der Anzahl der aufgezählten Einträge entsprechen. |
 | `database_id`, `user_id` | Überschreiben die Werte der Kommandozeile für diesen Fall. |
 
 ## Welche Fragetypen eine neue Wissensbasis abdecken sollte
