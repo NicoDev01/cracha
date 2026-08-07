@@ -33,18 +33,21 @@ const components: Options['components'] = {
       {children}
     </p>
   ),
+  // An outside marker is drawn to the left of the list, so the list must reserve
+  // room for it as padding. As a margin it fell outside the message box, and the
+  // bubble's `overflow-hidden` sliced the leading digit off every item past nine.
   ol: ({ node: _node, children, className, ...props }) => (
-    <ol className={cn('my-3 ml-5 list-outside list-decimal space-y-2 leading-7', className)} {...props}>
+    <ol className={cn('my-3 ps-8 list-outside list-decimal space-y-2 leading-7', className)} {...props}>
       {children}
     </ol>
   ),
   ul: ({ node: _node, children, className, ...props }) => (
-    <ul className={cn('my-3 ml-5 list-outside list-disc space-y-2 leading-7 marker:text-brand-500', className)} {...props}>
+    <ul className={cn('my-3 ps-6 list-outside list-disc space-y-2 leading-7 marker:text-brand-500', className)} {...props}>
       {children}
     </ul>
   ),
   li: ({ node: _node, children, className, ...props }) => (
-    <li className={cn('pl-1', className)} {...props}>{children}</li>
+    <li className={className} {...props}>{children}</li>
   ),
   h1: ({ node: _node, children, className, ...props }) => (
     <h1 className={cn('mb-3 mt-6 text-xl font-semibold tracking-tight first:mt-0', className)} {...props}>{children}</h1>

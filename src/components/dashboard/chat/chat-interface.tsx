@@ -29,6 +29,7 @@ import {
   linkifyCitations,
   type IndexedSource,
 } from '@/lib/chat/citations';
+import { answerMetaParts } from '@/lib/chat/metadata';
 import type { Message as ChatMessage } from '@/types/chat';
 import {
   Conversation,
@@ -65,14 +66,6 @@ const formatTime = (date: Date) => new Intl.DateTimeFormat('de-DE', {
   hour: '2-digit',
   minute: '2-digit',
 }).format(date);
-
-const formatDuration = (ms: number) => (ms >= 1_000
-  ? `${new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 }).format(ms / 1_000)} s`
-  : `${Math.round(ms)} ms`);
-
-// `google/gemini-3.5-flash + Cloudflare AI Search` is mostly routing detail the
-// reader cannot act on — the vendor prefix goes, the model name stays.
-const formatModel = (model: string) => model.replace(/(^|\s)[\w.-]+\//g, '$1');
 
 const getHostname = (url: string) => {
   try {
@@ -299,17 +292,7 @@ export function ChatInterface() {
                     ? message.content
                     : linkifyCitations(message.content, messageSources);
                   const metadata = !isUser && !message.isStreaming ? message.metadata : undefined;
-                  const metaParts = metadata && metadata.query_time > 0
-                    ? [
-                        formatModel(metadata.model_used),
-                        metadata.retrieval_time
-                          ? `${formatDuration(metadata.query_time)} (davon ${formatDuration(metadata.retrieval_time)} Suche)`
-                          : formatDuration(metadata.query_time),
-                        messageSources.length > 0
-                          ? `${messageSources.length} ${messageSources.length === 1 ? 'Quelle' : 'Quellen'}`
-                          : null,
-                      ].filter(Boolean)
-                    : [];
+                  const metaParts = answerMetaParts(metadata, messageSources.length);
                   return (
                     <Message
                       key={message.id}
