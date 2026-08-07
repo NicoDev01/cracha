@@ -13,7 +13,8 @@ export interface StreamingGenerationResult {
   text: AsyncGenerator<string>
 }
 
-const GEMINI_MODEL = 'google/gemini-3.5-flash'
+/** Overridden by the GENERATION_MODEL var; this is what applies without one. */
+export const DEFAULT_GENERATION_MODEL = 'google/gemini-3.5-flash-lite'
 /**
  * The standby has to survive the same prompt as the primary. Its predecessor,
  * `@cf/meta/llama-3.3-70b-instruct-fp8-fast`, holds 24 000 tokens, while an
@@ -381,7 +382,7 @@ async function prepareTextStream(input: Parameters<typeof openModelStream>[0]): 
 }
 
 export async function streamGroundedAnswer(input: Parameters<typeof openModelStream>[0]): Promise<StreamingGenerationResult> {
-  const primaryModel = input.model || GEMINI_MODEL
+  const primaryModel = input.model || DEFAULT_GENERATION_MODEL
   try {
     return {
       model: primaryModel,

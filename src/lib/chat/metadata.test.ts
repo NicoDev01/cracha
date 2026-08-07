@@ -11,12 +11,12 @@ describe('formatModel', () => {
   })
 
   it('drops the vendor prefix but keeps the rest of the line', () => {
-    expect(formatModel('google/gemini-3.5-flash + Cloudflare AI Search'))
-      .toBe('gemini-3.5-flash + Cloudflare AI Search')
+    expect(formatModel('google/gemini-3.5-flash-lite + Cloudflare AI Search'))
+      .toBe('gemini-3.5-flash-lite + Cloudflare AI Search')
   })
 
   it('leaves a plain model name untouched', () => {
-    expect(formatModel('gemini-3.5-flash')).toBe('gemini-3.5-flash')
+    expect(formatModel('gemini-3.5-flash-lite')).toBe('gemini-3.5-flash-lite')
   })
 })
 
@@ -34,12 +34,12 @@ describe('answerMetaParts', () => {
   const metadata = {
     query_time: 18_800,
     retrieval_time: 11_600,
-    model_used: 'google/gemini-3.5-flash + Cloudflare AI Search',
+    model_used: 'google/gemini-3.5-flash-lite + Cloudflare AI Search',
   }
 
   it('names the model, the split timing and the source count', () => {
     expect(answerMetaParts(metadata, 12)).toEqual([
-      'gemini-3.5-flash + Cloudflare AI Search',
+      'gemini-3.5-flash-lite + Cloudflare AI Search',
       '18,8 s (davon 11,6 s Suche)',
       '12 Quellen',
     ])

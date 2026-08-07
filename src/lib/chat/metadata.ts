@@ -9,7 +9,7 @@ export function formatDuration(ms: number): string {
 }
 
 /**
- * Model ids arrive as routing paths — `google/gemini-3.5-flash`,
+ * Model ids arrive as routing paths — `google/gemini-3.5-flash-lite`,
  * `@cf/meta/llama-3.3-70b`. The route is noise the reader cannot act on, so only
  * the model name survives. The raw id stays in the tooltip for debugging.
  */

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getWorkerEnv } from '@/lib/server/cloudflare'
-import { streamGroundedAnswer } from '@/lib/server/generation'
+import { DEFAULT_GENERATION_MODEL, streamGroundedAnswer } from '@/lib/server/generation'
 import { getAuthenticatedUser } from '@/lib/supabase/server'
 import type { Source } from '@/types/chat'
 
@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
       try {
         const generated = await streamGroundedAnswer({
           ai: env.AI,
-          model: env.GENERATION_MODEL || 'google/gemini-3.5-flash',
+          model: env.GENERATION_MODEL || DEFAULT_GENERATION_MODEL,
           question,
           history: messages,
           context: retrieval.context as string,
