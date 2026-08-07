@@ -8,6 +8,8 @@ type GatewayAIStreamRun = (
 
 export interface StreamingGenerationResult {
   model: string
+  /** The primary model failed and the standby answered instead. */
+  fallback: boolean
   text: AsyncGenerator<string>
 }
 
@@ -347,6 +349,7 @@ export async function streamGroundedAnswer(input: Parameters<typeof openModelStr
   try {
     return {
       model: primaryModel,
+      fallback: false,
       text: await prepareTextStream({ ...input, model: primaryModel }),
     }
   } catch (error) {
@@ -357,8 +360,12 @@ export async function streamGroundedAnswer(input: Parameters<typeof openModelStr
       fallback_model: LLAMA_FALLBACK_MODEL,
       error: error instanceof Error ? error.message : 'unknown',
     }))
+    // A flag, not a suffix on the model name. The suffix reached the reader as
+    // `(fallback: primary-model-error)` and forced the interface to parse a
+    // string to learn something the server already knew.
     return {
-      model: `${LLAMA_FALLBACK_MODEL} (fallback: primary-model-error)`,
+      model: LLAMA_FALLBACK_MODEL,
+      fallback: true,
       text: await prepareTextStream({ ...input, model: LLAMA_FALLBACK_MODEL }),
     }
   }

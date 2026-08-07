@@ -23,8 +23,11 @@ export interface ChatResponse {
   metadata: {
     query_time: number
     retrieval_time?: number
-    tokens_used: number
+    /** The search was reused from cache, so its time is not a search time. */
+    retrieval_cached?: boolean
     model_used: string
+    /** The primary model failed and the standby answered instead. */
+    fallback?: boolean
   }
 }
 

@@ -15,7 +15,7 @@ interface RawSource {
 interface Usage {
   latency_ms?: number
   retrieval_ms?: number
-  llm_tokens?: number
+  retrieval_cached?: boolean
 }
 
 interface RAGWorkerResponse {
@@ -24,16 +24,19 @@ interface RAGWorkerResponse {
   sources?: RawSource[]
   usage?: Usage
   model?: string
+  fallback?: boolean
 }
 
 interface StreamMeta {
   sources?: RawSource[]
   model?: string
+  fallback?: boolean
 }
 
 interface StreamDone {
   usage?: Usage
   model?: string
+  fallback?: boolean
 }
 
 export interface ChatStreamHandlers {
@@ -80,8 +83,9 @@ class ChatAPIClient {
       handlers.onDone({
         query_time: dataBody.usage?.latency_ms ?? 0,
         retrieval_time: dataBody.usage?.retrieval_ms,
-        tokens_used: dataBody.usage?.llm_tokens ?? 0,
+        retrieval_cached: dataBody.usage?.retrieval_cached === true,
         model_used: model,
+        fallback: dataBody.fallback === true,
       })
       return
     }
@@ -93,6 +97,7 @@ class ChatAPIClient {
     let buffer = ''
     let finished = false
     let currentModel = 'Cloudflare AI Search'
+    let usedFallback = false
 
     const processFrame = (frame: string) => {
       const lines = frame.split(/\r?\n/)
@@ -106,17 +111,20 @@ class ChatAPIClient {
       const data = JSON.parse(rawData) as StreamMeta & StreamDone & { text?: string; message?: string }
       if (event === 'meta') {
         currentModel = data.model ?? currentModel
+        usedFallback = data.fallback === true
         handlers.onStart({ sources: mapSources(data.sources), model: currentModel })
       } else if (event === 'delta' && typeof data.text === 'string') {
         handlers.onDelta(data.text)
       } else if (event === 'done') {
         currentModel = data.model ?? currentModel
+        usedFallback = data.fallback ?? usedFallback
         finished = true
         handlers.onDone({
           query_time: data.usage?.latency_ms ?? 0,
           retrieval_time: data.usage?.retrieval_ms,
-          tokens_used: data.usage?.llm_tokens ?? 0,
+          retrieval_cached: data.usage?.retrieval_cached === true,
           model_used: currentModel,
+          fallback: usedFallback,
         })
       } else if (event === 'error') {
         throw new Error(data.message ?? 'Die Antwort konnte nicht erzeugt werden.')
@@ -145,7 +153,6 @@ class ChatAPIClient {
     let sources: Source[] = []
     let metadata: ChatResponse['metadata'] = {
       query_time: 0,
-      tokens_used: 0,
       model_used: 'Cloudflare AI Search',
     }
     await this.streamChatQuery(request, {

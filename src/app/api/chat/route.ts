@@ -26,7 +26,7 @@ interface RetrievalResponse {
     authoritative?: boolean
   }>
   sources?: Array<{ id: string; title: string; url: string; snippet: string; score: number; chunk_index: string }>
-  usage?: { latency_ms?: number }
+  usage?: { latency_ms?: number; cached?: boolean }
   error?: string
 }
 
@@ -86,7 +86,11 @@ export async function POST(request: NextRequest) {
         controller.enqueue(encodeEvent('meta', { sources: [], model }))
         controller.enqueue(encodeEvent('delta', { text: 'Ich konnte in dieser Wissensbasis keine ausreichend relevanten Informationen finden.' }))
         controller.enqueue(encodeEvent('done', {
-          usage: { latency_ms: Date.now() - started, retrieval_ms: retrieval.usage?.latency_ms ?? 0, llm_tokens: 0 },
+          usage: {
+            latency_ms: Date.now() - started,
+            retrieval_ms: retrieval.usage?.latency_ms ?? 0,
+            retrieval_cached: retrieval.usage?.cached === true,
+          },
           model,
         }))
         controller.close()
@@ -106,15 +110,20 @@ export async function POST(request: NextRequest) {
           blocks: retrieval.blocks ?? [],
         })
         const model = `${generated.model} + Cloudflare AI Search`
-        controller.enqueue(encodeEvent('meta', { sources, model }))
+        controller.enqueue(encodeEvent('meta', { sources, model, fallback: generated.fallback }))
 
         for await (const text of generated.text) {
           controller.enqueue(encodeEvent('delta', { text }))
         }
 
         controller.enqueue(encodeEvent('done', {
-          usage: { latency_ms: Date.now() - started, retrieval_ms: retrieval.usage?.latency_ms ?? 0, llm_tokens: 0 },
+          usage: {
+            latency_ms: Date.now() - started,
+            retrieval_ms: retrieval.usage?.latency_ms ?? 0,
+            retrieval_cached: retrieval.usage?.cached === true,
+          },
           model,
+          fallback: generated.fallback,
         }))
       } catch (error) {
         console.error(JSON.stringify({ event: 'chat_generation_failed', error: error instanceof Error ? error.message : 'unknown' }))

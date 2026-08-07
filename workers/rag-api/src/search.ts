@@ -469,14 +469,35 @@ async function resolveHubPage(
   const candidates = hubCandidates(ranked, queryTokens)
     .filter((candidate) => !requireNamed || candidate.namesQuery)
     .slice(0, HUB_MAX_PROBES)
-  for (const candidate of candidates) {
+
+  // Looked up together, decided in rank order. Sequentially this cost up to
+  // three round trips before the first candidate could be ruled out, and each
+  // one may fall back to a paged key scan — on an enumerating question, the
+  // very kind that already retrieves the most.
+  const located = await Promise.all(candidates.map(async (candidate) => {
     const key = await itemKeyFor(candidate.url)
     try {
       const info = await findItemByUrl(items, key, candidate.url)
-      if (!info) {
-        console.log(JSON.stringify({ event: 'hub_probe_miss', url: candidate.url, key }))
-        continue
-      }
+      if (!info) console.log(JSON.stringify({ event: 'hub_probe_miss', url: candidate.url, key }))
+      return { candidate, key, info }
+    } catch (error) {
+      // A swallowed failure here is indistinguishable from "no collection page
+      // exists", which is exactly what made this hard to diagnose in production.
+      console.log(JSON.stringify({
+        event: 'hub_probe_failed',
+        url: candidate.url,
+        error: error instanceof Error ? error.message : 'unknown',
+      }))
+      return { candidate, key, info: null }
+    }
+  }))
+
+  // The page text is fetched one at a time: the first candidate that resolves is
+  // almost always the right one, and reading all three would trade the latency
+  // saved above for chunk requests nobody uses.
+  for (const { candidate, key, info } of located) {
+    if (!info) continue
+    try {
       const { text, truncated } = await readItemText(items, info.id)
       if (!text.trim()) {
         console.log(JSON.stringify({ event: 'hub_probe_empty', url: candidate.url, item_id: info.id }))
@@ -497,10 +518,8 @@ async function resolveHubPage(
         truncated,
       }
     } catch (error) {
-      // A swallowed failure here is indistinguishable from "no collection page
-      // exists", which is exactly what made this hard to diagnose in production.
       console.log(JSON.stringify({
-        event: 'hub_probe_failed',
+        event: 'hub_read_failed',
         url: candidate.url,
         error: error instanceof Error ? error.message : 'unknown',
       }))

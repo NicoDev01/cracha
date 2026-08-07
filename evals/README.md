@@ -1,12 +1,35 @@
-# Retrieval-Evaluation
+# Evaluation
 
-Deterministische Prüfung des Retrievals gegen eine echte, indexierte Wissensbasis.
-Bewertet wird der Kontext, den `/query` liefert — nicht der Text des Sprachmodells.
-Damit misst der Lauf genau das, was CraCha selbst entscheidet.
+Prüfung gegen eine echte, indexierte Wissensbasis, in zwei Stufen:
+
+1. **Retrieval** — der Kontext, den `/query` liefert. Deterministisch, braucht
+   nur den Query-Token, läuft immer.
+2. **Antwort** — der Text, den das Modell daraus schreibt. Läuft nur mit
+   `--chat-endpoint` und kostet einen echten Modellaufruf pro Fall.
+
+Stufe 2 ist nicht optional aus Bequemlichkeit. Sie deckt eine ganze Fehlerklasse
+ab, die Stufe 1 nicht sehen kann: Auf `webmen.de` lieferte das Retrieval alle 34
+Teammitglieder in den Kontext, und die Antwort zählte trotzdem 32 auf, weil das
+Modell drei Personen in einen Aufzählungspunkt gepackt hatte.
 
 ```bash
 python evals/evaluate.py --endpoint https://<rag-api> --token <RAG_QUERY_SECRET> --database-id <id> --user-id <uid> --cases evals/cases.webmen.json evals/cases.example.json
 ```
+
+## Antworten mitbewerten
+
+`/api/chat` verlangt eine angemeldete Sitzung, deshalb braucht der Lauf das
+Cookie aus dem Browser: Entwicklertools → Netzwerk → ein `/api/chat`-Request →
+Request-Header → `Cookie` kopieren.
+
+```bash
+python evals/evaluate.py --endpoint https://<rag-api> --token <RAG_QUERY_SECRET> --database-id <id> --user-id <uid> --cases evals/cases.webmen.json --chat-endpoint https://<app>/api/chat --chat-cookie "<cookie>"
+```
+
+Fälle mit Antwort-Feldern werden ohne `--chat-endpoint` übersprungen und am Ende
+gezählt — ein grüner Lauf, der das Modell nie gefragt hat, sagt das auch.
+Antwortet das Ersatzmodell, steht das am Fall: dann misst der Lauf das
+Ersatzmodell, nicht das primäre.
 
 ## Vor dem Deploy messen
 
@@ -40,6 +63,10 @@ etwa eine Firmenseite, eine Doku-Seite und eine Hochschulseite.
 | `min_source_count` | Wie viele Quellen mindestens zurückkommen. Standard 1. |
 | `expect_collection_page` | `true`/`false`: ob die Frage als Aufzählung behandelt werden soll. |
 | `expect_complete_collection` | Die Übersichtsseite muss vollständig in den Kontext passen. |
+| `answer_min_list_items` | Wie viele verschiedene Aufzählungspunkte die Antwort mindestens haben muss. |
+| `answer_required_terms` | Begriffe, die in der Antwort stehen müssen — nicht nur im Kontext. |
+| `answer_forbidden_terms` | Begriffe, die in der Antwort nicht stehen dürfen. |
+| `answer_must_cite` | Die Antwort muss mindestens einen Quellenmarker `[n]` tragen. |
 | `database_id`, `user_id` | Überschreiben die Werte der Kommandozeile für diesen Fall. |
 
 ## Welche Fragetypen eine neue Wissensbasis abdecken sollte

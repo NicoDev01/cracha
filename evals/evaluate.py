@@ -23,6 +23,34 @@ def normalize(value: str) -> str:
     return f" {re.sub(r'[^0-9a-z]+', ' ', stripped).strip()} "
 
 
+LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(.*)$")
+CITATION_MARKER = re.compile(r"\[\d+\]")
+ANSWER_FIELDS = (
+    "answer_min_list_items",
+    "answer_required_terms",
+    "answer_forbidden_terms",
+    "answer_must_cite",
+)
+
+
+def list_items(answer: str) -> list[str]:
+    """The entries an enumerating answer actually produced.
+
+    Counting them is the check the context assertions cannot make: retrieval
+    delivered all 34 team members and the answer still listed 32, because it
+    packed three people into one bullet.
+    """
+    items = []
+    for line in answer.splitlines():
+        match = LIST_ITEM.match(line)
+        if not match:
+            continue
+        body = CITATION_MARKER.sub("", match.group(1)).strip(" .;,")
+        if body:
+            items.append(body)
+    return items
+
+
 def query(endpoint: str, token: str, database_id: str, user_id: str, question: str) -> dict:
     request = urllib.request.Request(
         f"{endpoint.rstrip('/')}/query",
@@ -42,6 +70,78 @@ def query(endpoint: str, token: str, database_id: str, user_id: str, question: s
     )
     with urllib.request.urlopen(request, timeout=120) as response:
         return json.load(response)
+
+
+def ask(chat_endpoint: str, cookie: str, database_id: str, question: str) -> dict:
+    """Read one answer off the chat endpoint's SSE stream.
+
+    This is the deployed pipeline, generation included — the only place where a
+    weak enumeration or a dropped citation becomes visible.
+    """
+    request = urllib.request.Request(
+        chat_endpoint,
+        data=json.dumps(
+            {"tenant_id": database_id, "question": question, "top_k": 8, "messages": []}
+        ).encode(),
+        headers={"Content-Type": "application/json", "Cookie": cookie},
+        method="POST",
+    )
+    answer = ""
+    fallback = False
+    event = ""
+    with urllib.request.urlopen(request, timeout=300) as response:
+        for raw in response:
+            line = raw.decode("utf-8").rstrip("\r\n")
+            if line.startswith("event:"):
+                event = line[6:].strip()
+            elif line.startswith("data:"):
+                payload = json.loads(line[5:].strip())
+                if event == "delta":
+                    answer += payload.get("text", "")
+                elif event in {"meta", "done"}:
+                    fallback = payload.get("fallback", fallback) is True
+                elif event == "error":
+                    raise RuntimeError(payload.get("message", "generation failed"))
+    return {"answer": answer, "fallback": fallback}
+
+
+def evaluate_answer(case: dict, answer: str) -> list[str]:
+    """Assertions about the text the reader sees, not the context behind it."""
+    reasons: list[str] = []
+    normalized = normalize(answer)
+
+    minimum = case.get("answer_min_list_items")
+    if minimum is not None:
+        items = list_items(answer)
+        # Distinct, because a model that repeats an entry has not found more.
+        unique = {normalize(item) for item in items}
+        if len(unique) < int(minimum):
+            reasons.append(f"answer listed {len(unique)} items, expected {minimum}")
+
+    missing = [
+        term
+        for term in case.get("answer_required_terms", [])
+        if normalize(term).strip() not in normalized
+    ]
+    if missing:
+        shown = ", ".join(missing[:5])
+        extra = f" (+{len(missing) - 5})" if len(missing) > 5 else ""
+        reasons.append(f"answer missing: {shown}{extra}")
+
+    present = [
+        term
+        for term in case.get("answer_forbidden_terms", [])
+        if normalize(term).strip() in normalized
+    ]
+    if present:
+        reasons.append(f"answer contains forbidden: {present[:5]}")
+
+    if case.get("answer_must_cite") and not CITATION_MARKER.search(answer):
+        reasons.append("answer carries no citation marker")
+
+    if not answer.strip():
+        reasons.append("empty answer")
+    return reasons
 
 
 def evaluate_case(case: dict, result: dict) -> tuple[bool, str]:
@@ -136,20 +236,22 @@ def evaluate_case(case: dict, result: dict) -> tuple[bool, str]:
     return not reasons, detail
 
 
-def run_suite(path: Path, args: argparse.Namespace) -> tuple[int, int]:
+def run_suite(path: Path, args: argparse.Namespace) -> tuple[int, int, int]:
     cases = json.loads(path.read_text(encoding="utf-8"))
     database_id = args.database_id
     user_id = args.user_id
     passed = 0
+    skipped_answers = 0
     print(f"\n=== {path.name} ({len(cases)} Fälle) ===")
     for case in cases:
         # A suite may target its own knowledge base, so one run can cover a
         # company site, a documentation site and a university site at once.
+        case_database = case.get("database_id", database_id)
         try:
             result = query(
                 args.endpoint,
                 args.token,
-                case.get("database_id", database_id),
+                case_database,
                 case.get("user_id", user_id),
                 case["question"],
             )
@@ -157,10 +259,31 @@ def run_suite(path: Path, args: argparse.Namespace) -> tuple[int, int]:
             print(f"FAIL: {case['question']} [request failed: {type(error).__name__}: {error}]")
             continue
         ok, detail = evaluate_case(case, result)
+
+        wants_answer = any(case.get(field) is not None for field in ANSWER_FIELDS)
+        if wants_answer and not args.chat_endpoint:
+            skipped_answers += 1
+            detail += " [answer checks skipped: no --chat-endpoint]"
+        elif wants_answer:
+            try:
+                spoken = ask(args.chat_endpoint, args.chat_cookie, case_database, case["question"])
+            except Exception as error:  # noqa: BLE001
+                ok = False
+                detail += f" [chat failed: {type(error).__name__}: {error}]"
+            else:
+                answer_reasons = evaluate_answer(case, spoken["answer"])
+                # A run against the standby model measures the standby model.
+                # Saying so beats an unexplained regression in the numbers.
+                if spoken["fallback"]:
+                    detail += " [answered by the fallback model]"
+                if answer_reasons:
+                    ok = False
+                    detail += " " + "; ".join(answer_reasons)
+
         passed += int(ok)
         print(f"{'PASS' if ok else 'FAIL'}: {case['question']}{detail}")
     print(f"{passed}/{len(cases)} bestanden in {path.name}")
-    return passed, len(cases)
+    return passed, len(cases), skipped_answers
 
 
 def main() -> int:
@@ -178,15 +301,31 @@ def main() -> int:
         default=[Path("evals/cases.example.json")],
         help="Eine oder mehrere Fall-Dateien.",
     )
+    parser.add_argument(
+        "--chat-endpoint",
+        default="",
+        help="Voll qualifizierte /api/chat-URL. Ohne sie werden Antwort-Prüfungen übersprungen.",
+    )
+    parser.add_argument(
+        "--chat-cookie",
+        default="",
+        help="Session-Cookie für --chat-endpoint, wie im Browser gesendet.",
+    )
     args = parser.parse_args()
 
     passed = 0
     total = 0
+    skipped = 0
     for path in args.cases:
-        suite_passed, suite_total = run_suite(path, args)
+        suite_passed, suite_total, suite_skipped = run_suite(path, args)
         passed += suite_passed
         total += suite_total
+        skipped += suite_skipped
     print(f"\n{passed}/{total} bestanden insgesamt")
+    if skipped:
+        # Loud, because a green run that never asked the model proves less than
+        # it looks like it does.
+        print(f"{skipped} Fall/Fälle ohne Antwort-Prüfung — --chat-endpoint fehlt.")
     return 0 if passed == total else 1
 
 

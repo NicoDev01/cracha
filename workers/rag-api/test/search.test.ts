@@ -479,6 +479,41 @@ describe('enumerating retrieval', () => {
     expect(result.sources.length).toBeGreaterThan(8)
   })
 
+  it('looks candidates up at the same time instead of one after another', async () => {
+    // Three candidates probed in sequence meant three full round trips before
+    // the first could be ruled out, on exactly the questions that retrieve most.
+    let inFlight = 0
+    let peak = 0
+    const instance = {
+      search: async () => ({ search_query: 'team webmen', chunks }),
+      items: {
+        list: async ({ per_page: perPage, page }: { per_page?: number; page?: number }) => {
+          inFlight += 1
+          peak = Math.max(peak, inFlight)
+          await new Promise((resolve) => setTimeout(resolve, 5))
+          inFlight -= 1
+          return {
+            result: page === 1 || perPage === 10
+              ? [{ id: 'team-item', key: await itemKeyFor(TEAM_URL), status: 'completed', metadata: { url: TEAM_URL, title: 'Team' } }]
+              : [],
+            result_info: { count: 1, page: page ?? 1, per_page: perPage ?? 50, total_count: 1 },
+          }
+        },
+        get: () => ({
+          chunks: async () => ({
+            result: [{ id: 'a', text: names.join('\n'), start_byte: 0, end_byte: 900 }],
+            result_info: { count: 1, total: 1, limit: 100, offset: 0 },
+          }),
+        }),
+      },
+    } as unknown as Parameters<typeof retrieve>[0]
+
+    const result = await retrieve(instance, 'Wer sind die Teammitglieder von Webmen?', 8)
+
+    expect(result.sources[0].url).toBe(TEAM_URL)
+    expect(peak).toBeGreaterThan(1)
+  })
+
   it('marks a collection page that did not fit as partial', async () => {
     // Silently cutting the overview produced a confidently incomplete list,
     // because the prompt forbids hedging about completeness.

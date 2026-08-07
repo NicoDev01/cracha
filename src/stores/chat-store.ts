@@ -64,7 +64,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
               timestamp: new Date(),
               sources,
               isStreaming: true,
-              metadata: { query_time: 0, tokens_used: 0, model_used: model },
+              metadata: { query_time: 0, model_used: model },
             }],
             isLoading: false,
             isStreaming: true,

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
+  AlertTriangle,
   Bot,
   Check,
   Copy,
@@ -29,7 +30,7 @@ import {
   linkifyCitations,
   type IndexedSource,
 } from '@/lib/chat/citations';
-import { answerMetaParts } from '@/lib/chat/metadata';
+import { answerMetaParts, FALLBACK_NOTICE } from '@/lib/chat/metadata';
 import type { Message as ChatMessage } from '@/types/chat';
 import {
   Conversation,
@@ -359,6 +360,12 @@ export function ChatInterface() {
                               {copiedId === message.id ? <Check className="mr-1 size-3.5 text-success-600" /> : <Copy className="mr-1 size-3.5" />}
                               {copiedId === message.id ? 'Kopiert' : 'Kopieren'}
                             </Button>
+                            {metadata?.fallback && (
+                              <span className="inline-flex items-center gap-1 rounded-md bg-warning-50 px-1.5 py-0.5 text-[11px] font-medium text-warning-700 dark:bg-warning-500/15 dark:text-warning-400">
+                                <AlertTriangle className="size-3" aria-hidden="true" />
+                                {FALLBACK_NOTICE}
+                              </span>
+                            )}
                             {metaParts.length > 0 && (
                               <span
                                 className="text-[11px] leading-5 text-gray-400 dark:text-gray-500"

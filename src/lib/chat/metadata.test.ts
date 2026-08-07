@@ -15,11 +15,6 @@ describe('formatModel', () => {
       .toBe('gemini-3.5-flash + Cloudflare AI Search')
   })
 
-  it('says in words that the standby model answered', () => {
-    expect(formatModel('@cf/meta/llama-3.3-70b (fallback: primary-model-error)'))
-      .toBe('llama-3.3-70b (Ersatzmodell)')
-  })
-
   it('leaves a plain model name untouched', () => {
     expect(formatModel('gemini-3.5-flash')).toBe('gemini-3.5-flash')
   })
@@ -39,7 +34,6 @@ describe('answerMetaParts', () => {
   const metadata = {
     query_time: 18_800,
     retrieval_time: 11_600,
-    tokens_used: 0,
     model_used: 'google/gemini-3.5-flash + Cloudflare AI Search',
   }
 
@@ -61,6 +55,13 @@ describe('answerMetaParts', () => {
 
   it('leaves out the search share when it was not measured', () => {
     expect(answerMetaParts({ ...metadata, retrieval_time: undefined }, 3)[1]).toBe('18,8 s')
+  })
+
+  it('says the search was reused instead of reporting a search time', () => {
+    // 4 ms is the cache read, not a retrieval. Printing it as "davon 4 ms Suche"
+    // would read as a retrieval that got 2900x faster.
+    expect(answerMetaParts({ ...metadata, query_time: 7_200, retrieval_time: 4, retrieval_cached: true }, 3)[1])
+      .toBe('7,2 s (Suche zwischengespeichert)')
   })
 
   it('stays empty until the answer is timed', () => {

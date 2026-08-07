@@ -70,5 +70,9 @@ export interface RetrievalResponse {
   blocks: ContextBlock[]
   sources: Source[]
   search_query: string
-  usage: { latency_ms: number }
+  usage: {
+    latency_ms: number
+    /** Served from the retrieval cache, so the latency is not a search time. */
+    cached?: boolean
+  }
 }

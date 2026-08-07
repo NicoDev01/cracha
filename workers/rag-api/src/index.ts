@@ -1,4 +1,5 @@
 import { authenticateIngest, authenticateQuery } from './auth'
+import { readRetrievalCache, retrievalCacheKey, writeRetrievalCache } from './cache'
 import { databaseForIngest, databaseForUser, removeFromUserIndex, saveDatabase } from './database'
 import { assertText, HttpError, json, readJson } from './http'
 import { deleteInstanceIfExists, deleteStaleItems, ensureInstance, instanceIdFor, retrieve, uploadPages } from './search'
@@ -71,6 +72,16 @@ async function handleQuery(request: Request, env: Env): Promise<Response> {
 
   const topK = Number.isFinite(body.top_k) ? Math.min(Math.max(Number(body.top_k), 1), 12) : 8
   const messages = validHistory(body.messages)
+
+  // Only the search is cached, never the answer. Retrieval is deterministic for
+  // a given index version and is the larger half of the wait; the answer is
+  // written fresh every time, so nobody is served yesterday's wording.
+  const cacheKey = await retrievalCacheKey(database, question, topK, messages)
+  const cached = await readRetrievalCache(env, cacheKey)
+  if (cached) {
+    return json(request, env, { ...cached, usage: { latency_ms: Date.now() - started, cached: true } })
+  }
+
   const instance = env.AI_SEARCH.get(database.ai_search_instance_id ?? (await instanceIdFor(databaseId)))
   let retrieval
   try {
@@ -82,15 +93,16 @@ async function handleQuery(request: Request, env: Env): Promise<Response> {
     throw error
   }
   const { context, blocks, sources, searchQuery } = retrieval
-  return json(request, env, {
+  const payload = {
     context,
     // The generator needs the blocks separately to verify citations against the
     // exact text each source number stands for.
     blocks,
     sources,
     search_query: searchQuery,
-    usage: { latency_ms: Date.now() - started },
-  })
+  }
+  await writeRetrievalCache(env, cacheKey, payload)
+  return json(request, env, { ...payload, usage: { latency_ms: Date.now() - started, cached: false } })
 }
 
 async function handleIngest(request: Request, env: Env): Promise<Response> {

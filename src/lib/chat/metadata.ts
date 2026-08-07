@@ -9,16 +9,12 @@ export function formatDuration(ms: number): string {
 }
 
 /**
- * Model ids arrive as routing paths — `google/gemini-3.5-flash`, `@cf/meta/llama-3.3-70b`
- * — and pick up the marker the server appends when the primary model failed. The
- * route is noise the reader cannot act on; that the answer came from the standby
- * model is not, because its answers read differently. The raw id stays in the
- * tooltip for anyone debugging.
+ * Model ids arrive as routing paths — `google/gemini-3.5-flash`,
+ * `@cf/meta/llama-3.3-70b`. The route is noise the reader cannot act on, so only
+ * the model name survives. The raw id stays in the tooltip for debugging.
  */
 export function formatModel(model: string): string {
-  return model
-    .replace(/\(fallback:[^)]*\)/g, '(Ersatzmodell)')
-    .replace(/(^|\s)(@?[\w.-]+\/)+/g, '$1')
+  return model.replace(/(^|\s)(@?[\w.-]+\/)+/g, '$1')
 }
 
 /**
@@ -28,11 +24,24 @@ export function formatModel(model: string): string {
  */
 export function answerMetaParts(metadata: Metadata | undefined, sourceCount: number): string[] {
   if (!metadata || metadata.query_time <= 0) return []
+  const total = formatDuration(metadata.query_time)
+  // A cached search returns in milliseconds. Reporting that as search time would
+  // suggest the retrieval got faster, when it simply did not run.
+  const timing = metadata.retrieval_cached
+    ? `${total} (Suche zwischengespeichert)`
+    : metadata.retrieval_time
+      ? `${total} (davon ${formatDuration(metadata.retrieval_time)} Suche)`
+      : total
   return [
     formatModel(metadata.model_used),
-    metadata.retrieval_time
-      ? `${formatDuration(metadata.query_time)} (davon ${formatDuration(metadata.retrieval_time)} Suche)`
-      : formatDuration(metadata.query_time),
+    timing,
     sourceCount > 0 ? `${sourceCount} ${sourceCount === 1 ? 'Quelle' : 'Quellen'}` : null,
   ].filter((part): part is string => part !== null)
 }
+
+/**
+ * A failed primary model is not a detail. Its standby writes noticeably weaker
+ * answers — shorter enumerations above all — so the reader has to be able to
+ * tell the two apart, and a grey run-on line does not do that.
+ */
+export const FALLBACK_NOTICE = 'Ersatzmodell — das primäre Modell war nicht erreichbar'
