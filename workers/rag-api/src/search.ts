@@ -545,12 +545,17 @@ export async function retrieve(
     { role: 'user', content: question },
   ]
   const maxResults = intent.list ? 50 : Math.min(Math.max(topK * 4, 20), 40)
-  const search = (retrievalType: 'hybrid' | 'vector', rerank: boolean) => instance.search({
+  const search = (retrievalType: 'hybrid' | 'vector', rerank: boolean, rewrite: boolean) => instance.search({
     messages,
     ai_search_options: {
-      // Enabled for the first turn as well. Colloquial phrasing and typos
-      // otherwise reach the index verbatim on exactly the question that matters.
-      query_rewrite: { enabled: true },
+      // AI Search rewrites the query with an LLM inside every search call, so
+      // asking both paths to rewrite bought two identical calls per question —
+      // the gateway log showed the same sentence returned twice, 785 ms and
+      // 831 ms. Only the keyword side needs it, because colloquial phrasing and
+      // typos are what break a literal match. The vector side keeps the question
+      // as typed: embeddings tolerate typos, and letting the two paths search
+      // for differently worded things is the reason we run both.
+      query_rewrite: { enabled: rewrite },
       retrieval: {
         retrieval_type: retrievalType,
         fusion_method: 'rrf',
@@ -572,9 +577,23 @@ export async function retrieve(
   // supplies keyword precision. Local rank fusion keeps either path from
   // discarding a useful result solely because one model assigned a low score.
   const [hybridResult, vectorResult] = await Promise.allSettled([
-    search('hybrid', true),
-    search('vector', false),
+    search('hybrid', true, true),
+    search('vector', false, false),
   ])
+  // One path failing is survivable and stays survivable — but it silently halves
+  // recall, and nothing said so. The gateway log showed two query rewrites and
+  // only one embedding for the same question, which is what a half-failed
+  // retrieval looks like from the outside.
+  for (const [path, result] of [['hybrid', hybridResult], ['vector', vectorResult]] as const) {
+    if (result.status === 'rejected') {
+      console.warn(JSON.stringify({
+        event: 'search_path_failed',
+        path,
+        error: result.reason instanceof Error ? result.reason.message : 'unknown',
+      }))
+    }
+  }
+
   const successfulResults = [hybridResult, vectorResult]
     .filter((result): result is PromiseFulfilledResult<AiSearchSearchResponse> => result.status === 'fulfilled')
     .map((result) => result.value)
@@ -600,7 +619,12 @@ export async function retrieve(
   const hub = effectiveIntent.list
     ? await resolveHubPage(instance, rankedChunks, queryTokens, !intent.explicitList)
     : null
-  const searchQuery = [...new Set(successfulResults.map((result) => result.search_query).filter(Boolean))].join(' | ')
+  // Only the hybrid path rewrites, so its query is the one a reader can act on.
+  // The vector path now reports the question as typed, and printing both would
+  // read as two searches having disagreed rather than as one having been cleaned.
+  const searchQuery = (hybridResult.status === 'fulfilled' ? hybridResult.value.search_query : '')
+    || successfulResults.map((result) => result.search_query).find(Boolean)
+    || question
 
   return { ...packContext(rankedChunks, hub, effectiveIntent, topK), searchQuery }
 }

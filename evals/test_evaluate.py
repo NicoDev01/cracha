@@ -46,6 +46,15 @@ def test_citation_markers_are_not_read_as_numbers() -> None:
     assert contradicting_totals(answer, 34) == []
 
 
+def test_a_total_after_a_bulleted_list_is_still_checked() -> None:
+    # Production, 18:15: the standby model wrote 34 bullets and closed with
+    # "Es gibt insgesamt 37 Teammitglieder." Three hours earlier the same model
+    # numbered the same 34 entries and got the total right, which is why the
+    # prompt now demands a numbered list whenever a total is asked for.
+    answer = f"Das Webmen-Team besteht aus [1]:\n\n{LIST}\n\nEs gibt insgesamt 37 Teammitglieder. [1]"
+    assert contradicting_totals(answer, 34) == [37]
+
+
 def test_an_answer_without_a_list_claims_nothing() -> None:
     assert contradicting_totals("Webmen wurde 1999 gegruendet [1].", 0) == []
 

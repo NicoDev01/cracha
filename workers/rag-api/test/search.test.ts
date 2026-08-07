@@ -43,10 +43,10 @@ describe('input validation', () => {
 
 describe('retrieval mapping', () => {
   it('keeps diverse chunks per source and drops near-duplicates', async () => {
-    let searchRequest: AiSearchSearchRequest | undefined
+    const requests: AiSearchSearchRequest[] = []
     const instance = {
       search: async (request: AiSearchSearchRequest) => {
-        searchRequest = request
+        requests.push(request)
         return ({
         search_query: 'Laravel',
         chunks: [
@@ -86,23 +86,43 @@ describe('retrieval mapping', () => {
     expect(result.context).toContain('Laravel provides queues.')
     // Two distinct chunks per source, but the repeated one is dropped.
     expect(result.blocks).toHaveLength(2)
-    expect(searchRequest).toMatchObject({
+    expect(requests[0]).toMatchObject({
       messages: expect.arrayContaining([{ role: 'user', content: 'Wie deploye ich es?' }]),
-      ai_search_options: { query_rewrite: { enabled: true } },
     })
     expect(result.searchQuery).toBe('Laravel')
   })
 
-  it('rewrites the very first question too', async () => {
-    let searchRequest: AiSearchSearchRequest | undefined
+  it('rewrites the query once, on the keyword path only', async () => {
+    // Both paths rewriting meant AI Search ran the same LLM rewrite twice per
+    // question and returned the identical sentence both times.
+    const requests: AiSearchSearchRequest[] = []
     const instance = {
       search: async (request: AiSearchSearchRequest) => {
-        searchRequest = request
+        requests.push(request)
         return { search_query: 'x', chunks: [] }
       },
     }
     await retrieve(instance, 'wer ist im team von weben?', 6)
-    expect(searchRequest?.ai_search_options?.query_rewrite?.enabled).toBe(true)
+
+    const rewriting = requests.filter((request) => request.ai_search_options?.query_rewrite?.enabled)
+    expect(rewriting).toHaveLength(1)
+    expect(rewriting[0].ai_search_options?.retrieval?.retrieval_type).toBe('hybrid')
+    // Enabled on the very first turn as well, where there is no history to
+    // resolve and a typo would otherwise reach the index verbatim.
+    expect(requests).toHaveLength(2)
+  })
+
+  it('reports the rewritten query, not the question as typed', async () => {
+    const instance = {
+      search: async (request: AiSearchSearchRequest) => ({
+        search_query: request.ai_search_options?.retrieval?.retrieval_type === 'hybrid'
+          ? 'Wer ist im Webmen-Team?'
+          : 'wer ist alles im webmen team?',
+        chunks: [],
+      }),
+    }
+    const result = await retrieve(instance, 'wer ist alles im webmen team?', 6)
+    expect(result.searchQuery).toBe('Wer ist im Webmen-Team?')
   })
 
   it('fuses vector and hybrid rankings with source relevance for exhaustive questions', async () => {
