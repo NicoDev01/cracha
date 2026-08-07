@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import {
   AlertTriangle,
   Bot,
@@ -62,6 +62,15 @@ const exampleQuestions = {
     'Explain the topic in simple terms.',
   ],
 };
+
+// The browser language cannot change while the page is open, so there is
+// nothing to subscribe to — but the snapshots must stay referentially stable,
+// or the store would report a change on every render.
+const subscribeToNothing = () => () => {};
+const readServerStarters = () => exampleQuestions.de;
+const readBrowserStarters = () => (navigator.language.toLowerCase().startsWith('de')
+  ? exampleQuestions.de
+  : exampleQuestions.en);
 
 const formatTime = (date: Date) => new Intl.DateTimeFormat('de-DE', {
   hour: '2-digit',
@@ -150,17 +159,19 @@ export function ChatInterface() {
   } = useHydratedChatStore();
   const [input, setInput] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [starters, setStarters] = useState(exampleQuestions.de);
+  // `navigator` is a browser API, not React state. Reading it through an effect
+  // meant a second render on every mount; reading it during render would desync
+  // the server markup. useSyncExternalStore is the one that does neither.
+  const starters = useSyncExternalStore(
+    subscribeToNothing,
+    readBrowserStarters,
+    readServerStarters,
+  );
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     setError(null);
   }, [setError]);
-
-  // Reading `navigator` during render would desync server and client markup.
-  useEffect(() => {
-    if (!navigator.language.toLowerCase().startsWith('de')) setStarters(exampleQuestions.en);
-  }, []);
 
   useEffect(() => {
     if (!isLoading && !isStreaming && selectedDatabase) inputRef.current?.focus();
