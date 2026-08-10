@@ -162,6 +162,11 @@ async def finalize_index(
     cpu=2.0,
     memory=4096,
     scaledown_window=60,
+    # Each crawl holds 2 CPUs and 4 GB for as long as it runs, and nothing
+    # bounded how many could start at once. Ten at a time is far more than the
+    # expected load, so no one waits in practice — it exists so that a burst
+    # queues instead of turning into an unbounded number of containers.
+    max_containers=10,
 )
 async def process_crawl(payload: dict, job_id: str) -> dict:
     request = CrawlRequest.model_validate(payload)
