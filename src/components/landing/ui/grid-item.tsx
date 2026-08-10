@@ -10,7 +10,9 @@ interface GridItemProps {
 
 export const GridItem = ({ icon, title, description }: GridItemProps) => {
   return (
-    <li className="min-h-[14rem] list-none">
+    // A div, not a li: every one of these sits directly inside a `div.grid`,
+    // and a list item without a list is announced wrongly by screen readers.
+    <div className="min-h-[14rem]">
       <div className="relative h-full rounded-[1.25rem] border-[0.75px] border-border p-2 md:rounded-[1.5rem] md:p-3">
         <GlowingEffect
           spread={40}
@@ -37,6 +39,6 @@ export const GridItem = ({ icon, title, description }: GridItemProps) => {
           </div>
         </div>
       </div>
-    </li>
+    </div>
   );
 };

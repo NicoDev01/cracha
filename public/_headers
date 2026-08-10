@@ -1,0 +1,17 @@
+# Cloudflare Workers Static Assets reads this file from the root of the asset
+# directory. Next fingerprints everything under /_next/static and sets its own
+# immutable headers there; what it does not touch is the contents of public/,
+# which was being re-downloaded on every visit — Lighthouse reported the video
+# with a cache lifetime of zero.
+#
+# Thirty days, and deliberately not `immutable`: these filenames are stable, so
+# a replaced screenshot has to be able to reach visitors without a rename.
+
+/images/*
+  Cache-Control: public, max-age=2592000
+
+/videos/*
+  Cache-Control: public, max-age=2592000
+
+/fonts/*
+  Cache-Control: public, max-age=31536000, immutable
