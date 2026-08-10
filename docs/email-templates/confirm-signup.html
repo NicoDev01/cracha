@@ -1,0 +1,90 @@
+<!--
+  Supabase → Authentication → Emails → "Confirm signup"
+  Paste the markup below into the Message body field.
+
+  {{ .ConfirmationURL }} is filled in by Supabase. Leave it exactly as it is.
+
+  Everything is inline CSS and table-based on purpose: Gmail strips <style>
+  blocks, Outlook ignores flexbox, and a broken confirmation mail is a user who
+  never arrives. The dark card matches the site; the button stays readable even
+  where background images are blocked.
+-->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#060010;margin:0;padding:32px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <tr>
+    <td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;background-color:#0d0a1a;border:1px solid #221c3a;border-radius:16px;">
+
+        <tr>
+          <td style="padding:40px 40px 8px 40px;" align="center">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="width:44px;height:44px;background:linear-gradient(135deg,#6366f1 0%,#a855f7 100%);border-radius:12px;color:#ffffff;font-size:20px;font-weight:bold;text-align:center;line-height:44px;">C</td>
+                <td style="padding-left:12px;color:#ffffff;font-size:22px;font-weight:bold;letter-spacing:-0.3px;">CraCha</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding:24px 40px 0 40px;" align="center">
+            <h1 style="margin:0;color:#ffffff;font-size:26px;font-weight:700;letter-spacing:-0.5px;line-height:1.3;">
+              Willkommen bei CraCha
+            </h1>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding:16px 40px 0 40px;" align="center">
+            <p style="margin:0;color:#a5a1b8;font-size:15px;line-height:1.65;">
+              Schön, dass du da bist. Bestätige noch kurz deine E-Mail-Adresse,
+              dann kannst du deine erste Website in eine durchsuchbare
+              Wissensbasis verwandeln.
+            </p>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding:32px 40px 0 40px;" align="center">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="background:linear-gradient(135deg,#6366f1 0%,#a855f7 100%);border-radius:10px;">
+                  <a href="{{ .ConfirmationURL }}"
+                     style="display:inline-block;padding:14px 36px;color:#ffffff;font-size:16px;font-weight:600;text-decoration:none;">
+                    E-Mail-Adresse bestätigen
+                  </a>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding:28px 40px 0 40px;">
+            <p style="margin:0;color:#6f6b85;font-size:13px;line-height:1.6;">
+              Falls sich der Button nicht öffnen lässt, kopiere diesen Link in
+              deinen Browser:
+            </p>
+            <p style="margin:8px 0 0 0;word-break:break-all;">
+              <a href="{{ .ConfirmationURL }}" style="color:#8b8bf5;font-size:13px;text-decoration:underline;">{{ .ConfirmationURL }}</a>
+            </p>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding:28px 40px 40px 40px;">
+            <div style="height:1px;background-color:#221c3a;font-size:0;line-height:0;">&nbsp;</div>
+            <p style="margin:20px 0 0 0;color:#565270;font-size:12px;line-height:1.6;">
+              Du hast dich nicht bei CraCha registriert? Dann ignoriere diese
+              E-Mail einfach — ohne Bestätigung wird kein Konto aktiv.
+            </p>
+          </td>
+        </tr>
+
+      </table>
+
+      <p style="margin:24px 0 0 0;color:#454160;font-size:12px;">
+        CraCha · <a href="https://cracha-app.com" style="color:#6f6b85;text-decoration:none;">cracha-app.com</a>
+      </p>
+    </td>
+  </tr>
+</table>

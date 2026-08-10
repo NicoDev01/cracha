@@ -130,3 +130,6 @@ graphify-out/
 
 # Temporaere lokale Diagnose-Konfiguration
 workers/rag-api/wrangler.dev.jsonc
+
+# Claude Code: local machine settings, not shared
+.claude/settings.local.json
