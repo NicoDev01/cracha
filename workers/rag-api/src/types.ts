@@ -28,7 +28,6 @@ export interface IngestPage {
   markdown: string
   checksum: string
   crawled_at: string
-  depth?: number
   /** The date the page states it was published, when it states one. */
   published_at?: string
 }

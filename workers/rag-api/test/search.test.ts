@@ -8,6 +8,7 @@ import {
   deleteInstanceIfExists,
   deleteStaleItems,
   hubCandidates,
+  INSTANCE_CONFIG,
   instanceConfigMatches,
   instanceIdFor,
   isExhaustiveQuestion,
@@ -624,6 +625,15 @@ describe('evidence-based enumeration', () => {
 })
 
 describe('instance configuration drift', () => {
+  it('stays within the five custom metadata fields Cloudflare allows', () => {
+    // We shipped six. Every field the schema declares but nothing reads is a
+    // field that can push a real one over the limit, and changing the schema
+    // re-indexes every document in the instance.
+    expect(INSTANCE_CONFIG.custom_metadata.length).toBeLessThanOrEqual(5)
+    const names = INSTANCE_CONFIG.custom_metadata.map((field) => field.field_name)
+    expect(names).toEqual(['url', 'title', 'checksum', 'published_at'])
+  })
+
   const config = {
     chunk_size: 800,
     index_method: { vector: true, keyword: true },
@@ -656,7 +666,6 @@ describe('unchanged page upload', () => {
     markdown: '## Klaus Becker',
     checksum: 'abc',
     crawled_at: '2026-08-06T12:00:00Z',
-    depth: 1,
     ...overrides,
   })
   const indexed = { checksum: 'abc', title: 'Unser Team', status: 'completed', chunks: 2 }

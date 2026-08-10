@@ -1,6 +1,8 @@
 import type { ConversationMessage, Env, IngestPage, Source } from './types'
 
-const INSTANCE_CONFIG = {
+/** Cloudflare caps custom metadata at five fields per instance, so the schema
+ *  is exported for the test that holds us to it. */
+export const INSTANCE_CONFIG = {
   index_method: { vector: true, keyword: true },
   hybrid_search_enabled: true,
   embedding_model: '@cf/baai/bge-m3',
@@ -18,15 +20,19 @@ const INSTANCE_CONFIG = {
   max_num_results: 30,
   reranking: false,
   reranking_model: '@cf/baai/bge-reranker-base',
+  // Cloudflare allows five custom fields per instance and we declared six, so
+  // every new instance was one field over the line. The two that went are the
+  // two nothing ever read: `crawled_at` was written on every page and only ever
+  // looked at through the record's own `last_crawl`, and `depth` was written as
+  // a number the hub analysis then recomputed from the URL itself. Four fields
+  // leaves room for a real one later.
   custom_metadata: [
     { field_name: 'url', data_type: 'text' as const },
     { field_name: 'title', data_type: 'text' as const },
     { field_name: 'checksum', data_type: 'text' as const },
-    { field_name: 'crawled_at', data_type: 'datetime' as const },
     // The date the page states, not the date we fetched it. "Newest release"
     // is unanswerable without it, because every page is crawled at once.
     { field_name: 'published_at', data_type: 'datetime' as const },
-    { field_name: 'depth', data_type: 'number' as const },
   ],
 }
 
@@ -182,13 +188,9 @@ export async function uploadPages(
           url: page.url,
           title: page.title,
           checksum: page.checksum,
-          crawled_at: page.crawled_at,
           // Absent on pages that state no date. Omitted rather than defaulted,
           // so a missing date can never masquerade as a real one.
           ...(page.published_at ? { published_at: page.published_at } : {}),
-          // The Items API transports custom metadata as strings and casts it
-          // according to the instance schema during indexing.
-          depth: String(page.depth ?? 0),
         },
       })
       return key
