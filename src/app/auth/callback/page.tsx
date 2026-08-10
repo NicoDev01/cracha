@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent } from '@/components/ui/card'
 import { Loader2, AlertCircle } from 'lucide-react'
+import { useLightOnly } from '@/lib/theme/use-light-only'
 
 function CallbackPageContent() {
   const router = useRouter()
@@ -145,6 +146,9 @@ function CallbackPageContent() {
 }
 
 export default function CallbackPage() {
+  // Outside the (auth) group, so the light guard has to be applied here.
+  useLightOnly()
+
   return (
     <Suspense fallback={
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">

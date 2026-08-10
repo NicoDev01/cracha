@@ -1,9 +1,12 @@
 import { Suspense } from 'react'
 import { NewPasswordForm } from '@/components/auth/NewPasswordForm'
+import { LightOnly } from '@/lib/theme/use-light-only'
 
 export default function NewPasswordPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4 sm:p-6 lg:p-8">
+      {/* This page sits outside the (auth) group, so it needs the guard itself. */}
+      <LightOnly />
       <div className="w-full max-w-md mx-auto">
         {/* Logo */}
         <div className="text-center mb-8">

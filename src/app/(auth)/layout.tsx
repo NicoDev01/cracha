@@ -3,6 +3,7 @@
 import { useAuthStore } from '@/stores/auth-store'
 import { useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
+import { useLightOnly } from '@/lib/theme/use-light-only'
 
 export default function AuthLayout({
   children,
@@ -16,19 +17,7 @@ export default function AuthLayout({
   // Allow callback and confirm routes to render immediately without waiting for auth
   const isAuthCallbackRoute = pathname?.includes('/callback') || pathname?.includes('/confirm')
 
-  // These pages are one light card on a light gradient — there is no dark
-  // version of them and never was. But the theme class sits on <html>, so
-  // arriving here from the dark landing page left the inputs rendering their
-  // dark variant: black fields on a pale card. The class comes off while we are
-  // here and goes back on the way out, so the rest of the site is unaffected.
-  useEffect(() => {
-    const root = document.documentElement
-    const wasDark = root.classList.contains('dark')
-    root.classList.remove('dark')
-    return () => {
-      if (wasDark) root.classList.add('dark')
-    }
-  }, [])
+  useLightOnly()
 
   useEffect(() => {
     if (!isAuthCallbackRoute && !isInitialized) {
