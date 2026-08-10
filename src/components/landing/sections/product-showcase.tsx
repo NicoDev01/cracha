@@ -1,8 +1,6 @@
-import { InfoLdg } from "@/types";
 import MaxWidthWrapper from "@/components/shared/max-width-wrapper";
 import { cn } from "@/lib/utils";
-import { Icons } from "@/components/shared/icons";
-import Image from "next/image";
+import { LazyVideo } from "@/components/landing/ui/lazy-video";
 
 export default function ProductShowcase() {
     const reverse = true;
@@ -32,13 +30,9 @@ export default function ProductShowcase() {
                         )}
                     >
                         <div className="aspect-video">
-                            <video
+                            <LazyVideo
                                 className="size-full object-cover object-center"
                                 src={data.video}
-                                autoPlay
-                                loop
-                                muted
-                                playsInline
                             />
                         </div>
                     </div>
