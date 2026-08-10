@@ -26,7 +26,7 @@ export function SiteFooter({ className }: React.HTMLAttributes<HTMLElement>) {
           </Link>
         </div>
         <div>
-          <Link href="/home" className="text-sm font-medium text-foreground transition-colors hover:text-foreground">Home</Link>
+          <Link href="/" className="text-sm font-medium text-foreground transition-colors hover:text-foreground">Home</Link>
           <ul className="mt-4 list-none space-y-3">
             <li>
               <Link href="#how-to-use" className="text-sm text-muted-foreground transition-colors hover:text-foreground">

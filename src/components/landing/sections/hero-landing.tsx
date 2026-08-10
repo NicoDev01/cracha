@@ -18,6 +18,19 @@ const [isLoaded, setIsLoaded] = useState<boolean>(false);
   return (
     <section className="space-y-8 py-12 sm:py-20 lg:py-16">
       <div className="mx-auto flex w-full max-w-5xl flex-col items-center gap-5 px-4 text-center sm:px-6 lg:px-8">
+        {/* The product name as readable text, not only in a logo's alt
+            attribute. Anything that reads the page rather than looking at it —
+            a review bot, a search engine, a link preview — otherwise finds no
+            name here at all. */}
+        <p
+          className={cn(
+            "font-urban text-sm font-bold uppercase tracking-[0.25em] text-muted-foreground transition-all duration-1000 ease-out",
+            isLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+          )}
+        >
+          CraCha
+        </p>
+
         <h1
           className={cn(
             "text-balance font-urban text-4xl font-extrabold tracking-tight sm:text-5xl md:text-6xl lg:text-[66px] transition-all duration-1500 ease-out leading-tight",
@@ -36,7 +49,7 @@ const [isLoaded, setIsLoaded] = useState<boolean>(false);
             isLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
           )}
         >
-          <strong>Ein Klick</strong> verwandelt komplette Websites in Ihren individuellen Experten. Während andere Tools nur einzelne Seiten sehen, erfassen wir den <strong>gesamten Kontext</strong> für präzise, quellenbasierte Antworten aus hunderten von Unterseiten.
+          <strong>CraCha</strong> verwandelt mit einem Klick komplette Websites in Ihren individuellen Experten. Während andere Tools nur einzelne Seiten sehen, erfassen wir den <strong>gesamten Kontext</strong> für präzise, quellenbasierte Antworten aus hunderten von Unterseiten.
         </p>
 
         <div className="flex justify-center">
