@@ -70,6 +70,26 @@ export function SiteFooter({ className }: React.HTMLAttributes<HTMLElement>) {
             </li>
           </ul>
         </div>
+        <div>
+          <span className="text-sm font-medium text-foreground">Rechtliches</span>
+          <ul className="mt-4 list-none space-y-3">
+            <li>
+              <Link href="/impressum" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+                Impressum
+              </Link>
+            </li>
+            <li>
+              <Link href="/datenschutz" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+                Datenschutz
+              </Link>
+            </li>
+            <li>
+              <Link href="/nutzungsbedingungen" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+                Nutzungsbedingungen
+              </Link>
+            </li>
+          </ul>
+        </div>
       </div>
     </footer>
   );
