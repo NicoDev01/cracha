@@ -7,6 +7,29 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Loader2, AlertCircle } from 'lucide-react'
 import { useLightOnly } from '@/lib/theme/use-light-only'
 
+/**
+ * Reads a failure that Supabase reported by redirecting here.
+ *
+ * A rejected provider handshake arrives as `?error=…&error_description=…`, and
+ * for implicit-flow failures the same pair sits in the URL fragment instead,
+ * where `useSearchParams` cannot see it. Reading only the query made every
+ * provider-side failure show "no authentication data" — which sounds like a
+ * missing redirect and says nothing about, say, a client secret Google refused.
+ * The query is preferred because the fragment copy is encoded twice.
+ */
+function readProviderError(searchParams: URLSearchParams): string | null {
+  const fragment = new URLSearchParams(
+    typeof window === 'undefined' ? '' : window.location.hash.replace(/^#/, ''),
+  )
+  const pick = (key: string) => searchParams.get(key) ?? fragment.get(key)
+
+  const description = pick('error_description')
+  const code = pick('error_code') ?? pick('error')
+  if (!description && !code) return null
+  if (!description) return `Anmeldung fehlgeschlagen (${code}).`
+  return code ? `${description} (${code})` : description
+}
+
 function CallbackPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -15,10 +38,15 @@ function CallbackPageContent() {
 
   useEffect(() => {
     const handleCallback = async () => {
+      const providerError = readProviderError(searchParams)
+      if (providerError) {
+        setStatus('error')
+        setError(providerError)
+        return
+      }
+
       const code = searchParams.get('code')
       const next = searchParams.get('next') || '/dashboard'
-      
-      console.log('🔄 OAuth callback processing:', { code: code?.substring(0, 8) + '...', next })
 
       try {
         const supabase = createClient()
