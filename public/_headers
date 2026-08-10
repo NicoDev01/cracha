@@ -1,11 +1,19 @@
 # Cloudflare Workers Static Assets reads this file from the root of the asset
-# directory. Next fingerprints everything under /_next/static and sets its own
-# immutable headers there; what it does not touch is the contents of public/,
-# which was being re-downloaded on every visit — Lighthouse reported the video
-# with a cache lifetime of zero.
+# directory and serves everything else with `max-age=0, must-revalidate`.
 #
-# Thirty days, and deliberately not `immutable`: these filenames are stable, so
-# a replaced screenshot has to be able to reach visitors without a rename.
+# That default is the expensive part. Next fingerprints every file under
+# /_next/static — the name IS the content hash, so a changed file gets a new
+# URL — and on a Node server Next sends `immutable` for them itself. On Workers
+# it does not: the assets layer answers, and it was telling every browser to
+# re-check all sixteen chunks, ~590 KB, on every single visit. A year and
+# immutable is the header those filenames have always deserved.
+#
+# public/ is different: those names are stable across content changes, so they
+# get thirty days and deliberately no `immutable` — a replaced screenshot has
+# to be able to reach visitors without a rename.
+
+/_next/static/*
+  Cache-Control: public, max-age=31536000, immutable
 
 /images/*
   Cache-Control: public, max-age=2592000
