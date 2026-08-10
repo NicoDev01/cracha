@@ -15,13 +15,16 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const [theme, setTheme] = useState<Theme>("light");
+  // Dark is what the site is designed for, so it is what a first-time visitor
+  // gets. The inline script in the root layout has already put the class on
+  // <html>; this only has to agree with it.
+  const [theme, setTheme] = useState<Theme>("dark");
   const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
     // This code will only run on the client side
     const savedTheme = localStorage.getItem("theme") as Theme | null;
-    const initialTheme = savedTheme || "light"; // Default to light theme
+    const initialTheme = savedTheme === "light" ? "light" : "dark";
 
     setTheme(initialTheme);
     setIsInitialized(true);
