@@ -22,12 +22,6 @@ const calSans = localFont({
   display: "swap",
 });
 
-const geist = localFont({
-  src: "../../../assets/fonts/GeistVF.woff2",
-  variable: "--font-geist",
-  display: "swap",
-});
-
 /**
  * The public part of the site: fonts, theme, navigation and footer. Extracted
  * because the legal pages need exactly the same frame as the landing page but
@@ -36,7 +30,7 @@ const geist = localFont({
  */
 export function SiteShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className={`${inter.variable} ${urbanist.variable} ${calSans.variable} ${geist.variable} font-sans antialiased`}>
+    <div className={`${inter.variable} ${urbanist.variable} ${calSans.variable} font-sans antialiased`}>
       <ThemeProvider>
         <AuthProvider>
           <div className="min-h-screen w-full bg-white dark:bg-black">

@@ -30,12 +30,6 @@ const calSans = localFont({
   display: "swap",
 });
 
-const geist = localFont({
-  src: "../../assets/fonts/GeistVF.woff2",
-  variable: "--font-geist",
-  display: "swap",
-});
-
 function DashboardContent({ children }: { children: React.ReactNode }) {
   const { isExpanded, isHovered, isMobileOpen } = useSidebar();
   const pathname = usePathname();
@@ -74,7 +68,7 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <div className={`${inter.variable} ${urbanist.variable} ${calSans.variable} ${geist.variable} font-sans antialiased`}>
+    <div className={`${inter.variable} ${urbanist.variable} ${calSans.variable} font-sans antialiased`}>
       <AuthProvider>
         <AuthGuard>
           <ThemeProvider>

@@ -4,7 +4,6 @@ import Link from "next/link";
 import MaxWidthWrapper from "@/components/shared/max-width-wrapper";
 import { InfiniteSlider } from "@/components/landing/ui/infinite-slider";
 import { ProgressiveBlur } from "@/components/landing/ui/progressive-blur";
-import { useEffect, useRef, useState } from "react";
 
 const logos = [
   {
@@ -161,7 +160,9 @@ const logos = [
             strokeWidth="20"
           ></line>
         </svg>
-        <span className="font-geist text-[20px] font-bold">shadcn/ui</span>
+        {/* Geist would be the wordmark's own typeface; it is not worth a
+            57 KB font file preloaded ahead of the hero for nine characters. */}
+        <span className="font-sans text-[20px] font-bold">shadcn/ui</span>
       </div>
     ),
   },
@@ -184,73 +185,49 @@ const logos = [
   },
 ];
 
+/**
+ * The section had its own IntersectionObserver on top of the one in
+ * SectionWrapper: it held itself at opacity 0 and rendered the logo strip only
+ * once the observer fired, leaving a lone "Powered by" heading over an empty
+ * placeholder until React had hydrated. The wrapper now fades the section in
+ * from CSS, so the logos can simply be there.
+ */
 export default function Powered() {
-  const sectionRef = useRef<HTMLElement | null>(null);
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    const el = sectionRef.current;
-    if (!el) return;
-
-    const io = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setVisible(true);
-          io.disconnect();
-        }
-      },
-      { rootMargin: "0px 0px -10% 0px", threshold: 0.15 }
-    );
-
-    io.observe(el);
-    return () => io.disconnect();
-  }, []);
-
   return (
-    <section
-      ref={sectionRef}
-      className={`pb-0 md:py-0 text-muted-foreground overflow-hidden transition-opacity duration-2000 ease-out ${visible ? "opacity-100" : "opacity-0"}`}
-    >
+    <section className="pb-0 md:py-0 text-muted-foreground overflow-hidden">
       <MaxWidthWrapper>
         <h2 className="text-center text-sm font-semibold uppercase">
           Powered by
         </h2>
 
         <div className="relative pt-12 pb-0 -ml-2 sm:-ml-4">
-          {visible ? (
-            <>
-              <InfiniteSlider speedOnHover={20} speed={50} gap={100}>
-                {logos.map((logo) => (
-                  <div key={logo.title} className="flex">
-                    <Link
-                      target="_blank"
-                      href={logo.href}
-                      aria-label={logo.title}
-                      className="duration-250 grayscale transition hover:text-foreground hover:grayscale-0"
-                    >
-                      {logo.icon}
-                    </Link>
-                  </div>
-                ))}
-              </InfiniteSlider>
+          <InfiniteSlider speedOnHover={20} speed={50} gap={100}>
+            {logos.map((logo) => (
+              <div key={logo.title} className="flex">
+                <Link
+                  target="_blank"
+                  href={logo.href}
+                  aria-label={logo.title}
+                  className="duration-250 grayscale transition hover:text-foreground hover:grayscale-0"
+                >
+                  {logo.icon}
+                </Link>
+              </div>
+            ))}
+          </InfiniteSlider>
 
-              <div className="pointer-events-none absolute inset-y-0 left-0 w-20 bg-gradient-to-r from-background to-transparent"></div>
-              <div className="pointer-events-none absolute inset-y-0 right-0 w-20 bg-gradient-to-l from-background to-transparent"></div>
-              <ProgressiveBlur
-                className="pointer-events-none absolute left-0 top-0 h-full w-20"
-                direction="left"
-                blurIntensity={1}
-              />
-              <ProgressiveBlur
-                className="pointer-events-none absolute right-0 top-0 h-full w-20"
-                direction="right"
-                blurIntensity={1}
-              />
-            </>
-          ) : (
-            // Platzhalter, verhindert Layout-Shift bis zur Sichtbarkeit
-            <div className="h-12 sm:h-14"></div>
-          )}
+          <div className="pointer-events-none absolute inset-y-0 left-0 w-20 bg-gradient-to-r from-background to-transparent"></div>
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-20 bg-gradient-to-l from-background to-transparent"></div>
+          <ProgressiveBlur
+            className="pointer-events-none absolute left-0 top-0 h-full w-20"
+            direction="left"
+            blurIntensity={1}
+          />
+          <ProgressiveBlur
+            className="pointer-events-none absolute right-0 top-0 h-full w-20"
+            direction="right"
+            blurIntensity={1}
+          />
         </div>
       </MaxWidthWrapper>
     </section>

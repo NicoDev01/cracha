@@ -328,7 +328,6 @@
   --font-sans: ui-sans-serif, system-ui, sans-serif;
   --font-urban: 'Urbanist', ui-sans-serif, system-ui, sans-serif;
   --font-heading: 'Cal Sans', ui-sans-serif, system-ui, sans-serif;
-  --font-geist: 'Geist', ui-sans-serif, system-ui, sans-serif;
 }
 
 .font-urban {
@@ -337,10 +336,6 @@
 
 .font-heading {
   font-family: var(--font-heading);
-}
-
-.font-geist {
-  font-family: var(--font-geist);
 }
 
 .metaballs-container {
@@ -560,4 +555,45 @@
   position: relative;
   -webkit-user-select: none;
   user-select: none;
+}
+
+/* Einblenden ohne JavaScript.
+ *
+ * Die Abschnitte starteten auf opacity-0 und wurden erst sichtbar, wenn React
+ * hydriert hatte: erst ~590 KB JavaScript, dann ein Effekt, dann eine bis zu
+ * zwei Sekunden lange Transition. Bis dahin war ausser der Navigation nichts
+ * zu sehen, obwohl der Text vollstaendig im HTML steht.
+ *
+ * Jetzt macht das der Browser selbst. `reveal` laeuft beim Zeichnen,
+ * `reveal-on-scroll` haengt an der Scrollposition, wo der Browser das ohne
+ * JavaScript kann — und wo nicht, ist der Inhalt einfach sofort da. */
+@keyframes cracha-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(1rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.reveal,
+.reveal-on-scroll {
+  animation: cracha-reveal 700ms ease-out both;
+}
+
+@supports (animation-timeline: view()) {
+  .reveal-on-scroll {
+    animation-timeline: view();
+    animation-range: entry 10% cover 25%;
+    animation-duration: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal,
+  .reveal-on-scroll {
+    animation: none;
+  }
 }

@@ -1,6 +1,3 @@
-"use client";
-
-import { useRef, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
 interface SectionWrapperProps {
@@ -8,44 +5,20 @@ interface SectionWrapperProps {
   className?: string;
 }
 
+/**
+ * Fades a section in as it scrolls into view.
+ *
+ * This used to be a client component that rendered its children at opacity 0
+ * and waited for an IntersectionObserver to turn them on. The observer only
+ * exists once React has hydrated, so every section below the hero stayed blank
+ * until the whole JavaScript bundle had arrived and run — on a cold cache that
+ * was the several seconds of empty page under the navigation. The animation is
+ * now the browser's job, which means the content is visible whether or not the
+ * bundle ever shows up.
+ */
 export function SectionWrapper({ children, className }: SectionWrapperProps) {
-  const [inView, setInView] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setInView(true);
-          observer.disconnect();
-        }
-      },
-      {
-        rootMargin: "0px 0px 0px 0px", // Trigger animation a bit before it's fully in view
-      }
-    );
-
-    if (ref.current) {
-      observer.observe(ref.current);
-    }
-
-    return () => {
-      if (ref.current) {
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        observer.unobserve(ref.current);
-      }
-    };
-  }, []);
-
   return (
-    <div
-      ref={ref}
-      className={cn(
-        "transition-all duration-2000 ease-in-out overflow-x-hidden",
-        inView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-16",
-        className
-      )}
-    >
+    <div className={cn("reveal-on-scroll overflow-x-hidden", className)}>
       {children}
     </div>
   );
