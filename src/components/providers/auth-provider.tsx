@@ -3,12 +3,15 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/stores/auth-store'
+import { useCrawlStore } from '@/stores/crawl-store'
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isClient, setIsClient] = useState(false)
   const router = useRouter()
   const initialize = useAuthStore((state) => state.initialize)
   const logout = useAuthStore((state) => state.logout)
+  const userId = useAuthStore((state) => state.user?.id)
+  const claimCrawlHistory = useCrawlStore((state) => state.claimFor)
 
   useEffect(() => {
     setIsClient(true)
@@ -30,6 +33,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     initAuth()
   }, [initialize])
+
+  // The locally stored crawl history belongs to whoever is signed in. As soon
+  // as that is somebody else, it goes.
+  useEffect(() => {
+    if (userId) claimCrawlHistory(userId)
+  }, [userId, claimCrawlHistory])
 
   useEffect(() => {
     const handleExpiredSession = async () => {

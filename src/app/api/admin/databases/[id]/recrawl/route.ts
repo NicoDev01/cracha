@@ -17,7 +17,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
     // limit 100 and depth 2, regardless of how it was originally configured.
     const result = await enqueueCrawl({
       url: database.source_url,
-      tenant_id: database.id,
+      database_id: database.id,
     }, user.id)
     return NextResponse.json({ success: true, job_id: result.job_id, status: result.status ?? 'queued' }, { status: 202 })
   } catch (error) {

@@ -16,13 +16,13 @@ describe('re-crawl settings', () => {
   it('reproduces the crawl the knowledge base was built with', () => {
     // A re-crawl passes no settings. It previously fell back to limit 100 and
     // depth 2, so a base crawled with 350 pages shrank on every refresh.
-    expect(resolveCrawlSettings({ url: 'https://example.com', tenant_id: 'kb' }, sitemapBase))
+    expect(resolveCrawlSettings({ url: 'https://example.com', database_id: 'kb' }, sitemapBase))
       .toEqual(sitemapBase)
   })
 
   it('lets an explicit value win over the stored one', () => {
     const resolved = resolveCrawlSettings(
-      { url: 'https://example.com', tenant_id: 'kb', limit: 20 },
+      { url: 'https://example.com', database_id: 'kb', limit: 20 },
       sitemapBase,
     )
     expect(resolved.limit).toBe(20)
@@ -31,7 +31,7 @@ describe('re-crawl settings', () => {
   })
 
   it('falls back to the defaults for bases stored before settings were kept', () => {
-    expect(resolveCrawlSettings({ url: 'https://example.com', tenant_id: 'kb' }, undefined))
+    expect(resolveCrawlSettings({ url: 'https://example.com', database_id: 'kb' }, undefined))
       .toEqual({
         type: 'recursive',
         max_depth: 2,
@@ -44,7 +44,7 @@ describe('re-crawl settings', () => {
 
   it('keeps a deliberate false for robots.txt instead of reading it as absent', () => {
     const resolved = resolveCrawlSettings(
-      { url: 'https://example.com', tenant_id: 'kb', respect_robots_txt: false },
+      { url: 'https://example.com', database_id: 'kb', respect_robots_txt: false },
       undefined,
     )
     expect(resolved.respect_robots_txt).toBe(false)

@@ -68,6 +68,63 @@ export function databaseRegistry(): KVNamespace {
   return getWorkerEnv().DATABASE_REGISTRY
 }
 
+/**
+ * One key per membership instead of one array for all of them. The array was
+ * read, extended and written back, so two knowledge bases created at the same
+ * moment — a second tab, a double click — left only one behind in the list.
+ * Independent keys have nothing to overwrite, and a prefix scan reads them back.
+ */
+export function ownerKey(userId: string, databaseId: string): string {
+  return `owner:${userId}:${databaseId}`
+}
+
+function legacyIndexKey(userId: string): string {
+  return `user_index:${userId}`
+}
+
+/**
+ * Existing accounts still have their list in the old array. It is migrated the
+ * first time it is read: the membership keys are written, then the array goes.
+ * Doing it twice writes the same keys, so a concurrent read cannot break it.
+ */
+export async function listOwnedDatabaseIds(userId: string): Promise<string[]> {
+  const kv = databaseRegistry()
+  const prefix = ownerKey(userId, '')
+  const ids = new Set<string>()
+
+  let cursor: string | undefined
+  do {
+    // A user with more knowledge bases than one page holds would otherwise see
+    // the list silently cut off, which is the bug this replaces.
+    const page = await kv.list({ prefix, cursor })
+    for (const key of page.keys) ids.add(key.name.slice(prefix.length))
+    cursor = page.list_complete ? undefined : page.cursor
+  } while (cursor)
+
+  const legacy = await kv.get<{ databases?: string[] }>(legacyIndexKey(userId), 'json')
+  const legacyIds = (legacy?.databases ?? []).filter(Boolean)
+  if (legacyIds.length) {
+    await Promise.all(legacyIds.map((id) => kv.put(ownerKey(userId, id), '1')))
+    for (const id of legacyIds) ids.add(id)
+  }
+  if (legacy) await kv.delete(legacyIndexKey(userId))
+
+  return [...ids]
+}
+
+/** The record and the membership are written as two independent keys. */
+export async function claimDatabase(database: DatabaseRecord): Promise<void> {
+  await Promise.all([
+    saveDatabase(database),
+    databaseRegistry().put(ownerKey(database.user_id, database.id), '1'),
+  ])
+}
+
+export async function releaseDatabase(userId: string, databaseId: string): Promise<void> {
+  const kv = databaseRegistry()
+  await Promise.all([kv.delete(databaseId), kv.delete(ownerKey(userId, databaseId))])
+}
+
 export async function getOwnedDatabase(id: string, userId: string): Promise<DatabaseRecord | null> {
   const kv = databaseRegistry()
   const raw = await kv.get<Partial<DatabaseRecord>>(id, 'json')
@@ -75,8 +132,13 @@ export async function getOwnedDatabase(id: string, userId: string): Promise<Data
   if (raw.user_id && raw.user_id !== userId) return null
 
   if (!raw.user_id) {
-    const index = await kv.get<{ databases?: string[] }>(`user_index:${userId}`, 'json')
-    if (!(index?.databases ?? []).includes(id)) return null
+    // Records written before ownership was stored on the record itself. The
+    // claim has to be proven from this user's own index, never assumed.
+    const owned = await kv.get(ownerKey(userId, id))
+    if (owned === null) {
+      const legacy = await kv.get<{ databases?: string[] }>(legacyIndexKey(userId), 'json')
+      if (!(legacy?.databases ?? []).includes(id)) return null
+    }
   }
 
   const now = new Date().toISOString()
@@ -107,10 +169,46 @@ export async function getOwnedDatabase(id: string, userId: string): Promise<Data
     crawl_settings: normalizeCrawlSettings(raw.crawl_settings),
   }
 
-  if (!raw.user_id) await saveDatabase(database)
+  // Stamping the owner onto the record also writes the membership key, so the
+  // record stops depending on the index that is about to disappear.
+  if (!raw.user_id) await claimDatabase(database)
   return database
 }
 
 export async function saveDatabase(database: DatabaseRecord): Promise<void> {
   await databaseRegistry().put(database.id, JSON.stringify(database))
+}
+
+/**
+ * The only place a knowledge base id is minted. It used to be built in the
+ * browser from the name plus eight characters of the user id and sent along
+ * with the crawl, which let the client pick the key its own data is stored
+ * under — and let a name someone else had taken block a new one. The name is
+ * still the caller's; the key never is.
+ */
+export async function createDatabase(
+  userId: string,
+  name: string,
+  sourceUrl: string,
+  description = '',
+): Promise<DatabaseRecord> {
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50) || 'kb'
+  const now = new Date().toISOString()
+  const database: DatabaseRecord = {
+    id: `${slug}-${crypto.randomUUID().slice(0, 8)}`,
+    name,
+    description,
+    user_id: userId,
+    source_url: sourceUrl,
+    url: sourceUrl,
+    created_at: now,
+    updated_at: now,
+    last_crawl: null,
+    document_count: 0,
+    chunks_count: 0,
+    pages_count: 0,
+    status: 'pending',
+  }
+  await claimDatabase(database)
+  return database
 }

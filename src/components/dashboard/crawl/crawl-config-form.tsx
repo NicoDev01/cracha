@@ -59,16 +59,6 @@ const modes = [
   { value: "sitemap" as const, label: "Sitemap", icon: ListTree },
 ]
 
-function slugifyDatabaseName(value: string) {
-  return value
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 60) || `wissensbasis-${Date.now()}`
-}
-
 export function CrawlConfigForm({ onStarted }: { onStarted?: () => void }) {
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [analysis, setAnalysis] = useState<AnalysisState>({ status: "idle" })
@@ -151,7 +141,9 @@ export function CrawlConfigForm({ onStarted }: { onStarted?: () => void }) {
     const config: CrawlConfig = {
       ...rest,
       type: values.type === "single" ? "single" : useSitemap ? "sitemap" : values.type,
-      tenant_id: `${slugifyDatabaseName(values.name)}-${user.id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 8)}`,
+      // No id here any more. It was built from the name plus eight characters
+      // of the user id, which meant the browser chose the key its own data is
+      // stored under. The server assigns it and returns it.
       user_id: user.id,
       max_depth: values.type === "single" ? 1 : values.max_depth,
       limit: values.type === "single" ? 1 : useSitemap ? cappedTotal : values.limit,

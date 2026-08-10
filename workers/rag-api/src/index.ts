@@ -5,7 +5,7 @@ import {
   retrievalCacheKey,
   writeRetrievalCache,
 } from './cache'
-import { databaseForIngest, databaseForUser, removeFromUserIndex, saveDatabase } from './database'
+import { databaseForIngest, databaseForUser, removeOwnership, saveDatabase } from './database'
 import { assertText, HttpError, json, readJson } from './http'
 import { deleteInstanceIfExists, deleteStaleItems, ensureInstance, instanceIdFor, retrieve, uploadPages } from './search'
 import type { ConversationMessage, DatabaseRecord, Env, IngestPage, QueryBody } from './types'
@@ -249,7 +249,7 @@ async function handleDelete(request: Request, env: Env, databaseId: string): Pro
 
   const [, , purgedCacheEntries] = await Promise.all([
     env.DATABASE_REGISTRY.delete(databaseId),
-    removeFromUserIndex(env, userId, databaseId),
+    removeOwnership(env, userId, databaseId),
     deleteRetrievalCache(env, databaseId),
   ])
   return json(request, env, { success: true, purged_cache_entries: purgedCacheEntries })

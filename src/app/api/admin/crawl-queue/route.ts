@@ -17,14 +17,16 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ success: false, error: 'Authentifizierung erforderlich.' }, { status: 401 })
 
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null
-  if (!body || typeof body.url !== 'string' || typeof body.tenant_id !== 'string') {
-    return NextResponse.json({ success: false, error: 'url und tenant_id sind erforderlich.' }, { status: 400 })
+  if (!body || typeof body.url !== 'string') {
+    return NextResponse.json({ success: false, error: 'url ist erforderlich.' }, { status: 400 })
   }
 
   try {
     const input: CrawlInput = {
       url: body.url,
-      tenant_id: body.tenant_id,
+      // Only an id the caller already owns is accepted here; a new knowledge
+      // base is identified by its name and gets its id from the server.
+      database_id: typeof body.database_id === 'string' && body.database_id ? body.database_id : undefined,
       database_name: typeof body.database_name === 'string' ? body.database_name.trim().slice(0, 160) : undefined,
       type: body.type === 'single' || body.type === 'sitemap' ? body.type : 'recursive',
       max_depth: typeof body.max_depth === 'number' ? body.max_depth : 2,
@@ -37,7 +39,12 @@ export async function POST(request: NextRequest) {
       respect_robots_txt: body.respect_robots_txt !== false,
     }
     const result = await enqueueCrawl(input, user.id)
-    return NextResponse.json({ success: true, job_id: result.job_id, status: result.status ?? 'queued' }, { status: 202 })
+    return NextResponse.json({
+      success: true,
+      job_id: result.job_id,
+      database_id: result.database_id,
+      status: result.status ?? 'queued',
+    }, { status: 202 })
   } catch (error) {
     console.error('Crawl enqueue failed', error)
     return NextResponse.json({ success: false, error: error instanceof Error ? error.message : 'Crawl konnte nicht gestartet werden.' }, { status: 502 })

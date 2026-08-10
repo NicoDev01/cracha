@@ -29,6 +29,8 @@ export interface CrawlProgress {
 interface CrawlApiResponse {
   success: boolean
   job_id?: string
+  /** Assigned by the server, because the client no longer picks the id. */
+  database_id?: string
   status?: string
   error?: string
 }
@@ -74,7 +76,8 @@ export interface CrawlJob {
 
 export interface CrawlConfig {
   url: string
-  tenant_id: string
+  /** Set only when re-crawling an existing knowledge base of this user. */
+  database_id?: string
   name: string
   user_id: string
   type: 'single' | 'recursive' | 'sitemap'
@@ -90,11 +93,14 @@ interface CrawlState {
   isRunning: boolean
   statusError: string | null
   jobs: CrawlJob[]
+  /** Whose history this is. Persisted, so a browser can tell after a reload. */
+  ownerId: string | null
   startCrawl: (config: CrawlConfig) => Promise<void>
   cancelCrawl: () => Promise<void>
   resumeCurrentCrawl: () => void
   pollJobStatus: (localJobId: string, remoteJobId: string) => void
   deleteJob: (jobId: string) => void
+  claimFor: (userId: string) => void
 }
 
 const activeStatuses = new Set<CrawlStatus>(['pending', 'queued', 'running', 'processing'])
@@ -134,15 +140,18 @@ function migrateJob(value: unknown): CrawlJob | null {
   const job = value as Partial<CrawlJob> & {
     progress?: CrawlProgress & { pages_crawled?: number; chunks_created?: number }
   }
-  if (!job.id || !job.tenant_id || !job.url || !job.type || !job.created_at) return null
+  // No tenant_id here on purpose. A job that has been started but whose
+  // response has not arrived yet does not know its knowledge base id, and
+  // reloading the page in that second must not erase it from the history.
+  if (!job.id || !job.url || !job.type || !job.created_at) return null
   const incompleteLegacyJob = job.status === 'completed' && job.indexing_complete === false
   const status = incompleteLegacyJob ? 'failed' : (job.status ?? 'failed')
   const phase = incompleteLegacyJob ? 'failed' : (job.phase ?? phaseFromStatus(status))
   return {
     id: job.id,
     remote_job_id: job.remote_job_id,
-    tenant_id: job.tenant_id,
-    name: job.name || job.tenant_id,
+    tenant_id: job.tenant_id ?? '',
+    name: job.name || job.tenant_id || job.url,
     status,
     phase,
     url: job.url,
@@ -170,6 +179,7 @@ export const useCrawlStore = create<CrawlState>()(
       isRunning: false,
       statusError: null,
       jobs: [],
+      ownerId: null,
 
       startCrawl: async (config) => {
         if (get().isRunning) throw new Error('Es läuft bereits ein Crawl.')
@@ -179,7 +189,9 @@ export const useCrawlStore = create<CrawlState>()(
         const localJobId = `crawl_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
         const newJob: CrawlJob = {
           id: localJobId,
-          tenant_id: config.tenant_id,
+          // Empty until the server answers with the id it assigned. A re-crawl
+          // already knows it.
+          tenant_id: config.database_id ?? '',
           name: config.name,
           status: 'pending',
           phase: 'queued',
@@ -214,6 +226,7 @@ export const useCrawlStore = create<CrawlState>()(
           const queuedJob: CrawlJob = {
             ...newJob,
             remote_job_id: result.job_id,
+            tenant_id: result.database_id ?? newJob.tenant_id,
             status: statusFromResponse(result.status, 'queued'),
             updated_at: new Date().toISOString(),
           }
@@ -398,20 +411,40 @@ export const useCrawlStore = create<CrawlState>()(
           statusError: isCurrent ? null : state.statusError,
         }))
       },
+
+      /**
+       * The crawl history lives in localStorage under one fixed key, so on a
+       * shared browser the next person to sign in inherited the previous one's
+       * crawls — their site names, their URLs, their knowledge base ids. The
+       * knowledge bases themselves were never reachable, but the list was, and
+       * a list of somebody else's work is exactly what must not appear.
+       */
+      claimFor: (userId) => {
+        if (get().ownerId === userId) return
+        stopPolling()
+        set({ ownerId: userId, jobs: [], currentJob: null, isRunning: false, statusError: null })
+      },
     }),
     {
       name: 'crawl-store',
-      version: 3,
+      version: 4,
       migrate: (persisted) => {
-        const previous = (persisted ?? {}) as { jobs?: unknown[]; currentJob?: unknown }
+        const previous = (persisted ?? {}) as {
+          jobs?: unknown[]
+          currentJob?: unknown
+          ownerId?: unknown
+        }
         const jobs = (previous.jobs ?? []).map(migrateJob).filter((job): job is CrawlJob => Boolean(job))
         return {
           ...previous,
           jobs,
           currentJob: migrateJob(previous.currentJob),
+          // Anything stored before this version has no owner recorded, so the
+          // first sign-in after the update clears it rather than guessing.
+          ownerId: typeof previous.ownerId === 'string' ? previous.ownerId : null,
         }
       },
-      partialize: (state) => ({ jobs: state.jobs, currentJob: state.currentJob }),
+      partialize: (state) => ({ jobs: state.jobs, currentJob: state.currentJob, ownerId: state.ownerId }),
     },
   ),
 )

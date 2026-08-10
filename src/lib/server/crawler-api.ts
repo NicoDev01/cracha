@@ -2,8 +2,8 @@ import 'server-only'
 
 import { getWorkerEnv } from './cloudflare'
 import {
+  createDatabase,
   DEFAULT_CRAWL_SETTINGS,
-  databaseRegistry,
   getOwnedDatabase,
   normalizeCrawlSettings,
   saveDatabase,
@@ -14,7 +14,8 @@ import {
 
 export interface CrawlInput {
   url: string
-  tenant_id: string
+  /** An existing knowledge base of this user. Absent means: create a new one. */
+  database_id?: string
   database_name?: string
   type?: CrawlType
   max_depth?: number
@@ -87,36 +88,21 @@ export async function enqueueCrawl(input: CrawlInput, userId: string) {
   const sourceUrl = new URL(input.url)
   if (!['http:', 'https:'].includes(sourceUrl.protocol)) throw new Error('Ungültige Crawl-URL.')
 
-  let database = await getOwnedDatabase(input.tenant_id, userId)
-  if (!database) {
-    const kv = databaseRegistry()
-    const existing = await kv.get<Partial<DatabaseRecord>>(input.tenant_id, 'json')
-    if (existing) throw new Error('Wissensbasis nicht gefunden oder Zugriff verweigert.')
-    if (!/^[a-zA-Z0-9_-]{1,160}$/.test(input.tenant_id)) {
-      throw new Error('Die ID darf nur Buchstaben, Zahlen, Bindestriche und Unterstriche enthalten.')
-    }
-    const now = new Date().toISOString()
-    database = {
-      id: input.tenant_id,
-      name: input.database_name || input.tenant_id,
-      description: '',
-      user_id: userId,
-      source_url: sourceUrl.toString(),
-      url: sourceUrl.toString(),
-      created_at: now,
-      updated_at: now,
-      last_crawl: null,
-      document_count: 0,
-      chunks_count: 0,
-      pages_count: 0,
-      status: 'pending',
-    }
-    const indexKey = `user_index:${userId}`
-    const index = await kv.get<{ databases?: string[] }>(indexKey, 'json')
-    await Promise.all([
-      saveDatabase(database),
-      kv.put(indexKey, JSON.stringify({ databases: [...new Set([...(index?.databases ?? []), database.id])] })),
-    ])
+  // Naming an existing knowledge base means re-crawling that one, and it must
+  // belong to the caller. Naming none means creating one, and only then does an
+  // id come into existence — server-side.
+  let database: DatabaseRecord
+  if (input.database_id) {
+    const owned = await getOwnedDatabase(input.database_id, userId)
+    // Deliberately the same message whether the id is unknown or belongs to
+    // somebody else: the previous pair of messages told a caller which ids
+    // exist.
+    if (!owned) throw new Error('Wissensbasis nicht gefunden oder Zugriff verweigert.')
+    database = owned
+  } else {
+    const name = input.database_name?.trim()
+    if (!name) throw new Error('Ein Name für die Wissensbasis ist erforderlich.')
+    database = await createDatabase(userId, name.slice(0, 160), sourceUrl.toString())
   }
 
   const env = getWorkerEnv()
@@ -144,7 +130,7 @@ export async function enqueueCrawl(input: CrawlInput, userId: string) {
     },
     body: JSON.stringify({
       url: sourceUrl.toString(),
-      tenant_id: input.tenant_id,
+      tenant_id: database.id,
       user_id: userId,
       ...settings,
     }),
@@ -171,5 +157,6 @@ export async function enqueueCrawl(input: CrawlInput, userId: string) {
     JSON.stringify({ user_id: userId, database_id: database.id }),
     { expirationTtl: 86_400 },
   )
-  return result
+  // The caller no longer knows the id it is crawling into, so it is returned.
+  return { ...result, database_id: database.id }
 }
