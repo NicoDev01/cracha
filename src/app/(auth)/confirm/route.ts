@@ -61,5 +61,5 @@ export async function GET(request: NextRequest) {
 
   // Return the user to an error page with instructions
   console.log('🚫 No valid authentication parameters found')
-  return NextResponse.redirect(`${origin}/auth/auth-code-error`)
+  return NextResponse.redirect(`${origin}/auth-code-error`)
 }

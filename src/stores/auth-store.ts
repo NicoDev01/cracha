@@ -3,7 +3,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { createClient } from '@/lib/supabase/client'
-import type { Session } from '@supabase/supabase-js'
+import type { Session, User } from '@supabase/supabase-js'
 import { clearAuthCookies } from '@/lib/auth/clear-auth-cookies'
 
 export interface AuthUser {
@@ -13,6 +13,22 @@ export interface AuthUser {
   avatar?: string
   plan: 'free' | 'pro' | 'enterprise'
   created_at: string
+}
+
+/** The same mapping was written out at every place a session appears. */
+function authUserFromSession(user: User): AuthUser {
+  const email = user.email ?? ''
+  return {
+    id: user.id,
+    email,
+    name: user.user_metadata?.name || email.split('@')[0] || 'User',
+    avatar: user.user_metadata?.avatar_url
+      || `https://api.dicebear.com/7.x/avataaars/svg?seed=${email}`,
+    // Display only. Nothing server-side reads this, and nothing should: what a
+    // user is allowed to do is decided where the data is, not in the browser.
+    plan: 'free',
+    created_at: user.created_at,
+  }
 }
 
 interface AuthState {
@@ -109,17 +125,8 @@ export const useAuthStore = create<AuthState>()(
           const { data: { session } } = await supabase.auth.getSession()
           
           if (session?.user) {
-            const authUser: AuthUser = {
-              id: session.user.id,
-              email: session.user.email || '',
-              name: session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'User',
-              avatar: session.user.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${session.user.email}`,
-              plan: 'free', // Default plan
-              created_at: session.user.created_at
-            }
-            
             set({
-              user: authUser,
+              user: authUserFromSession(session.user),
               session,
               isAuthenticated: true,
               isLoading: false,
@@ -140,17 +147,8 @@ export const useAuthStore = create<AuthState>()(
           // Listen for auth changes
           supabase.auth.onAuthStateChange((event, session) => {
             if (event !== 'SIGNED_OUT' && session?.user) {
-              const authUser: AuthUser = {
-                id: session.user.id,
-                email: session.user.email || '',
-                name: session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'User',
-                avatar: session.user.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${session.user.email}`,
-                plan: 'free',
-                created_at: session.user.created_at
-              }
-              
               set({
-                user: authUser,
+                user: authUserFromSession(session.user),
                 session,
                 isAuthenticated: true,
                 error: null
@@ -183,11 +181,11 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null })
         
         try {
-          const { error } = await supabase.auth.signInWithPassword({
+          const { data, error } = await supabase.auth.signInWithPassword({
             email,
             password
           })
-          
+
           if (error) {
             // Better error messages
             let errorMessage = error.message
@@ -201,9 +199,24 @@ export const useAuthStore = create<AuthState>()(
             throw new Error(errorMessage)
           }
           
-          // User state will be updated by onAuthStateChange
-          set({ isLoading: false })
-          
+          // Set the session here rather than waiting for onAuthStateChange.
+          // The form pushes to /dashboard the moment this resolves, and the
+          // guard there reads isAuthenticated. Leaving that to a listener that
+          // fires a tick later meant the guard often saw a signed-out store and
+          // bounced back to /login — the reason a correct password sometimes
+          // had to be entered twice.
+          const session = data.session
+          if (!session?.user) throw new Error('Anmeldung fehlgeschlagen.')
+
+          set({
+            user: authUserFromSession(session.user),
+            session,
+            isAuthenticated: true,
+            isInitialized: true,
+            isLoading: false,
+            error: null,
+          })
+
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Anmeldung fehlgeschlagen'
           set({ 
@@ -218,14 +231,18 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null })
         
         try {
-          const { error } = await supabase.auth.signUp({
+          const { data, error } = await supabase.auth.signUp({
             email,
             password,
             options: {
               data: {
                 name: name
               },
-              emailRedirectTo: undefined // Disable email confirmation
+              // Was undefined, which does not disable anything — it makes
+              // Supabase fall back to the project's Site URL. That is how a
+              // confirmation link sent from cracha-app.com ended up pointing at
+              // localhost. The link now comes back to the site the user is on.
+              emailRedirectTo: `${window.location.origin}/confirm?next=/dashboard`,
             }
           })
           
@@ -242,14 +259,25 @@ export const useAuthStore = create<AuthState>()(
             throw new Error(errorMessage)
           }
           
-          // Registration successful - show success message
-          set({ 
-            error: 'Registrierung erfolgreich! Nach Bestätigung deiner E-Mail-Adresse kannst du dich jetzt anmelden.',
-            isLoading: false 
+          // Supabase reports an already-confirmed account by returning a user
+          // with no identities rather than an error, so that case has to be
+          // read off the response instead of caught.
+          if (data.user && data.user.identities?.length === 0) {
+            throw new Error('Ein Account mit dieser E-Mail-Adresse existiert bereits.')
+          }
+
+          // Which of the two messages is true depends on whether the project
+          // requires confirmation, and the response says so: a session comes
+          // back only when it does not.
+          set({
+            error: data.session
+              ? 'Registrierung erfolgreich! Du kannst dich jetzt anmelden.'
+              : `Fast geschafft! Wir haben dir eine E-Mail an ${email} geschickt. Bestätige den Link darin, dann kannst du dich anmelden.`,
+            isLoading: false
           })
-          
+
           // Don't throw error for successful registration
-          
+
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Registrierung fehlgeschlagen'
           set({ 
