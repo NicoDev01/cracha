@@ -33,6 +33,10 @@ interface CrawlApiResponse {
   database_id?: string
   status?: string
   error?: string
+  /** What the crawl is actually allowed to fetch after the quota was applied. */
+  page_limit?: number
+  /** What was asked for. Lower than page_limit never happens. */
+  requested_page_limit?: number
 }
 
 interface CrawlStatusResponse {
@@ -92,6 +96,13 @@ interface CrawlState {
   currentJob: CrawlJob | null
   isRunning: boolean
   statusError: string | null
+  /**
+   * Set when the server let the crawl start but cut its page limit down to what
+   * the account still has left. Not an error — the crawl runs — but without
+   * saying so, a crawl asked for 200 pages and quietly delivering 40 looks like
+   * the crawler missed most of the site.
+   */
+  quotaNotice: string | null
   jobs: CrawlJob[]
   /** Whose history this is. Persisted, so a browser can tell after a reload. */
   ownerId: string | null
@@ -178,6 +189,7 @@ export const useCrawlStore = create<CrawlState>()(
       currentJob: null,
       isRunning: false,
       statusError: null,
+      quotaNotice: null,
       jobs: [],
       ownerId: null,
 
@@ -209,6 +221,7 @@ export const useCrawlStore = create<CrawlState>()(
           currentJob: newJob,
           isRunning: true,
           statusError: null,
+          quotaNotice: null,
           jobs: [newJob, ...state.jobs.filter((job) => job.id !== localJobId)],
         }))
 
@@ -230,8 +243,14 @@ export const useCrawlStore = create<CrawlState>()(
             status: statusFromResponse(result.status, 'queued'),
             updated_at: new Date().toISOString(),
           }
+          const capped = typeof result.page_limit === 'number'
+            && typeof result.requested_page_limit === 'number'
+            && result.page_limit < result.requested_page_limit
           set((state) => ({
             currentJob: queuedJob,
+            quotaNotice: capped
+              ? `Dein Seitenkontingent lässt nur noch ${result.page_limit} von ${result.requested_page_limit} angefragten Seiten zu. Der Crawl läuft mit diesem Limit.`
+              : null,
             jobs: replaceJob(state.jobs, queuedJob),
           }))
           get().pollJobStatus(localJobId, result.job_id)
@@ -409,6 +428,7 @@ export const useCrawlStore = create<CrawlState>()(
           jobs: state.jobs.filter((job) => job.id !== jobId),
           currentJob: isCurrent ? null : state.currentJob,
           statusError: isCurrent ? null : state.statusError,
+          quotaNotice: isCurrent ? null : state.quotaNotice,
         }))
       },
 
@@ -422,7 +442,7 @@ export const useCrawlStore = create<CrawlState>()(
       claimFor: (userId) => {
         if (get().ownerId === userId) return
         stopPolling()
-        set({ ownerId: userId, jobs: [], currentJob: null, isRunning: false, statusError: null })
+        set({ ownerId: userId, jobs: [], currentJob: null, isRunning: false, statusError: null, quotaNotice: null })
       },
     }),
     {

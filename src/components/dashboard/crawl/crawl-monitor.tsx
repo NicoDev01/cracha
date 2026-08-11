@@ -41,7 +41,7 @@ function StepIcon({ complete, active }: { complete: boolean; active: boolean }) 
 }
 
 export function CrawlMonitor() {
-  const { currentJob, isRunning, statusError, cancelCrawl } = useCrawlStore()
+  const { currentJob, isRunning, statusError, quotaNotice, cancelCrawl } = useCrawlStore()
   const [elapsed, setElapsed] = useState(0)
 
   useEffect(() => {
@@ -181,6 +181,12 @@ export function CrawlMonitor() {
               <span className="text-[11px] text-gray-500">Chunks</span>
             </div>
           </div>
+        )}
+
+        {quotaNotice && (
+          <p className="mt-4 rounded-xl border border-warning-200 bg-warning-50 px-3 py-2 text-xs leading-5 text-warning-700 dark:border-warning-500/30 dark:bg-warning-500/10 dark:text-warning-300">
+            {quotaNotice}
+          </p>
         )}
 
         {statusError && isRunning && (
