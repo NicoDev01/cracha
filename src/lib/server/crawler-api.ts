@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { getWorkerEnv } from './cloudflare'
+import { canCreateDatabase, getUsage, QuotaError, remainingPages } from './plan'
 import {
   createDatabase,
   DEFAULT_CRAWL_SETTINGS,
@@ -91,14 +92,26 @@ export async function enqueueCrawl(input: CrawlInput, userId: string) {
   // Naming an existing knowledge base means re-crawling that one, and it must
   // belong to the caller. Naming none means creating one, and only then does an
   // id come into existence — server-side.
+  //
+  // Deliberately the same message whether the id is unknown or belongs to
+  // somebody else: the previous pair of messages told a caller which ids exist.
+  const rebuilding = input.database_id ? await getOwnedDatabase(input.database_id, userId) : null
+  if (input.database_id && !rebuilding) {
+    throw new Error('Wissensbasis nicht gefunden oder Zugriff verweigert.')
+  }
+
+  // Every crawl is checked against the account's quota here rather than in the
+  // two routes that lead to it, so a route added later cannot forget to ask.
+  // The check happens before anything is created: a refused crawl must not
+  // leave an empty knowledge base behind.
+  const usage = await getUsage(userId)
+  if (!rebuilding && !canCreateDatabase(usage)) throw new QuotaError('databases', usage)
+  const budget = remainingPages(usage, rebuilding)
+  if (budget <= 0) throw new QuotaError('pages', usage)
+
   let database: DatabaseRecord
-  if (input.database_id) {
-    const owned = await getOwnedDatabase(input.database_id, userId)
-    // Deliberately the same message whether the id is unknown or belongs to
-    // somebody else: the previous pair of messages told a caller which ids
-    // exist.
-    if (!owned) throw new Error('Wissensbasis nicht gefunden oder Zugriff verweigert.')
-    database = owned
+  if (rebuilding) {
+    database = rebuilding
   } else {
     const name = input.database_name?.trim()
     if (!name) throw new Error('Ein Name für die Wissensbasis ist erforderlich.')
@@ -110,7 +123,11 @@ export async function enqueueCrawl(input: CrawlInput, userId: string) {
     throw new Error('Crawler-Service ist nicht konfiguriert.')
   }
 
-  const settings = resolveCrawlSettings(input, database.crawl_settings)
+  // Asking for more pages than are left is capped rather than refused. Someone
+  // with 30 pages of budget who requests 100 gets the 30 they can still have;
+  // refusing the whole crawl would leave them to guess the right number.
+  const requested = resolveCrawlSettings(input, database.crawl_settings)
+  const settings = { ...requested, limit: Math.min(requested.limit, budget) }
   await saveDatabase({
     ...database,
     name: input.database_name || database.name,
@@ -157,6 +174,13 @@ export async function enqueueCrawl(input: CrawlInput, userId: string) {
     JSON.stringify({ user_id: userId, database_id: database.id }),
     { expirationTtl: 86_400 },
   )
-  // The caller no longer knows the id it is crawling into, so it is returned.
-  return { ...result, database_id: database.id }
+  // The caller no longer knows the id it is crawling into, so it is returned —
+  // and so is the page limit actually granted, which the interface needs to say
+  // when it came out lower than what was asked for.
+  return {
+    ...result,
+    database_id: database.id,
+    page_limit: settings.limit,
+    requested_page_limit: requested.limit,
+  }
 }

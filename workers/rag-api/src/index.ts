@@ -152,12 +152,17 @@ async function handleComplete(request: Request, env: Env): Promise<Response> {
     ? Math.max(0, Math.floor(Number(body.chunks_count)))
     : database.chunks_count ?? 0
   const now = new Date().toISOString()
+  const pagesCount = Math.max(0, Math.floor(body.pages_count))
   const updated: DatabaseRecord = {
     ...database,
     status: 'active',
     ai_search_instance_id: instanceId,
-    pages_count: Math.max(0, Math.floor(body.pages_count)),
-    document_count: Math.max(0, Math.floor(body.pages_count)),
+    pages_count: pagesCount,
+    // This is the moment the real page count is known, so it is the moment the
+    // owner's quota is settled. Taking the larger of the two keeps a re-crawl
+    // that shrank the site from handing budget back.
+    pages_charged: Math.max(database.pages_charged ?? 0, pagesCount),
+    document_count: pagesCount,
     chunks_count: chunksCount,
     last_crawl: now,
     updated_at: now,

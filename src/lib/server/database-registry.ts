@@ -36,6 +36,13 @@ export interface DatabaseRecord {
   document_count: number
   chunks_count: number
   pages_count: number
+  /**
+   * The highest page count this knowledge base has ever reached, which is what
+   * its owner's quota is charged. It never falls: a re-crawl that finds fewer
+   * pages does not refund the ones already fetched. Absent on records written
+   * before quotas existed, where pages_count is the best available stand-in.
+   */
+  pages_charged?: number
   status: 'pending' | 'crawling' | 'active' | 'failed'
   ai_search_instance_id?: string
   last_error?: string
@@ -161,6 +168,7 @@ export async function getOwnedDatabase(id: string, userId: string): Promise<Data
     document_count: raw.document_count ?? 0,
     chunks_count: raw.chunks_count ?? 0,
     pages_count: raw.pages_count ?? raw.document_count ?? 0,
+    pages_charged: raw.pages_charged ?? raw.pages_count ?? raw.document_count ?? 0,
     status: raw.status === 'active' || raw.status === 'crawling' || raw.status === 'failed'
       ? raw.status
       : 'pending',
@@ -207,6 +215,7 @@ export async function createDatabase(
     document_count: 0,
     chunks_count: 0,
     pages_count: 0,
+    pages_charged: 0,
     status: 'pending',
   }
   await claimDatabase(database)

@@ -16,6 +16,12 @@ export interface DatabaseRecord {
   last_crawl?: string | null
   document_count: number
   pages_count: number
+  /**
+   * The highest pages_count this base has ever reached. It is what the owner's
+   * page quota is charged, and it never falls — a re-crawl that finds fewer
+   * pages does not refund the ones already fetched and indexed.
+   */
+  pages_charged?: number
   chunks_count: number
   status: 'pending' | 'crawling' | 'active' | 'failed'
   ai_search_instance_id?: string

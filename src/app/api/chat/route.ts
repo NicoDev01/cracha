@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { getWorkerEnv } from '@/lib/server/cloudflare'
 import { DEFAULT_GENERATION_MODEL, streamGroundedAnswer } from '@/lib/server/generation'
+import { consumeChatMessage, getUsage, QuotaError } from '@/lib/server/plan'
 import { getAuthenticatedUser } from '@/lib/supabase/server'
 import type { Source } from '@/types/chat'
 
@@ -57,6 +58,15 @@ export async function POST(request: NextRequest) {
   if (!question || question.length > 4_000 || !tenantId || tenantId.length > 160) {
     return NextResponse.json({ error: 'Frage oder Wissensbasis-ID ist ungültig.' }, { status: 400 })
   }
+  // Charged before the search and the model run, not after: those are what the
+  // quota exists to bound, so an account that is over must not reach them. The
+  // usage is only read on refusal, where a few extra reads cost nothing.
+  if (!(await consumeChatMessage())) {
+    const usage = await getUsage(user.id)
+    const quota = new QuotaError('chat', usage)
+    return NextResponse.json({ error: quota.message, reason: quota.reason, usage }, { status: 402 })
+  }
+
   const messages = Array.isArray(body?.messages)
     ? body.messages.filter((message) => (message.role === 'user' || message.role === 'assistant') && message.content.trim()).slice(-12).map((message) => ({ role: message.role, content: message.content.trim().slice(0, 2_000) }))
     : []
