@@ -1,6 +1,14 @@
+import type { Metadata } from "next"
+import { noIndex } from "@/lib/seo"
 import { Suspense } from 'react'
 import { NewPasswordForm } from '@/components/auth/NewPasswordForm'
 import { LightOnly } from '@/lib/theme/use-light-only'
+
+export const metadata: Metadata = {
+  ...noIndex,
+  title: "Neues Passwort",
+  description: "Lege ein neues Passwort für dein CraCha-Konto fest.",
+}
 
 export default function NewPasswordPage() {
   return (

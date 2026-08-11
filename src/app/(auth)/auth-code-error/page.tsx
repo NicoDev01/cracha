@@ -1,7 +1,15 @@
+import type { Metadata } from "next"
+import { noIndex } from "@/lib/seo"
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { AlertCircle, ArrowLeft } from 'lucide-react'
+
+export const metadata: Metadata = {
+  ...noIndex,
+  title: "Anmeldung fehlgeschlagen",
+  description: "Die Anmeldung konnte nicht abgeschlossen werden.",
+}
 
 export default function AuthCodeErrorPage() {
   return (

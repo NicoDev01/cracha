@@ -1,9 +1,11 @@
 import { Metadata } from "next";
+import { noIndex } from "@/lib/seo";
 
 import { DashboardOverview } from "@/components/dashboard/overview/dashboard-overview";
 
 export const metadata: Metadata = {
-  title: "Dashboard - CraCha RAG-Agent",
+  ...noIndex,
+  title: "Dashboard",
   description: "Status der Wissensbasen und der laufenden Crawls",
 };
 

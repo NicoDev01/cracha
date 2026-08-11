@@ -5,7 +5,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 
-import { siteConfig } from "@/config/site";
 import { cn } from "@/lib/utils";
 // import { useScroll } from "@/hooks/use-scroll";
 import { Icons } from "@/components/shared/icons";
@@ -85,7 +84,7 @@ export function NavBar({ scroll = false }: NavBarProps) {
             <Link href="/" className="flex items-center">
               <Image
                 src="/images/logo/logo.svg"
-                alt="CraCha Logo"
+                alt="CraCha"
                 width={154}
                 height={32}
                 priority
@@ -93,7 +92,7 @@ export function NavBar({ scroll = false }: NavBarProps) {
               />
               <Image
                 src="/images/logo/logo-dark.svg"
-                alt="CraCha Logo Dark"
+                alt="CraCha"
                 width={154}
                 height={32}
                 priority

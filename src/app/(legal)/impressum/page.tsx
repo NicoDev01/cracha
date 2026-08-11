@@ -3,7 +3,8 @@ import type { Metadata } from "next";
 import { LegalPage, Platzhalter, Section } from "@/components/legal/legal-page";
 
 export const metadata: Metadata = {
-  title: "Impressum – CraCha",
+  alternates: { canonical: "/impressum" },
+  title: "Impressum",
   description: "Anbieterkennzeichnung nach § 5 DDG.",
 };
 

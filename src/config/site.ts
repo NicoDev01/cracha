@@ -1,46 +1,22 @@
-import { SidebarNavItem, SiteConfig } from "@/types";
+import { SiteConfig } from "@/types";
 
-const site_url = process.env.NEXT_PUBLIC_APP_URL || "https://cracha.aimpact-agency.workers.dev";
+/**
+ * The public origin. It used to fall back to the workers.dev hostname, and
+ * NEXT_PUBLIC_APP_URL is set nowhere in the repo or the deploy workflow — so
+ * every absolute URL built from this pointed at cracha.aimpact-agency.workers.dev
+ * while the site lives on cracha-app.com. Canonical links and Open Graph URLs
+ * are exactly the places where that is expensive: a crawler follows them.
+ */
+const site_url = process.env.NEXT_PUBLIC_APP_URL || "https://cracha-app.com";
 
 export const siteConfig: SiteConfig = {
   name: "CraCha",
   description:
-    "Verwandle komplexe Websites in intelligente, durchsuchbare Wissensspeicher mit modernster RAG-Technologie. CraCha macht Wissensmanagement einfach und effizient.",
+    "CraCha kämpft sich durch jede Unterseite einer Webseite und baut daraus deine eigene Wissensdatenbank. Du fragst, CraCha antwortet – hunderte Seiten in einem Chat.",
   url: site_url,
-  ogImage: `${site_url}/_static/og.jpg`,
   links: {
     twitter: "https://twitter.com/cracha_ai",
     github: "https://github.com/cracha/cracha-rag-agent",
   },
   mailSupport: "support@cracha.ai",
 };
-
-export const footerLinks: SidebarNavItem[] = [
-  {
-    title: "Unternehmen",
-    items: [
-      { title: "Über uns", href: "/about" },
-      { title: "Kontakt", href: "/contact" },
-      { title: "AGB", href: "/terms" },
-      { title: "Datenschutz", href: "/privacy" },
-    ],
-  },
-  {
-    title: "Produkt",
-    items: [
-      { title: "Features", href: "/#features" },
-      { title: "Preise", href: "/pricing" },
-      { title: "API", href: "/api-docs" },
-      { title: "Status", href: "/status" },
-    ],
-  },
-  {
-    title: "Ressourcen",
-    items: [
-      { title: "Dokumentation", href: "/docs" },
-      { title: "Tutorials", href: "/tutorials" },
-      { title: "Blog", href: "/blog" },
-      { title: "Support", href: "/support" },
-    ],
-  },
-];

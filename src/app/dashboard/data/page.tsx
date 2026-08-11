@@ -1,10 +1,12 @@
 import PageBreadcrumb from "@/components/dashboard/common/PageBreadCrumb";
 import { DataDashboard } from '@/components/dashboard/data/data-dashboard';
 import { Metadata } from "next";
+import { noIndex } from "@/lib/seo";
 
 export const metadata: Metadata = {
-  title: "Datenbank-Verwaltung - CraCha RAG-Agent Dashboard",
-  description: "Verwalten Sie Ihre Datenbanken, überwachen Sie den Status und führen Sie Re-Crawls durch",
+  ...noIndex,
+  title: "Wissensbasen",
+  description: "Verwalte deine Wissensbasen, sieh den Status und lies Websites neu ein.",
 };
 
 export default function DataPage() {

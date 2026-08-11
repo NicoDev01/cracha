@@ -3,7 +3,8 @@ import type { Metadata } from "next";
 import { LegalPage, List, Platzhalter, Section } from "@/components/legal/legal-page";
 
 export const metadata: Metadata = {
-  title: "Datenschutzerklärung – CraCha",
+  alternates: { canonical: "/datenschutz" },
+  title: "Datenschutzerklärung",
   description:
     "Welche personenbezogenen Daten CraCha verarbeitet, zu welchem Zweck, auf welcher Rechtsgrundlage und welche Rechte du hast.",
 };

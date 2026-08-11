@@ -1,9 +1,25 @@
 import type { Metadata } from "next";
 import "./home/globals.css";
+import { siteConfig } from "@/config/site";
 
+/**
+ * The fallback for every route that does not set its own.
+ *
+ * `metadataBase` belongs here rather than in a single layout: without it Next
+ * cannot turn a relative Open Graph or canonical path into the absolute URL a
+ * crawler needs, and it silently drops the tag instead of failing the build.
+ *
+ * The title used to be "Intelligente Wissensspeicher durch RAG-Technologie" —
+ * three words nobody types into a search box, and none of them naming what the
+ * thing is.
+ */
 export const metadata: Metadata = {
-  title: "CraCha - Intelligente Wissensspeicher durch RAG-Technologie",
-  description: "Verwandle komplexe Websites in intelligente, durchsuchbare Wissensspeicher. CraCha nutzt modernste RAG-Technologie für präzise, kontextuelle Antworten aus Ihren Daten.",
+  metadataBase: new URL(siteConfig.url),
+  title: {
+    default: "CraCha – verwandle Webseiten in einen Chatbot",
+    template: "%s | CraCha",
+  },
+  description: siteConfig.description,
 };
 
 interface RootLayoutProps {

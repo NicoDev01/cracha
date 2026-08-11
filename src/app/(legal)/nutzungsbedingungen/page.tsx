@@ -3,7 +3,8 @@ import type { Metadata } from "next";
 import { LegalPage, List, Platzhalter, Section } from "@/components/legal/legal-page";
 
 export const metadata: Metadata = {
-  title: "Nutzungsbedingungen – CraCha",
+  alternates: { canonical: "/nutzungsbedingungen" },
+  title: "Nutzungsbedingungen",
   description:
     "Bedingungen für die Nutzung von CraCha während der Beta-Phase: Konto, erlaubte Nutzung, Verantwortung für abgerufene Websites, Haftung und Laufzeit.",
 };

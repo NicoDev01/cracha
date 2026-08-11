@@ -1,10 +1,12 @@
 import type { Metadata } from "next"
+import { noIndex } from "@/lib/seo";
 
 import { ClientOnly } from "@/components/client-only"
 import { CrawlInterface } from "@/components/dashboard/crawl/crawl-interface"
 
 export const metadata: Metadata = {
-  title: "Website erfassen – CraCha",
+  ...noIndex,
+  title: "Website erfassen",
   description: "Websites crawlen und als durchsuchbare Wissensbasis bereitstellen.",
 }
 

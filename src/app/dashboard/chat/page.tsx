@@ -1,7 +1,6 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import Head from "next/head";
 
 // Dynamic import to reduce bundle size
 const ChatInterface = dynamic(
@@ -18,14 +17,8 @@ const ChatInterface = dynamic(
 
 export default function ChatPage() {
   return (
-    <>
-      <Head>
-        <title>Chat - CraCha RAG-Agent Dashboard</title>
-        <meta name="description" content="Intelligente Unterhaltungen mit Ihren gecrawlten Daten durch RAG-Technologie" />
-      </Head>
-      <div className="h-full min-h-0 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-theme-xs dark:border-gray-800 dark:bg-gray-900">
-        <ChatInterface />
-      </div>
-    </>
+    <div className="h-full min-h-0 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-theme-xs dark:border-gray-800 dark:bg-gray-900">
+      <ChatInterface />
+    </div>
   );
 }
