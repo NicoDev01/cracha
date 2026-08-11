@@ -307,3 +307,41 @@ async def test_the_user_agent_names_someone_to_contact() -> None:
     # The whole failure above came down to this string. A bot that does not say
     # who it is gets turned away by more than one large site.
     assert "https://" in crawl.USER_AGENT
+
+
+def test_a_language_switcher_is_not_content() -> None:
+    # Wikipedia lists every translation of the article inside <main>, in a plain
+    # <div>, so nothing in the markup marks it as navigation. It was 7% of the
+    # extracted text and answers no question anyone would ask.
+    languages = "".join(
+        f'<li><a href="/x/{i}">Sprache {i}</a></li>' for i in range(40)
+    )
+    page = html_page(f"<div><ul>{languages}</ul></div>" + FILLER)
+
+    assert page is not None
+    assert "Sprache 7" not in page.markdown
+    # ASCII on purpose: the helper's document declares no charset, so lxml
+    # follows the HTML default and reads the bytes as Latin-1.
+    assert "Beschreibung des Angebots" in page.markdown
+
+
+def test_a_short_list_of_links_inside_prose_survives() -> None:
+    # The blunt version of this rule dropped <header> wholesale and took 13% off
+    # python.org/about, its headline included. A handful of links among real
+    # sentences is a paragraph, not a menu.
+    page = html_page(
+        FILLER
+        + """
+        <div>
+          <p>Weiterführend siehe die Dokumentation und den Leitfaden.</p>
+          <ul>
+            <li><a href="/docs">Dokumentation</a></li>
+            <li><a href="/guide">Leitfaden</a></li>
+          </ul>
+        </div>
+        """
+    )
+
+    assert page is not None
+    assert "Dokumentation" in page.markdown
+    assert "Leitfaden" in page.markdown

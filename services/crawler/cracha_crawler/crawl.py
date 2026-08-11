@@ -312,6 +312,40 @@ MAX_TABLE_ROWS = 400
 BLOCK_XPATH = (
     ".//h1|.//h2|.//h3|.//h4|.//h5|.//h6|.//p|.//li|.//pre|.//blockquote|.//table|.//dt|.//dd"
 )
+# A block whose text sits almost entirely inside links, and enough of them, is
+# navigation wearing a content tag: a language switcher, a documentation rail, a
+# tag cloud. Dropping <header> outright was the obvious idea and the wrong one —
+# measured against four real sites it took 13% off python.org/about, headline
+# included, while leaving laravel.com and MDN untouched.
+#
+# The thresholds come from those same measurements rather than from taste.
+# Wikipedia's language list is 105 links at a ratio of 1.00 and goes; the
+# densest real content on python.org/about is 4 links at 0.98 and stays. MDN's
+# densest block reaches 0.52 and is never a candidate.
+NAVIGATION_LINK_RATIO = 0.9
+NAVIGATION_MIN_LINKS = 10
+NAVIGATION_MIN_TEXT = 120
+NAVIGATION_XPATH = ".//ul|.//ol|.//div|.//header"
+
+
+def _visible_text(element) -> str:
+    return " ".join("".join(element.itertext()).split())
+
+
+def _drop_navigation_blocks(root) -> None:
+    for element in root.xpath(NAVIGATION_XPATH):
+        # A parent may already have taken this subtree with it.
+        if element is root or root not in element.iterancestors():
+            continue
+        text = _visible_text(element)
+        if len(text) < NAVIGATION_MIN_TEXT:
+            continue
+        links = element.xpath(".//a")
+        if len(links) < NAVIGATION_MIN_LINKS:
+            continue
+        linked = sum(len(_visible_text(link)) for link in links)
+        if linked / len(text) >= NAVIGATION_LINK_RATIO:
+            element.drop_tree()
 
 
 def _markdown_table(table) -> str:
@@ -379,6 +413,7 @@ def _html_page(
         or [document]
     )
     root = roots[0]
+    _drop_navigation_blocks(root)
     lines: list[str] = []
     consumed: set = set()
     for element in root.xpath(BLOCK_XPATH):
