@@ -230,3 +230,18 @@ async def test_finalize_completes_a_ready_index() -> None:
 
     assert result.complete is True
     assert completed is True
+
+
+def test_a_small_job_does_not_wait_fifteen_seconds_between_polls() -> None:
+    # A flat ceiling was set for crawls of hundreds of pages. On a single-page
+    # crawl it was most of the wait: measured on one Wikipedia article, the last
+    # two polls sat 15.8 and 15.1 seconds apart and the index had gone ready
+    # inside that gap.
+    assert ingest_module.index_poll_ceiling(1) < 5
+    assert ingest_module.index_poll_ceiling(10) < 6
+
+
+def test_a_large_job_still_backs_off() -> None:
+    # Polling every two seconds for half an hour cost 900 full item listings.
+    assert ingest_module.index_poll_ceiling(500) == ingest_module.INDEX_STATUS_MAX_INTERVAL_SECONDS
+    assert ingest_module.index_poll_ceiling(120) >= 15

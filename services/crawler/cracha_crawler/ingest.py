@@ -11,7 +11,23 @@ from .models import Page
 ProgressCallback = Callable[[dict[str, object]], Awaitable[None]]
 INDEX_STATUS_ATTEMPTS = 15
 INDEX_STATUS_INTERVAL_SECONDS = 2
+# How long we are willing to keep asking before we notice the index is ready.
+# A flat 15 seconds was chosen for crawls of hundreds of pages, where asking
+# often only makes work for both sides. On a one-page crawl it is most of what
+# the user waits for: measured on a single Wikipedia article, the last two polls
+# were 15.8 and 15.1 seconds apart and the index had been ready inside that gap.
+# The ceiling now grows with the job, so a small crawl reacts quickly and a
+# large one still backs off.
 INDEX_STATUS_MAX_INTERVAL_SECONDS = 15
+INDEX_STATUS_MIN_CEILING_SECONDS = 4
+
+
+def index_poll_ceiling(item_count: int) -> float:
+    """The longest gap between two status polls for a job of this size."""
+    return min(
+        float(INDEX_STATUS_MAX_INTERVAL_SECONDS),
+        INDEX_STATUS_MIN_CEILING_SECONDS + item_count / 10,
+    )
 # AI Search sometimes leaves an item in "running" indefinitely although its
 # chunks are already searchable. Waiting out the whole budget for those turned a
 # finished crawl into a half-hour hang followed by a failure, while the pages
@@ -180,6 +196,9 @@ class RagIngestClient:
         )
         last_change = _monotonic()
         delay = float(INDEX_STATUS_INTERVAL_SECONDS)
+        # From the starting count: failed keys are dropped from active_keys as
+        # we go, and the pace should not change because of that.
+        ceiling = index_poll_ceiling(len(active_keys))
         for attempt in range(attempts):
             response = await self._post(client, "/ingest/status", payload)
             status = response.json()
@@ -233,7 +252,7 @@ class RagIngestClient:
                 await asyncio.sleep(delay)
                 # Polling every two seconds for half an hour cost 900 full item
                 # listings and told us nothing the backoff does not.
-                delay = min(delay * 1.5, float(INDEX_STATUS_MAX_INTERVAL_SECONDS))
+                delay = min(delay * 1.5, ceiling)
 
         # AI Search processes accepted uploads asynchronously. A still-running item is
         # not an ingestion failure and remains searchable as soon as Cloudflare finishes.
