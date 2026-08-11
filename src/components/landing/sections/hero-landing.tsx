@@ -31,7 +31,11 @@ export default function HeroLanding() {
 
          <p className="reveal max-w-2xl text-balance leading-normal text-muted-foreground sm:text-xl sm:leading-8 [animation-delay:160ms]">
            Chatte mit hunderten Seiten gleichzeitig. <br />
-           <strong>CraCha</strong> kämpft sich durch jede Unterseite einer Website <br /> 
+           {/* Only from sm up: this break sits inside a sentence, and on a phone
+               the line has already wrapped there anyway — forcing it a second
+               time left a stub of two or three words on its own line. */}
+           <strong>CraCha</strong> kämpft sich durch jede Unterseite einer Website{" "}
+           <br className="hidden sm:inline" />
            und baut dir daraus eine Datenbank. <br />
            Nie wieder lästiges Geklicke durch einen Website-Dschungel.
          </p>

@@ -65,12 +65,11 @@ export default function Features() {
                 <h2 className="font-heading text-3xl leading-tight md:text-5xl text-foreground">
                     Das macht CraCha für <span className="text-gradient_indigo-purple">dich</span>
                 </h2>
-                <p className="mt-4 text-muted-foreground">
-                    Die Arbeit übernimmt CraCha. Du bekommst ganz einfach die Antworten, die du suchst.
-                </p>
             </div>
 
-          <div className="mt-12 grid gap-4">
+          {/* No mt on top of the header's mb-12: the two used to be separated
+              by a paragraph as well, and without it they add up to 6rem. */}
+          <div className="grid gap-4">
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 {features.slice(0, 2).map((feature) => (
                     <GridItem
