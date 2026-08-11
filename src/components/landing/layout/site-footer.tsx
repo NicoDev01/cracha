@@ -10,12 +10,15 @@ import { cn } from "@/lib/utils";
  * the link did nothing, and none of the link equity from those pages reached
  * the landing page.
  *
- * The line under the logo names the product and says what it does in one
- * sentence. Google's OAuth branding review asks for the app's purpose to be
- * stated on the home page and for the name there to match the consent screen;
- * the hero does both, but it does it in marketing voice and split across a
- * headline and a paragraph. This is the plain version, and because it sits in
- * the footer it is on every public page a reviewer might open.
+ * The two paragraphs under the logo exist for Google's OAuth branding review,
+ * which asks the home page for three separate things: what the app is called,
+ * what it does, and why it wants the user data it asks for. The hero covers
+ * the first two, but in marketing voice and split across a headline and a
+ * paragraph. The first paragraph here is the plain version of that. The second
+ * answers the third question, which nothing else on the site answered: it
+ * names the three fields Google hands us, what they are used for, and what
+ * does not happen with them. Both sit in the footer, so they are on every
+ * public page a reviewer might open rather than only on the landing page.
  */
 export function SiteFooter({ className }: React.HTMLAttributes<HTMLElement>) {
   return (
@@ -44,6 +47,21 @@ export function SiteFooter({ className }: React.HTMLAttributes<HTMLElement>) {
             eine durchsuchbare Wissensdatenbank. Du stellst Fragen im Chat und
             bekommst Antworten mit Link auf die Seite, aus der sie stammen. Zum
             Anmelden nutzt CraCha deine E-Mail-Adresse oder dein Google-Konto.
+          </p>
+          <p className="max-w-sm text-sm text-muted-foreground">
+            Meldest du dich über Google an, erhält CraCha aus deinem Google-Konto
+            ausschließlich deinen Namen, deine E-Mail-Adresse und dein
+            Profilbild. Diese Angaben dienen allein dazu, dein CraCha-Konto
+            anzulegen und dich beim nächsten Besuch wiederzuerkennen. Weitere
+            Daten fragt CraCha nicht ab, und es werden keine Daten an Dritte
+            verkauft oder für Werbung genutzt. Einzelheiten stehen in der{" "}
+            <Link
+              href="/datenschutz"
+              className="underline underline-offset-4 transition-colors hover:text-foreground"
+            >
+              Datenschutzerklärung
+            </Link>
+            .
           </p>
         </div>
         <div>
