@@ -13,7 +13,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
   return [
     {
-      url: `${siteConfig.url}/`,
+      // No trailing slash, because that is the exact string the canonical link
+      // and og:url carry. The two forms are the same address to a crawler, but
+      // Search Console matches some of its reports on the literal text, and a
+      // home page listed one way and declared the other shows up there as
+      // "no referring sitemaps found".
+      url: siteConfig.url,
       lastModified,
       changeFrequency: "weekly",
       priority: 1,
