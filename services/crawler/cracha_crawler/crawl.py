@@ -24,7 +24,13 @@ from .security import assert_public_url
 
 MAX_SITEMAP_BYTES = 2_000_000
 MAX_REDIRECTS = 5
-USER_AGENT = "CraChaBot/1.0"
+# The contact URL is not decoration. Wikimedia — and it is not alone — answers
+# 403 to a bot that does not say who it is, for robots.txt as well as for every
+# article, which made a Wikipedia crawl fail with "no indexable content".
+# Measured against de.wikipedia.org: "CraChaBot/1.0" gets 403, the same string
+# with "(+https://cracha-app.com)" gets 200. A browser user agent gets 403 too,
+# so impersonating one is not the way out — identifying ourselves is.
+USER_AGENT = "CraChaBot/1.0 (+https://cracha-app.com)"
 # Probed in order once robots.txt names no sitemap.
 SITEMAP_PATHS = (
     "/sitemap.xml",
@@ -131,11 +137,28 @@ async def _dynamic_page_urls(start_url: str, source_host: str | None) -> list[st
     return list(dict.fromkeys(urls))
 
 
+class CrawlBlockedError(RuntimeError):
+    """The source refused us, as opposed to having nothing worth indexing.
+
+    Both used to end at the same place: zero pages, and a job that failed with
+    "No indexable content was found." — which sends the reader looking for a
+    problem in their own site's content when the site never answered at all.
+    """
+
+
 async def _robots_allowed(
     client: httpx.AsyncClient,
     url: str,
     cache: dict[str, robotparser.RobotFileParser | None],
-) -> bool:
+) -> str | None:
+    """None when the URL may be fetched, otherwise the reason it may not.
+
+    This returned a bare False for three different situations — robots.txt
+    forbids this path, the server refused to hand out robots.txt at all, and
+    robots.txt redirected off the host — and every caller then dropped the URL
+    without a word. A refusal is worth saying out loud: it is the difference
+    between a site that has nothing for us and a site that will not talk to us.
+    """
     parsed = urlsplit(url)
     origin = urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
     if origin not in cache:
@@ -143,18 +166,23 @@ async def _robots_allowed(
         try:
             content, final_url = await _safe_download(client, robots_url)
             if urlsplit(final_url).hostname != parsed.hostname:
-                return False
+                return f"robots.txt von {origin} verweist auf einen anderen Host."
             rules = robotparser.RobotFileParser(robots_url)
             rules.parse(content.decode("utf-8", errors="replace").splitlines())
             cache[origin] = rules
         except httpx.HTTPStatusError as error:
             cache[origin] = None
             if error.response.status_code in {401, 403}:
-                return False
+                return (
+                    f"{parsed.hostname} beantwortet auch robots.txt mit "
+                    f"HTTP {error.response.status_code} und sperrt uns damit aus."
+                )
         except (httpx.HTTPError, ValueError, OSError):
             cache[origin] = None
     rules = cache[origin]
-    return rules is None or rules.can_fetch(USER_AGENT, url)
+    if rules is not None and not rules.can_fetch(USER_AGENT, url):
+        return f"robots.txt von {parsed.hostname} verbietet diese Seite."
+    return None
 
 
 async def _robots_sitemaps(client: httpx.AsyncClient, origin: str) -> list[str]:
@@ -394,6 +422,9 @@ async def _http_fallback_pages(
     visited: set[str] = set()
     pages: dict[str, Page] = {}
     skipped = 0
+    # Why the URL the user actually typed was dropped, if it was. Everything
+    # below it can fail for ordinary reasons; that one failing is the whole job.
+    blocked_start: str | None = None
     robots_cache: dict[str, robotparser.RobotFileParser | None] = {}
     async with httpx.AsyncClient(timeout=45) as client:
         while pending and len(pages) < request.limit:
@@ -405,9 +436,14 @@ async def _http_fallback_pages(
             if urlsplit(url).hostname != source_host:
                 skipped += 1
                 continue
-            if request.respect_robots_txt and not await _robots_allowed(client, url, robots_cache):
-                skipped += 1
-                continue
+            if request.respect_robots_txt:
+                refusal = await _robots_allowed(client, url, robots_cache)
+                if refusal:
+                    print(f"[WARN] HTTP fallback skipped {url} ({refusal})")
+                    if url == start_url:
+                        blocked_start = refusal
+                    skipped += 1
+                    continue
             try:
                 content, final_url = await _safe_download(client, url)
                 if urlsplit(final_url).hostname != source_host:
@@ -418,6 +454,13 @@ async def _http_fallback_pages(
                     f"[WARN] HTTP fallback skipped {url} "
                     f"({type(error).__name__}: {error})"
                 )
+                if url == start_url:
+                    status = getattr(getattr(error, "response", None), "status_code", None)
+                    blocked_start = (
+                        f"{source_host} hat die Seite mit HTTP {status} abgelehnt."
+                        if status
+                        else f"{source_host} war nicht erreichbar ({type(error).__name__})."
+                    )
                 skipped += 1
                 await _report_progress(
                     on_progress,
@@ -451,6 +494,8 @@ async def _http_fallback_pages(
                 skipped_count=skipped,
                 url=final_url,
             )
+    if not pages and blocked_start:
+        raise CrawlBlockedError(blocked_start)
     return list(pages.values()), skipped
 
 
@@ -474,17 +519,19 @@ async def _http_direct_pages(
             page: Page | None = None
             final_url = url
             try:
-                if request.respect_robots_txt and not await _robots_allowed(
-                    client, url, robots_cache
-                ):
-                    raise ValueError("Blocked by robots.txt")
+                if request.respect_robots_txt:
+                    refusal = await _robots_allowed(client, url, robots_cache)
+                    if refusal:
+                        raise ValueError(refusal)
                 async with semaphore:
                     content, final_url = await _safe_download(client, url)
                 if urlsplit(final_url).hostname != urlsplit(str(request.url)).hostname:
                     raise ValueError("Redirect must remain on the source host.")
                 page, _links = _html_page(content, final_url, 1, request)
-            except (httpx.HTTPError, ValueError, OSError):
-                pass
+            except (httpx.HTTPError, ValueError, OSError) as error:
+                # Swallowing this without a word is how a whole crawl came back
+                # empty with nothing in the log to say which URL failed or why.
+                print(f"[WARN] Skipped {url} ({type(error).__name__}: {error})")
             async with lock:
                 if page:
                     pages[page.url] = page
@@ -519,13 +566,19 @@ async def _crawl4ai_pages(
         text_mode=True,
         light_mode=True,
         verbose=False,
+        # The browser sends this, not the run config. Without it Chromium used
+        # its own headless default and a site that screens user agents refused
+        # every page — the run config's user_agent never reached the wire, so
+        # the browser pass returned nothing and the failure looked like empty
+        # content rather than a rejected request.
+        user_agent=USER_AGENT,
         extra_args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
     )
     run_options = {
         "cache_mode": CacheMode.BYPASS,
         "verbose": False,
         "check_robots_txt": request.respect_robots_txt,
-        "user_agent": f"{USER_AGENT} (+https://cracha.aimpact-agency.workers.dev)",
+        "user_agent": USER_AGENT,
         "exclude_external_links": True,
         "excluded_tags": ["nav", "footer", "aside", "script", "style", "noscript"],
         "remove_overlay_elements": True,

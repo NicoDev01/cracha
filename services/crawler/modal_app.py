@@ -7,7 +7,7 @@ from typing import Annotated
 
 import modal
 
-from cracha_crawler.crawl import analyze_site, crawl_pages
+from cracha_crawler.crawl import CrawlBlockedError, analyze_site, crawl_pages
 from cracha_crawler.ingest import RagIngestClient
 from cracha_crawler.models import AnalyzeRequest, CrawlRequest, SiteAnalysis
 from cracha_crawler.status import stale_job_ids
@@ -280,15 +280,18 @@ async def process_crawl(payload: dict, job_id: str) -> dict:
             )
         return result
     except Exception as error:
+        # A site that refused us is not a site with nothing to index, and the
+        # reader cannot open the Modal log to tell the two apart. When the
+        # crawler knows which it was, that sentence is the error.
+        message = (
+            f"{error} Die Quelle lässt sich nicht automatisiert abrufen."
+            if isinstance(error, CrawlBlockedError)
+            else "Crawl oder Indexierung ist fehlgeschlagen. Details stehen im Modal-Log."
+        )
         try:
             await ingest_client.mark_failed(request.tenant_id, request.user_id, str(error))
         finally:
-            await update_status(
-                job_id,
-                status="failed",
-                phase="failed",
-                error="Crawl oder Indexierung ist fehlgeschlagen. Details stehen im Modal-Log.",
-            )
+            await update_status(job_id, status="failed", phase="failed", error=message)
             raise
 
 

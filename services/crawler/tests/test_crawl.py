@@ -1,6 +1,7 @@
 import textwrap
 
 import httpx
+import pytest
 
 from cracha_crawler import crawl
 from cracha_crawler.models import CrawlRequest, Page
@@ -278,3 +279,31 @@ async def test_a_supplied_sitemap_url_is_used_directly(monkeypatch) -> None:
 
     assert urls == ["https://example.com/one", "https://example.com/two"]
     assert used == "https://example.com/custom/sitemap.xml"
+
+
+async def test_a_site_that_refuses_robots_txt_says_so(monkeypatch) -> None:
+    # de.wikipedia.org answers 403 to a user agent that names no contact, for
+    # robots.txt as much as for the article. Both callers used to drop the URL
+    # without a word, so a crawl of a perfectly ordinary page ended as "No
+    # indexable content was found" — pointing the reader at their own content.
+    async def allow_url(_url: str) -> None:
+        return None
+
+    async def refuse(_client, url: str) -> tuple[bytes, str]:
+        response = httpx.Response(403, request=httpx.Request("GET", url))
+        raise httpx.HTTPStatusError("403", request=response.request, response=response)
+
+    monkeypatch.setattr(crawl, "assert_public_url", allow_url)
+    monkeypatch.setattr(crawl, "_safe_download", refuse)
+
+    with pytest.raises(crawl.CrawlBlockedError) as failure:
+        await crawl._http_fallback_pages(request())
+
+    assert "403" in str(failure.value)
+    assert "example.com" in str(failure.value)
+
+
+async def test_the_user_agent_names_someone_to_contact() -> None:
+    # The whole failure above came down to this string. A bot that does not say
+    # who it is gets turned away by more than one large site.
+    assert "https://" in crawl.USER_AGENT
