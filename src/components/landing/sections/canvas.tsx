@@ -45,7 +45,7 @@ export default function CanvasSection() {
           </div>
           <div className="flex flex-col items-center gap-7 text-center">
             <h2 className="font-heading text-3xl leading-tight text-foreground md:text-5xl">
-              Verwandle das Internet in <br /> deinen{" "}
+              Mach jede Website zu <br /> deinem{" "}
               <span className="text-gradient_indigo-purple">persönlichen Chatbot</span>
             </h2>
             <Link href="/login" prefetch={true}>

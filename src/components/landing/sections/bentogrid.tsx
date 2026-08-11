@@ -1,11 +1,23 @@
-
-
 "use client";
 
 import { Search, Settings, MessageSquare } from "lucide-react";
 import MaxWidthWrapper from "@/components/shared/max-width-wrapper";
 import { GridItem } from "@/components/landing/ui/grid-item";
 
+/**
+ * The three steps.
+ *
+ * The first card used to promise "Webseiten, PDFs und mehr". There is no PDF
+ * handling anywhere in the crawler — the settings offer a start URL, a depth,
+ * a page limit and include/exclude patterns, and every one of them describes
+ * an HTML page. Promising a format the product cannot read is the kind of
+ * thing a visitor discovers thirty seconds after signing up.
+ *
+ * The steps are also written from the visitor's side now. "Crawlen, Chatten,
+ * Verwalten" named the software's three screens; what a first-time reader
+ * wants to know is how much of it lands on them, and the answer is: the first
+ * step and the last one.
+ */
 export function BentoGrid() {
   return (
     <section id="how-to-use" className="py-16 md:py-24">
@@ -14,25 +26,22 @@ export function BentoGrid() {
          <h2 className="font-heading text-3xl leading-tight md:text-5xl text-foreground">
             So einfach geht <span className="text-gradient_indigo-purple">CraCha</span>
           </h2>
-          <p className="mt-4 text-muted-foreground">
-            CraCha automatisiert das Crawling Ihrer Webinhalte, strukturiert das Wissen und liefert präzise KI-basierte Antworten. Verwalten Sie alles zentral und halten Sie Ihre Daten mühelos aktuell.
-          </p>
        </div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-8">
           <GridItem
             icon={<Search className="h-4 w-4" />}
-            title="1. Crawlen"
-            description="Erfassen Sie Inhalte von jeder Quelle – Webseiten, PDFs und mehr – vollautomatisch und in Minutenschnelle."
-          />
-          <GridItem
-            icon={<MessageSquare className="h-4 w-4" />}
-            title="2. Chatten"
-            description="Stellen Sie Fragen in natürlicher Sprache und erhalten Sie sofort präzise, KI-gestützte Antworten aus Ihren Daten."
+            title="1. Website Crawlen"
+            description="Gib CraCha ein Website link, bestimme die Tiefe und die maximale Seitenanzahl. CraCha crawlt sich durch jede Unterseite und legt alle Texte in einer eigenen Datenbank ab."
           />
           <GridItem
             icon={<Settings className="h-4 w-4" />}
-            title="3. Verwalten"
-            description="Behalten Sie die volle Kontrolle. Managen und aktualisieren Sie alle Ihre Wissensdatenbanken an einem zentralen Ort."
+            title="2. Chatte mit der Website"
+            description="CraCha baut dir einen Chatbot, der die Inhalte der Website kennt. Quellenangaben und Links zu den Unterseiten sind inklusive, damit du die Antwort überprüfen kannst."
+          />
+          <GridItem
+            icon={<MessageSquare className="h-4 w-4" />}
+            title="3. Datenbanken verwalten"
+            description="CraCha speichert jede Website in einer eigenen Datenbank. Du kannst beliebig viele Datenbanken anlegen und zwischen ihnen wechseln."
           />
         </div>
       </MaxWidthWrapper>

@@ -2,14 +2,20 @@ import MaxWidthWrapper from "@/components/shared/max-width-wrapper";
 import { cn } from "@/lib/utils";
 import { LazyVideo } from "@/components/landing/ui/lazy-video";
 
+/**
+ * The comparison against a plain AI chat.
+ *
+ * The text here used to be built from "unstrukturierte Daten", "dialogfähiger
+ * Wissens-Hub" and "an der Oberfläche kratzen" — three phrases that sound like
+ * a difference without naming one. The difference is countable: one page
+ * versus every page the crawl reaches.
+ *
+ * The `data` object also carried a `title` the markup never read and an empty
+ * `list` nothing rendered.
+ */
 export default function ProductShowcase() {
     const reverse = true;
-    const data = {
-        title: "Warum CraCha?",
-        description: "Während Standard-KIs an der Oberfläche kratzen, taucht CraCha tief in Ihre Inhalte ein. Wir lesen jede einzelne Unterseite, extrahieren das Wesentliche und verwandeln unstrukturierte Daten in einen präzisen, dialogfähigen Wissens-Hub – damit Sie Antworten statt nur Links erhalten.",
-        video: "/videos/animation.webm",
-        list: []
-    }
+    const video = "/videos/animation.webm";
 
     return (
         <section id="why-cracha" className="py-16 md:py-24">
@@ -20,7 +26,12 @@ export default function ProductShowcase() {
                            Warum <span className="text-gradient_indigo-purple">CraCha</span>?
                         </h2>
                         <p className="mt-4 text-base text-muted-foreground">
-                            {data.description}
+                            Eine normale KI kennt nur die eine Seite, die du ihr
+                            zeigst. CraCha kennt die ganze Website — jede
+                            Unterseite, auch die, die im Menü nirgends auftaucht.
+                            Du fragst einmal und hast die Antwort. <br />
+                            <strong> Kein Suchen, kein Scrollen, keine zwanzig offenen Tabs.</strong>
+                            
                         </p>
                     </div>
                     <div
@@ -32,7 +43,7 @@ export default function ProductShowcase() {
                         <div className="aspect-video">
                             <LazyVideo
                                 className="size-full object-cover object-center"
-                                src={data.video}
+                                src={video}
                             />
                         </div>
                     </div>

@@ -3,6 +3,13 @@ import Image from "next/image";
 
 import { cn } from "@/lib/utils";
 
+/**
+ * The section links are written as "/#features" rather than "#features". This
+ * footer also renders on /impressum, /datenschutz and /nutzungsbedingungen,
+ * where a bare fragment points at an anchor that does not exist on the page —
+ * the link did nothing, and none of the link equity from those pages reached
+ * the landing page.
+ */
 export function SiteFooter({ className }: React.HTMLAttributes<HTMLElement>) {
   return (
     <footer className={cn("border-t bg-background", className)}>
@@ -11,14 +18,14 @@ export function SiteFooter({ className }: React.HTMLAttributes<HTMLElement>) {
           <Link href="/" className="flex items-center space-x-2">
             <Image
               src="/images/logo/logo.svg"
-              alt="CraCha Logo"
+              alt="CraCha"
               width={150}
               height={150}
               className="dark:hidden"
             />
             <Image
               src="/images/logo/logo-dark.svg"
-              alt="CraCha Logo"
+              alt="CraCha"
               width={150}
               height={150}
               className="hidden dark:block"
@@ -29,22 +36,22 @@ export function SiteFooter({ className }: React.HTMLAttributes<HTMLElement>) {
           <Link href="/" className="text-sm font-medium text-foreground transition-colors hover:text-foreground">Home</Link>
           <ul className="mt-4 list-none space-y-3">
             <li>
-              <Link href="#how-to-use" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+              <Link href="/#how-to-use" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
                 Nutzung
               </Link>
             </li>
             <li>
-              <Link href="#why-cracha" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+              <Link href="/#why-cracha" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
                 Warum CraCha?
               </Link>
             </li>
             <li>
-              <Link href="#features" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+              <Link href="/#features" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
                 Features
               </Link>
             </li>
             <li>
-              <Link href="#canvas-section" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+              <Link href="/#canvas-section" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
                 Jetzt loslegen
               </Link>
             </li>

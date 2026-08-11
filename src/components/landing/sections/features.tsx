@@ -1,44 +1,60 @@
-import { Icons } from "@/components/shared/icons";
+import type { ReactNode } from "react";
+import { BadgeCheck, Filter, Network, SlidersHorizontal, Zap } from "lucide-react";
+
 import MaxWidthWrapper from "@/components/shared/max-width-wrapper";
-import { FeatureLdg } from "@/types";
 import { GridItem } from "@/components/landing/ui/grid-item";
 
-export const features: FeatureLdg[] = [
-    {
-        title: "Antworten ohne den Lärm",
-        description:
-            "Unsere intelligente Extraktion filtert automatisch störende Menüs, Werbung und unwichtigen Code heraus. Sie erhalten nur den reinen, relevanten Inhalt als Antwortgrundlage.",
-        link: "/dashboard",
-        icon: "nextjs",
-    },
-    {
-        title: "Lückenlose Wissensbasis",
-        description:
-            "Verpassen Sie nie wieder versteckte Details. CraCha folgt Links tief in die Website-Struktur, um eine lückenlose Wissensbasis zu garantieren – nicht nur von einer Seite, sondern von der gesamten Domain.",
-        link: "/dashboard",
-        icon: "google",
-    },
-    {
-        title: "Ihre KI, nach Ihren Regeln",
-        description:
-            "Formen Sie eine Wissensbasis, die exakt Ihren Bedürfnissen entspricht. Mit anpassbaren Crawling-Regeln legen Sie genau fest, was Ihre KI wissen soll – und was nicht.",
-        link: "/dashboard",
-        icon: "search",
-    },
-    {
-        title: "100 % transparente Antworten",
-        description:
-            "Keine \"Halluzinationen\", keine Unsicherheiten. Jede Antwort wird mit einem direkten Zitat und einem Link zur Originalquelle belegt. So wissen Sie immer, woher die Information stammt.",
-        link: "/dashboard",
-        icon: "laptop",
-    },
-    {
-        title: "Blitzschnelle Verarbeitung",
-        description:
-            "Von der URL zur fertigen Wissensbasis in Minuten, nicht Stunden. Unsere optimierte Pipeline verarbeitet selbst komplexe Websites mit hunderten von Seiten in Rekordzeit.",
-        link: "/dashboard",
-        icon: "user",
-    },
+interface Feature {
+  title: string;
+  description: string;
+  icon: ReactNode;
+}
+
+/**
+ * Every card used to carry a foreign logo. The icons were looked up by name
+ * from the shared `Icons` map, and the names in the data were `nextjs`,
+ * `google`, `search`, `laptop` and `user` — so the first two features were
+ * illustrated with the Next.js and the Google logo. On a feature card that
+ * does not read as decoration, it reads as an integration that does not exist.
+ *
+ * Two of the claims were also not ours to make. "Keine Halluzinationen, keine
+ * Unsicherheiten" is a guarantee no retrieval system can give, and the system
+ * prompt does not attempt it — it instructs the model to say plainly when the
+ * sources do not contain the answer. That is the honest version and it is the
+ * stronger one. And the answer carries a citation marker linking to the source
+ * page, not a verbatim quote; the chat lists them under "Verwendete Quellen".
+ */
+const features: Feature[] = [
+  {
+    title: "Kein Müll in deinen Antworten",
+    description:
+      "Menüs, Cookie-Banner, Werbung und Footer wirft CraCha beim Einlesen raus. Übrig bleibt nur das, worum es auf der Seite wirklich geht.",
+    icon: <Filter className="h-4 w-4" />,
+  },
+  {
+    title: "Auch die Seiten, die sonst keiner findet",
+    description:
+      "CraCha klickt sich bis zu fünf Ebenen tief durch die Website — auch in Unterseiten, die im Menü nirgends verlinkt sind. Bis zu 500 Seiten pro Wissensdatenbank.",
+    icon: <Network className="h-4 w-4" />,
+  },
+  {
+    title: "Du sagst, was reinkommt",
+    description:
+      "Wie tief, wie viele Seiten, welche Bereiche — das legst du vorher fest. Was dich nicht interessiert, lässt CraCha einfach weg.",
+    icon: <SlidersHorizontal className="h-4 w-4" />,
+  },
+  {
+    title: "Du siehst immer, woher es kommt",
+    description:
+      "Zu jeder Antwort gehört die Seite, auf der es steht — ein Klick, und du liest es im Original nach. Und steht etwas nirgends, sagt CraCha das, statt sich etwas auszudenken.",
+    icon: <BadgeCheck className="h-4 w-4" />,
+  },
+  {
+    title: "In Minuten fertig, nicht in Tagen",
+    description:
+      "Eine mittelgroße Website ist in wenigen Minuten durch. Du siehst live, wie weit CraCha ist, und legst danach sofort los.",
+    icon: <Zap className="h-4 w-4" />,
+  },
 ];
 
 export default function Features() {
@@ -47,39 +63,33 @@ export default function Features() {
         <MaxWidthWrapper>
              <div className="mx-auto mb-12 max-w-3xl text-center">
                 <h2 className="font-heading text-3xl leading-tight md:text-5xl text-foreground">
-                    Eine Engine, die für Sie <span className="text-gradient_indigo-purple">denkt</span>
+                    Das macht CraCha für <span className="text-gradient_indigo-purple">dich</span>
                 </h2>
                 <p className="mt-4 text-muted-foreground">
-                    CraCha ist vollgepackt mit intelligenten Funktionen, die Ihnen die mühsame Arbeit abnehmen.
+                    Die Arbeit übernimmt CraCha. Du bekommst ganz einfach die Antworten, die du suchst.
                 </p>
             </div>
 
           <div className="mt-12 grid gap-4">
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                {[features[0], features[1]].map((feature) => {
-                    const Icon = Icons[feature.icon as keyof typeof Icons] || Icons.nextjs;
-                    return (
-                        <GridItem
-                            key={feature.title}
-                            icon={<Icon />}
-                            title={feature.title}
-                            description={feature.description}
-                        />
-                    );
-                })}
+                {features.slice(0, 2).map((feature) => (
+                    <GridItem
+                        key={feature.title}
+                        icon={feature.icon}
+                        title={feature.title}
+                        description={feature.description}
+                    />
+                ))}
             </div>
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-                {[features[2], features[3], features[4]].map((feature) => {
-                    const Icon = Icons[feature.icon as keyof typeof Icons] || Icons.nextjs;
-                    return (
-                        <GridItem
-                            key={feature.title}
-                            icon={<Icon />}
-                            title={feature.title}
-                            description={feature.description}
-                        />
-                    );
-                })}
+                {features.slice(2).map((feature) => (
+                    <GridItem
+                        key={feature.title}
+                        icon={feature.icon}
+                        title={feature.title}
+                        description={feature.description}
+                    />
+                ))}
             </div>
           </div>
         </MaxWidthWrapper>
