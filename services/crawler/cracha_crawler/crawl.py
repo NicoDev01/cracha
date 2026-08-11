@@ -616,7 +616,14 @@ async def _crawl4ai_pages(
         "user_agent": USER_AGENT,
         "exclude_external_links": True,
         "excluded_tags": ["nav", "footer", "aside", "script", "style", "noscript"],
-        "remove_overlay_elements": True,
+        # remove_overlay_elements is deliberately absent. It runs a script in
+        # the page that deletes whatever it takes for a modal, and on two of
+        # five sites measured it deleted the article: de.wikipedia.org went from
+        # 35124 characters of markdown to 29, heise.de from 1326 to 1. On the
+        # three it did not break — laravel.com, python.org, MDN — it removed
+        # between 200 and 1300 characters of ordinary content. It never once
+        # helped. Cookie banners are what we actually wanted gone, and
+        # remove_consent_popups does that without the collateral.
         "remove_consent_popups": True,
         # Measured against the real webmen team page and laravel.com/docs: the
         # markdown is byte for byte identical at 5 and at 20, because the
@@ -687,6 +694,16 @@ async def _crawl4ai_pages(
                     page.depth = depth
                     pages_by_url[page.url] = page
                 elif not route_wrapper:
+                    # "Crawl4AI returned no indexable pages" was the only trace
+                    # this left, which is true of a refused request and of a
+                    # fetch that worked and was then thrown away by the
+                    # extraction. Those need different fixes.
+                    markdown = getattr(getattr(result, "markdown", None), "fit_markdown", "")
+                    print(
+                        f"[WARN] Browser pass dropped {result_url} "
+                        f"(status={getattr(result, 'status_code', None)}, "
+                        f"html={len(html)}, markdown={len(markdown or '')})"
+                    )
                     skipped += 1
         await _report_progress(
             on_progress,
