@@ -34,7 +34,12 @@ export async function getAuthenticatedUser() {
     const supabase = await createClient()
     const { data, error } = await supabase.auth.getClaims()
     const id = data?.claims?.sub
-    return error || typeof id !== 'string' ? null : { id }
+    if (error || typeof id !== 'string') return null
+    // The address comes along for Stripe: handing it to Checkout means the
+    // customer is created against the address the account already proved,
+    // instead of whatever gets typed into the payment form.
+    const email = data?.claims?.email
+    return { id, email: typeof email === 'string' ? email : undefined }
   } catch {
     return null
   }

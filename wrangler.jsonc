@@ -26,7 +26,12 @@
     "binding": "AI"
   },
   "vars": {
-    "GENERATION_MODEL": "google/gemini-3.5-flash-lite"
+    "GENERATION_MODEL": "google/gemini-3.5-flash-lite",
+    // CraCha Pro, 10,00 EUR im Monat. A price id is not a secret, and keeping
+    // it here means the tariff the code charges is visible in the diff that
+    // changes it. STRIPE_API_KEY, STRIPE_WEBHOOK_SECRET and
+    // SUPABASE_SERVICE_ROLE_KEY are secrets and are set on the Worker itself.
+    "STRIPE_PRICE_ID": "price_1U3JZPKErihln31nxO0y5xnU"
   },
   "observability": {
     "enabled": true,

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, ArrowRight, Globe, Loader2, MessageSquare, RefreshCw } from 'lucide-react'
 
 import { StatusBadge } from '@/components/dashboard/common/StatusBadge'
+import { PlanCard } from '@/components/dashboard/overview/plan-card'
 import { Button } from '@/components/ui/button'
 import {
   byLastCrawl,
@@ -23,17 +24,6 @@ import { getDatabases, useChatStore } from '@/stores/chat-store'
 import type { Database } from '@/types/chat'
 
 const VISIBLE_DATABASES = 5
-
-function Stat({ label, value, loading }: { label: string; value: number; loading: boolean }) {
-  return (
-    <div className="rounded-2xl border border-gray-200 bg-white px-4 py-4 dark:border-gray-800 dark:bg-white/[0.03]">
-      <dt className="text-xs font-medium text-gray-500 dark:text-gray-400">{label}</dt>
-      <dd className="mt-1 text-2xl font-semibold tabular-nums text-gray-900 dark:text-white">
-        {loading ? '–' : formatNumber(value)}
-      </dd>
-    </div>
-  )
-}
 
 function Notice({ href, tone, children }: {
   href: string
@@ -97,11 +87,6 @@ export function DashboardOverview() {
     return () => window.clearInterval(timer)
   }, [isCrawling, load])
 
-  const totals = useMemo(() => databases.reduce((sum, database) => ({
-    pages: sum.pages + pageCount(database),
-    chunks: sum.chunks + (database.chunks_count ?? 0),
-  }), { pages: 0, chunks: 0 }), [databases])
-
   const crawling = databases.filter((database) => databaseStatus(database) === 'crawling').length
   const failed = databases.filter((database) => databaseStatus(database) === 'failed').length
   const recent = useMemo(() => [...databases].sort(byLastCrawl).slice(0, VISIBLE_DATABASES), [databases])
@@ -134,6 +119,14 @@ export function DashboardOverview() {
         </div>
       )}
 
+      {/*
+        This replaces a row that counted knowledge bases and pages without
+        saying how many were allowed. The same two numbers are here, now next to
+        the ceiling they are approaching — and outside the empty-state branch,
+        because a new account benefits most from seeing what it may use.
+      */}
+      <PlanCard />
+
       {!error && !isLoading && databases.length === 0 ? (
         <div className="flex flex-col items-center rounded-2xl border border-gray-200 bg-white px-6 py-14 text-center dark:border-gray-800 dark:bg-white/[0.03]">
           <div className="flex size-12 items-center justify-center rounded-2xl bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-400">
@@ -149,12 +142,6 @@ export function DashboardOverview() {
         </div>
       ) : !error && (
         <>
-          <dl className="grid gap-3 sm:grid-cols-3">
-            <Stat label="Wissensbasen" value={databases.length} loading={isLoading} />
-            <Stat label="Indexierte Seiten" value={totals.pages} loading={isLoading} />
-            <Stat label="Chunks im Index" value={totals.chunks} loading={isLoading} />
-          </dl>
-
           {(crawling > 0 || failed > 0) && (
             <div className="grid gap-2 sm:grid-cols-2">
               {crawling > 0 && (
