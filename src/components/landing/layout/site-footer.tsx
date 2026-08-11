@@ -29,15 +29,15 @@ export function SiteFooter({ className }: React.HTMLAttributes<HTMLElement>) {
             <Image
               src="/images/logo/logo.svg"
               alt="CraCha"
-              width={150}
-              height={150}
+              width={185}
+              height={45}
               className="dark:hidden"
             />
             <Image
               src="/images/logo/logo-dark.svg"
               alt="CraCha"
-              width={150}
-              height={150}
+              width={185}
+              height={45}
               className="hidden dark:block"
             />
           </Link>

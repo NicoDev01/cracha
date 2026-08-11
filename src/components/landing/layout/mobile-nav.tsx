@@ -58,7 +58,7 @@ export function NavMobile() {
                         <Image
                             src="/images/logo/logo.svg"
                             alt="CraCha"
-                            width={150}
+                            width={132}
                             height={32}
                             priority
                             className="dark:hidden"
@@ -66,7 +66,7 @@ export function NavMobile() {
                         <Image
                             src="/images/logo/logo-dark.svg"
                             alt="CraCha"
-                            width={154}
+                            width={132}
                             height={32}
                             priority
                             className="hidden dark:block"
@@ -119,16 +119,16 @@ export function NavMobile() {
                     <Image
                         src="/images/logo/logo.svg"
                         alt="CraCha"
-                        width={154}
-                        height={32}
+                        width={148}
+                        height={36}
                         priority
                         className="dark:hidden"
                     />
                     <Image
                         src="/images/logo/logo-dark.svg"
                         alt="CraCha"
-                        width={154}
-                        height={32}
+                        width={148}
+                        height={36}
                         priority
                         className="hidden dark:block"
                     />

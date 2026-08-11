@@ -81,20 +81,27 @@ export function NavBar({ scroll = false }: NavBarProps) {
       >
         <MaxWidthWrapper className="flex h-12 md:h-14 items-center justify-between py-0">
           <div className="flex gap-6 md:gap-10">
+            {/*
+              148x36 is the wordmark's own proportion (4.12:1). It used to be
+              154x32, which does not match any logo we have ever shipped, so the
+              browser fell back to the file's intrinsic ratio and drew a 154x154
+              square starting at y=-49 -- the mark hung out of a 56px header and
+              was clipped at the top.
+            */}
             <Link href="/" className="flex items-center">
               <Image
                 src="/images/logo/logo.svg"
                 alt="CraCha"
-                width={154}
-                height={32}
+                width={148}
+                height={36}
                 priority
                 className="dark:hidden"
               />
               <Image
                 src="/images/logo/logo-dark.svg"
                 alt="CraCha"
-                width={154}
-                height={32}
+                width={148}
+                height={36}
                 priority
                 className="hidden dark:block"
               />
