@@ -17,7 +17,7 @@ const ChatInterface = dynamic(
 
 export default function ChatPage() {
   return (
-    <div className="h-full min-h-0 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-theme-xs dark:border-gray-800 dark:bg-gray-900">
+    <div className="h-full min-h-0 overflow-hidden bg-white shadow-theme-xs sm:rounded-2xl sm:border sm:border-gray-200 dark:bg-gray-900 dark:sm:border-gray-800">
       <ChatInterface />
     </div>
   );

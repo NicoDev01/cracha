@@ -54,7 +54,13 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
         <AppHeader />
 
         {/* Page Content */}
-        <div className={`mx-auto min-h-0 w-full max-w-7xl flex-1 p-4 md:p-6 ${isChatPage ? "overflow-hidden" : "overflow-y-auto"}`}>
+        {/*
+          The chat runs without the page padding on a phone. Measured at 375px,
+          this padding plus the card border plus the conversation's own padding
+          left the answer 266px to be read in. The other pages are lists and
+          forms that want the breathing room; the chat wants the width.
+        */}
+        <div className={`mx-auto min-h-0 w-full max-w-7xl flex-1 md:p-6 ${isChatPage ? "overflow-hidden p-0 sm:p-4" : "overflow-y-auto p-4"}`}>
           {children}
         </div>
       </div>

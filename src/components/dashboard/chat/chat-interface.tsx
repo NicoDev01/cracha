@@ -205,15 +205,22 @@ export function ChatInterface() {
 
   return (
     <section className="flex h-full min-h-0 flex-col" aria-label="CraCha Chat">
-      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-gray-200 px-4 py-3 sm:px-5 dark:border-gray-800">
-        <div className="flex min-w-0 items-center gap-3">
+      {/*
+        Icon and title are hidden on a phone. Measured at 375px they left the
+        knowledge base selector and the delete button so little room that the
+        heading rendered 30px wide -- a truncated word saying nothing, in front
+        of the one control the header exists for. The page is already named in
+        the app header above it.
+      */}
+      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-gray-200 px-3 py-3 sm:px-5 dark:border-gray-800">
+        <div className="hidden min-w-0 items-center gap-3 sm:flex">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-500 text-white shadow-theme-sm">
             <MessageSquare className="size-5" />
           </div>
           <h1 className="truncate font-semibold text-gray-900 dark:text-white">CraCha Chat</h1>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center justify-end gap-2 sm:flex-none">
           <DatabaseSelector />
           {messages.length > 0 && (
             <AlertDialog>
@@ -257,7 +264,7 @@ export function ChatInterface() {
 
       <div className="flex min-h-0 flex-1 flex-col bg-gradient-to-b from-gray-25 to-white dark:from-gray-950 dark:to-gray-900">
         <Conversation className="min-h-0 flex-1 custom-scrollbar">
-          <ConversationContent className="mx-auto flex min-h-full w-full max-w-5xl flex-col px-4 py-4 sm:px-6 sm:py-6">
+          <ConversationContent className="mx-auto flex min-h-full w-full max-w-5xl flex-col px-3 py-4 sm:px-6 sm:py-6">
             {messages.length === 0 ? (
               <div className="m-auto flex w-full max-w-xl flex-col items-center py-8 text-center">
                 <div className="mb-5 flex size-14 items-center justify-center rounded-2xl border border-brand-100 bg-brand-50 text-brand-600 shadow-theme-xs dark:border-brand-800 dark:bg-brand-500/10 dark:text-brand-400">
@@ -311,8 +318,13 @@ export function ChatInterface() {
                       from={isUser ? 'user' : 'assistant'}
                       data-model={!isUser ? message.metadata?.model_used : undefined}
                     >
+                      {/*
+                        The avatar costs 44px of a 375px screen and says what
+                        the "CraCha" label directly under it already says, so on
+                        a phone the answer gets the width instead.
+                      */}
                       {!isUser && (
-                        <div className={`mt-6 flex size-8 shrink-0 items-center justify-center rounded-xl ${message.isError ? 'bg-error-50 text-error-600 dark:bg-error-500/10' : 'bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-400'}`}>
+                        <div className={`mt-6 hidden size-8 shrink-0 items-center justify-center rounded-xl sm:flex ${message.isError ? 'bg-error-50 text-error-600 dark:bg-error-500/10' : 'bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-400'}`}>
                           <Bot className="size-4" />
                         </div>
                       )}
@@ -394,7 +406,7 @@ export function ChatInterface() {
 
                 {isLoading && (
                   <Message from="assistant">
-                    <div className="mt-6 flex size-8 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-400">
+                    <div className="mt-6 hidden size-8 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600 sm:flex dark:bg-brand-500/10 dark:text-brand-400">
                       <Bot className="size-4" />
                     </div>
                     <div className="w-full max-w-3xl">
