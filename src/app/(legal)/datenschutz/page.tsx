@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { LegalPage, List, Platzhalter, Section } from "@/components/legal/legal-page";
+import { LegalPage, List, Section } from "@/components/legal/legal-page";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/datenschutz" },
@@ -29,17 +29,15 @@ export default function DatenschutzPage() {
           der Datenschutz-Grundverordnung (DSGVO) ist:
         </p>
         <p>
-          <Platzhalter>Vor- und Nachname bzw. Firma</Platzhalter>
+          Nicolas Guerrero Tello
           <br />
-          <Platzhalter>Straße und Hausnummer</Platzhalter>
+          Meyerstraße 216
           <br />
-          <Platzhalter>PLZ und Ort</Platzhalter>
+          28201 Bremen
           <br />
           Deutschland
         </p>
-        <p>
-          E-Mail: <Platzhalter>kontakt@cracha-app.com</Platzhalter>
-        </p>
+        <p>E-Mail: aimpact.agency@gmail.com</p>
         <p>
           Ein Datenschutzbeauftragter ist nicht bestellt, da die gesetzlichen
           Voraussetzungen hierfür nicht vorliegen.

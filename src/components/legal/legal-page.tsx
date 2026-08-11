@@ -43,11 +43,3 @@ export function List({ items }: { items: ReactNode[] }) {
   );
 }
 
-/** Marks something only the operator can fill in, so it cannot ship unnoticed. */
-export function Platzhalter({ children }: { children: ReactNode }) {
-  return (
-    <mark className="rounded bg-amber-200/70 px-1 py-0.5 font-medium text-amber-950 dark:bg-amber-400/25 dark:text-amber-200">
-      {children}
-    </mark>
-  );
-}

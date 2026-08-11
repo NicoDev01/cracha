@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { LegalPage, List, Platzhalter, Section } from "@/components/legal/legal-page";
+import { LegalPage, List, Section } from "@/components/legal/legal-page";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/nutzungsbedingungen" },
@@ -23,10 +23,8 @@ export default function NutzungsbedingungenPage() {
     >
       <Section heading="1. Anbieter">
         <p>
-          <Platzhalter>Vor- und Nachname bzw. Firma</Platzhalter>,{" "}
-          <Platzhalter>Straße und Hausnummer</Platzhalter>,{" "}
-          <Platzhalter>PLZ und Ort</Platzhalter>, Deutschland. Kontakt:{" "}
-          <Platzhalter>kontakt@cracha-app.com</Platzhalter>
+          Nicolas Guerrero Tello, Meyerstraße 216, 28201 Bremen, Deutschland.
+          Kontakt: aimpact.agency@gmail.com
         </p>
       </Section>
 
