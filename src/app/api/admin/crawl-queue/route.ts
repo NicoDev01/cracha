@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { enqueueCrawl, type CrawlInput } from '@/lib/server/crawler-api'
-import { QuotaError } from '@/lib/server/plan'
+import { CreditError } from '@/lib/server/credits'
 import { getAuthenticatedUser } from '@/lib/supabase/server'
 
 function stringList(value: unknown): string[] {
@@ -47,13 +47,14 @@ export async function POST(request: NextRequest) {
       status: result.status ?? 'queued',
       page_limit: result.page_limit,
       requested_page_limit: result.requested_page_limit,
+      credits_held: result.credits_held,
     }, { status: 202 })
   } catch (error) {
-    // A quota is not a service failure, and logging it as one would bury the
-    // real ones. 402 tells the interface to offer the upgrade instead of
+    // An empty balance is not a service failure, and logging it as one would
+    // bury the real ones. 402 tells the interface to offer a top-up instead of
     // suggesting a retry.
-    if (error instanceof QuotaError) {
-      return NextResponse.json({ success: false, error: error.message, reason: error.reason, usage: error.usage }, { status: 402 })
+    if (error instanceof CreditError) {
+      return NextResponse.json({ success: false, error: error.message, reason: error.reason, credits: error.state }, { status: 402 })
     }
     console.error('Crawl enqueue failed', error)
     return NextResponse.json({ success: false, error: error instanceof Error ? error.message : 'Crawl konnte nicht gestartet werden.' }, { status: 502 })

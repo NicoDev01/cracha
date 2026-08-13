@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUser } from '@/lib/supabase/server'
 import { getWorkerEnv } from '@/lib/server/cloudflare'
 import { getOwnedDatabase, saveDatabase } from '@/lib/server/database-registry'
-import { recordDeletedPages } from '@/lib/server/plan'
 
 export const dynamic = 'force-dynamic'
 
@@ -53,10 +52,9 @@ export async function DELETE(_request: NextRequest, { params }: Context) {
     return NextResponse.json({ success: false, error: result.error ?? 'Löschen fehlgeschlagen.' }, { status: response.status })
   }
 
-  // The record is gone, so the pages it cost would be gone with it. They are
-  // written to a marker instead: crawling is what the quota pays for, and that
-  // already happened. Only after the deletion succeeded, so a failed delete
-  // does not charge for a knowledge base the user still has.
-  await recordDeletedPages(user.id, database)
+  // Nothing to book. What the crawl cost was charged when it ran and is a row
+  // in the ledger; deleting the knowledge base does not undo the fetching and
+  // indexing that was paid for. The old model had to write a marker here,
+  // because it counted pages by looking at the records that still existed.
   return NextResponse.json({ success: true })
 }

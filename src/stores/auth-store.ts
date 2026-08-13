@@ -11,7 +11,6 @@ export interface AuthUser {
   email: string
   name: string
   avatar?: string
-  plan: 'free' | 'pro' | 'enterprise'
   created_at: string
 }
 
@@ -24,9 +23,6 @@ function authUserFromSession(user: User): AuthUser {
     name: user.user_metadata?.name || email.split('@')[0] || 'User',
     avatar: user.user_metadata?.avatar_url
       || `https://api.dicebear.com/7.x/avataaars/svg?seed=${email}`,
-    // Display only. Nothing server-side reads this, and nothing should: what a
-    // user is allowed to do is decided where the data is, not in the browser.
-    plan: 'free',
     created_at: user.created_at,
   }
 }

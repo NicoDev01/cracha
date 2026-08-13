@@ -249,7 +249,7 @@ export const useCrawlStore = create<CrawlState>()(
           set((state) => ({
             currentJob: queuedJob,
             quotaNotice: capped
-              ? `Dein Seitenkontingent lässt nur noch ${result.page_limit} von ${result.requested_page_limit} angefragten Seiten zu. Der Crawl läuft mit diesem Limit.`
+              ? `Dein Guthaben reicht für ${result.page_limit} der ${result.requested_page_limit} angefragten Seiten. Der Crawl läuft mit diesem Limit — was er nicht braucht, bekommst du zurück.`
               : null,
             jobs: replaceJob(state.jobs, queuedJob),
           }))

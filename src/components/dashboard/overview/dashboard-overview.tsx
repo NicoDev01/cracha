@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, ArrowRight, Globe, Loader2, MessageSquare, RefreshCw } from 'lucide-react'
 
 import { StatusBadge } from '@/components/dashboard/common/StatusBadge'
-import { PlanCard } from '@/components/dashboard/overview/plan-card'
+import { CreditCard } from '@/components/dashboard/overview/credit-card'
 import { Button } from '@/components/ui/button'
 import {
   byLastCrawl,
@@ -125,7 +125,7 @@ export function DashboardOverview() {
         the ceiling they are approaching — and outside the empty-state branch,
         because a new account benefits most from seeing what it may use.
       */}
-      <PlanCard />
+      <CreditCard />
 
       {!error && !isLoading && databases.length === 0 ? (
         <div className="flex flex-col items-center rounded-2xl border border-gray-200 bg-white px-6 py-14 text-center dark:border-gray-800 dark:bg-white/[0.03]">

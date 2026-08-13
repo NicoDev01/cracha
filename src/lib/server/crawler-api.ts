@@ -1,7 +1,14 @@
 import 'server-only'
 
 import { getWorkerEnv } from './cloudflare'
-import { canCreateDatabase, getUsage, QuotaError, remainingPages } from './plan'
+import {
+  affordablePages,
+  CreditError,
+  crawlCost,
+  getCreditState,
+  holdCrawlCredits,
+  releaseCrawlCredits,
+} from './credits'
 import {
   createDatabase,
   DEFAULT_CRAWL_SETTINGS,
@@ -100,14 +107,18 @@ export async function enqueueCrawl(input: CrawlInput, userId: string) {
     throw new Error('Wissensbasis nicht gefunden oder Zugriff verweigert.')
   }
 
-  // Every crawl is checked against the account's quota here rather than in the
-  // two routes that lead to it, so a route added later cannot forget to ask.
-  // The check happens before anything is created: a refused crawl must not
-  // leave an empty knowledge base behind.
-  const usage = await getUsage(userId)
-  if (!rebuilding && !canCreateDatabase(usage)) throw new QuotaError('databases', usage)
-  const budget = remainingPages(usage, rebuilding)
-  if (budget <= 0) throw new QuotaError('pages', usage)
+  // Every crawl is priced here rather than in the two routes that lead to it,
+  // so a route added later cannot forget to ask. It happens before anything is
+  // created: a refused crawl must not leave an empty knowledge base behind.
+  //
+  // A re-crawl costs the same as a first crawl. It fetches and indexes the
+  // pages again, so it consumes the capacity again — the old model's
+  // high-water mark, where rebuilding was free, was charging for the record
+  // rather than for the work.
+  const state = await getCreditState(userId)
+  if (!rebuilding && state.databases >= state.maxDatabases) throw new CreditError('databases', state)
+  const budget = affordablePages(state.balance)
+  if (budget <= 0) throw new CreditError('credits', state, crawlCost(1))
 
   let database: DatabaseRecord
   if (rebuilding) {
@@ -123,11 +134,24 @@ export async function enqueueCrawl(input: CrawlInput, userId: string) {
     throw new Error('Crawler-Service ist nicht konfiguriert.')
   }
 
-  // Asking for more pages than are left is capped rather than refused. Someone
-  // with 30 pages of budget who requests 100 gets the 30 they can still have;
-  // refusing the whole crawl would leave them to guess the right number.
+  // Asking for more pages than the balance covers is capped rather than
+  // refused. Someone with 30 credits who requests 100 pages gets the 30 they
+  // can pay for; refusing the whole crawl would leave them to guess the number.
   const requested = resolveCrawlSettings(input, database.crawl_settings)
   const settings = { ...requested, limit: Math.min(requested.limit, budget) }
+
+  // The ceiling is held now and settled against the real page count when the
+  // crawl ends. Charging the ceiling outright would make every crawl cost its
+  // limit; charging only at the end would let ten crawls started in the same
+  // second each see the whole balance as free.
+  //
+  // The reference is minted here because the job id does not exist yet, and it
+  // is written into the job record below so the settlement can find the hold.
+  const holdReference = crypto.randomUUID()
+  if (!(await holdCrawlCredits(userId, settings.limit, holdReference))) {
+    throw new CreditError('credits', state, crawlCost(settings.limit))
+  }
+
   await saveDatabase({
     ...database,
     name: input.database_name || database.name,
@@ -160,6 +184,10 @@ export async function enqueueCrawl(input: CrawlInput, userId: string) {
     detail?: string
   }
   if (!response.ok || !result.success || !result.job_id) {
+    // Nothing was fetched, so nothing is charged. Without this the credits stay
+    // held until the 24-hour reaper releases them, and the account looks poorer
+    // than it is for a day because a service was briefly down.
+    await releaseCrawlCredits(holdReference)
     await saveDatabase({
       ...database,
       status: 'failed',
@@ -171,7 +199,7 @@ export async function enqueueCrawl(input: CrawlInput, userId: string) {
 
   await env.DATABASE_REGISTRY.put(
     `crawl_job:${result.job_id}`,
-    JSON.stringify({ user_id: userId, database_id: database.id }),
+    JSON.stringify({ user_id: userId, database_id: database.id, hold_reference: holdReference }),
     { expirationTtl: 86_400 },
   )
   // The caller no longer knows the id it is crawling into, so it is returned —
@@ -182,5 +210,6 @@ export async function enqueueCrawl(input: CrawlInput, userId: string) {
     database_id: database.id,
     page_limit: settings.limit,
     requested_page_limit: requested.limit,
+    credits_held: crawlCost(settings.limit),
   }
 }

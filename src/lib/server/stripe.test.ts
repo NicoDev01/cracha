@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 // Cloudflare context, which does not exist outside a Worker.
 vi.mock('./cloudflare', () => ({ getWorkerEnv: () => ({}) }))
 
-const { periodEnd, stripeForm, verifyStripeSignature } = await import('./stripe')
+const { customerId, stripeForm, verifyStripeSignature } = await import('./stripe')
 
 const SECRET = 'whsec_ThisIsNotARealSigningSecret'
 const NOW = 1_786_470_000_000
@@ -90,22 +90,18 @@ describe('talking to Stripe in the shape it expects', () => {
   })
 })
 
-describe('when the paid period ends', () => {
-  const subscription = { id: 'sub_1', status: 'active', customer: 'cus_1' }
-
-  it('reads the period from the subscription', () => {
-    expect(periodEnd({ ...subscription, current_period_end: 1_786_470_000 }))
-      .toBe('2026-08-11T17:40:00.000Z')
+describe('which customer a checkout belongs to', () => {
+  it('takes the id whether Stripe sent it bare or expanded', () => {
+    expect(customerId('cus_1')).toBe('cus_1')
+    expect(customerId({ id: 'cus_1' })).toBe('cus_1')
   })
 
-  it('reads it from the item when the newer API put it there', () => {
-    expect(periodEnd({ ...subscription, items: { data: [{ current_period_end: 1_786_470_000 }] } }))
-      .toBe('2026-08-11T17:40:00.000Z')
-  })
-
-  it('reports an unknown period as unknown rather than as now', () => {
-    // null leaves current_period_end empty, which planState reads as "no end".
-    // A zero would expire the plan the moment it was paid for.
-    expect(periodEnd(subscription)).toBeNull()
+  it('reports no customer rather than an empty one', () => {
+    // A one-off payment has no customer unless the checkout asked for it, and
+    // storing '' would later be read back as a customer that does not exist.
+    expect(customerId(null)).toBeNull()
+    expect(customerId(undefined)).toBeNull()
+    expect(customerId('')).toBeNull()
+    expect(customerId({})).toBeNull()
   })
 })

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { getAuthenticatedUser } from '@/lib/supabase/server'
 import { createDatabase, type DatabaseRecord, getOwnedDatabase, listOwnedDatabaseIds } from '@/lib/server/database-registry'
-import { canCreateDatabase, getUsage, QuotaError } from '@/lib/server/plan'
+import { CreditError, getCreditState } from '@/lib/server/credits'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,12 +50,13 @@ export async function POST(request: NextRequest) {
 
   try {
     // This route creates a knowledge base without crawling into it, so the
-    // crawler's own quota check never runs. Without this one it is the way past
-    // the limit on how many an account may have.
-    const usage = await getUsage(user.id)
-    if (!canCreateDatabase(usage)) {
-      const error = new QuotaError('databases', usage)
-      return NextResponse.json({ success: false, error: error.message, reason: error.reason, usage }, { status: 402 })
+    // crawler's own check never runs. Without this one it is the way past the
+    // limit on how many an account may have. Creating one costs no credits —
+    // an empty knowledge base consumes nothing until it is crawled.
+    const state = await getCreditState(user.id)
+    if (state.databases >= state.maxDatabases) {
+      const error = new CreditError('databases', state)
+      return NextResponse.json({ success: false, error: error.message, reason: error.reason, credits: state }, { status: 402 })
     }
 
     const description = typeof body?.description === 'string' ? body.description.trim().slice(0, 500) : ''

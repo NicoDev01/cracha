@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getWorkerEnv } from '@/lib/server/cloudflare'
+import { settleCrawlCredits } from '@/lib/server/credits'
 import { getAuthenticatedUser } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
+
+const TERMINAL = new Set(['completed', 'failed', 'cancelled'])
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ jobId: string }> }) {
   const user = await getAuthenticatedUser()
@@ -11,7 +14,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 
   const { jobId } = await params
   const env = getWorkerEnv()
-  const job = await env.DATABASE_REGISTRY.get<{ user_id: string; database_id: string }>(`crawl_job:${jobId}`, 'json')
+  const job = await env.DATABASE_REGISTRY.get<{ user_id: string; database_id: string; hold_reference?: string }>(`crawl_job:${jobId}`, 'json')
   if (!job || job.user_id !== user.id) {
     return NextResponse.json({ success: false, error: 'Crawl-Auftrag nicht gefunden.' }, { status: 404 })
   }
@@ -47,10 +50,37 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ success: false, status: 'failed', error: result.error ?? 'Statusabfrage fehlgeschlagen.' }, { status: 502 })
   }
 
+  // The crawl is over, so the hold becomes a charge for the pages that were
+  // actually fetched and the rest goes back. This runs on the polling route
+  // because it is the only place that learns the final count while holding a
+  // Supabase connection — the RAG worker, which sees it first, has no service
+  // key and should not be given one for this.
+  //
+  // Settling is idempotent: the hold is gone after the first call, so the
+  // polls that follow move nothing. A crawl whose tab was closed before the
+  // last poll is caught by the 24-hour reaper in credit_state instead.
+  const status = result.status ?? 'running'
+  let settledCredits: number | undefined
+  if (job.hold_reference && TERMINAL.has(status)) {
+    try {
+      const settlement = await settleCrawlCredits(job.hold_reference, result.result?.pages_count ?? 0)
+      if (settlement.settled) settledCredits = settlement.spent
+    } catch (error) {
+      // A failed settlement must not hide the crawl result from the user. The
+      // reaper releases the hold either way.
+      console.error(JSON.stringify({
+        event: 'crawl_settlement_failed',
+        job_id: jobId,
+        error: error instanceof Error ? error.message : 'unknown',
+      }))
+    }
+  }
+
   return NextResponse.json({
     success: result.success !== false,
     job_id: jobId,
-    status: result.status ?? 'running',
+    status,
+    credits_charged: settledCredits,
     phase: result.phase,
     error: result.error,
     progress: result.progress,

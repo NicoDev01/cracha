@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { getWorkerEnv } from '@/lib/server/cloudflare'
 import { DEFAULT_GENERATION_MODEL, streamGroundedAnswer } from '@/lib/server/generation'
-import { consumeChatMessage, getUsage, QuotaError } from '@/lib/server/plan'
+import { CreditError, getCreditState, spendChatCredits, CREDITS } from '@/lib/server/credits'
 import { getAuthenticatedUser } from '@/lib/supabase/server'
 import type { Source } from '@/types/chat'
 
@@ -59,12 +59,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Frage oder Wissensbasis-ID ist ungültig.' }, { status: 400 })
   }
   // Charged before the search and the model run, not after: those are what the
-  // quota exists to bound, so an account that is over must not reach them. The
-  // usage is only read on refusal, where a few extra reads cost nothing.
-  if (!(await consumeChatMessage())) {
-    const usage = await getUsage(user.id)
-    const quota = new QuotaError('chat', usage)
-    return NextResponse.json({ error: quota.message, reason: quota.reason, usage }, { status: 402 })
+  // balance exists to bound, so an account that cannot pay must not reach them.
+  // The state is only read on refusal, where a few extra reads cost nothing.
+  if (!(await spendChatCredits(user.id, crypto.randomUUID()))) {
+    const state = await getCreditState(user.id)
+    const shortfall = new CreditError('credits', state, CREDITS.perChatMessage)
+    return NextResponse.json({ error: shortfall.message, reason: shortfall.reason, credits: state }, { status: 402 })
   }
 
   const messages = Array.isArray(body?.messages)

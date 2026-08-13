@@ -115,35 +115,12 @@ export async function verifyStripeSignature(
   return signatures.some((signature) => timingSafeEqual(expected, signature))
 }
 
-export interface StripeSubscription {
-  id: string
-  status: string
-  customer: string | { id: string }
-  current_period_end?: number
-  metadata?: Record<string, string>
-  items?: { data?: Array<{ current_period_end?: number }> }
-}
-
-/** A subscription in one of these states is one the customer is paying for. */
-export function isPayingStatus(status: string): boolean {
-  return status === 'active' || status === 'trialing'
-}
-
-export function customerId(customer: StripeSubscription['customer']): string | null {
+/**
+ * Stripe returns a customer either as an id or as the expanded object,
+ * depending on the endpoint and on whether anything asked for it to be
+ * expanded. Both shapes reduce to the same id here.
+ */
+export function customerId(customer: string | { id?: string } | null | undefined): string | null {
   if (typeof customer === 'string') return customer || null
   return customer?.id ?? null
-}
-
-/**
- * Stripe moved the billing period from the subscription onto its individual
- * items. Both places are read so that neither an older nor a newer API version
- * leaves the paid period unknown — and an unknown period would expire the plan
- * immediately.
- */
-export function periodEnd(subscription: StripeSubscription): string | null {
-  const seconds = subscription.current_period_end
-    ?? subscription.items?.data?.[0]?.current_period_end
-  return typeof seconds === 'number' && Number.isFinite(seconds)
-    ? new Date(seconds * 1_000).toISOString()
-    : null
 }

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { enqueueCrawl } from '@/lib/server/crawler-api'
 import { getOwnedDatabase } from '@/lib/server/database-registry'
-import { QuotaError } from '@/lib/server/plan'
+import { CreditError } from '@/lib/server/credits'
 import { getAuthenticatedUser } from '@/lib/supabase/server'
 
 export async function POST(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -28,8 +28,8 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
       requested_page_limit: result.requested_page_limit,
     }, { status: 202 })
   } catch (error) {
-    if (error instanceof QuotaError) {
-      return NextResponse.json({ success: false, error: error.message, reason: error.reason, usage: error.usage }, { status: 402 })
+    if (error instanceof CreditError) {
+      return NextResponse.json({ success: false, error: error.message, reason: error.reason, credits: error.state }, { status: 402 })
     }
     return NextResponse.json({ success: false, error: error instanceof Error ? error.message : 'Re-Crawl fehlgeschlagen.' }, { status: 502 })
   }

@@ -1,25 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { accountFor, applySubscription, billingAdmin } from '@/lib/server/billing'
 import { getWorkerEnv } from '@/lib/server/cloudflare'
-import { verifyStripeSignature, type StripeSubscription } from '@/lib/server/stripe'
+import { findPackage, grantPurchasedCredits, rememberCustomer } from '@/lib/server/credits'
+import { customerId, verifyStripeSignature } from '@/lib/server/stripe'
 
 export const dynamic = 'force-dynamic'
+
+interface CheckoutSession {
+  id?: string
+  payment_status?: string
+  customer?: string | { id: string } | null
+  metadata?: Record<string, string> | null
+}
 
 interface StripeEvent {
   id?: string
   type?: string
-  data?: { object?: StripeSubscription }
+  data?: { object?: CheckoutSession }
 }
 
 /**
- * Only subscription events are handled, and that is enough: a failed payment,
- * a cancellation and a renewal all move the subscription into a new status and
- * emit `customer.subscription.updated`. Each of those events carries the
- * status, the period and the account, so none of them needs a second lookup.
+ * Only `checkout.session.completed` is handled, and that is enough: credits are
+ * bought outright, so there is no renewal, no dunning and no cancellation to
+ * follow. Everything else is answered with 200 — an error would make Stripe
+ * retry an event this app has no interest in, for days.
  *
- * Everything else is answered with 200. An error would make Stripe retry an
- * event this app has no interest in, for days.
+ * The amount is never taken from the event. The session carries the package id;
+ * how many credits that is worth is looked up from the tariff here.
  */
 export async function POST(request: NextRequest) {
   const env = getWorkerEnv()
@@ -38,41 +45,64 @@ export async function POST(request: NextRequest) {
   }
 
   const parsed = JSON.parse(payload) as StripeEvent
-  if (!parsed.type?.startsWith('customer.subscription.')) {
+  if (parsed.type !== 'checkout.session.completed') {
     return NextResponse.json({ received: true, handled: false })
   }
 
-  const subscription = parsed.data?.object
-  if (!subscription?.id || !subscription.status) {
+  const session = parsed.data?.object
+  const userId = session?.metadata?.supabase_user_id
+  const pack = findPackage(session?.metadata?.package)
+
+  // A session that is completed but not paid is a delayed payment method that
+  // has not settled. Crediting it now would hand out credits for money that may
+  // never arrive; Stripe sends `checkout.session.async_payment_succeeded` when
+  // it does, and until this app sells to such methods there is nothing to do.
+  if (!session?.id || !userId || !pack || session.payment_status !== 'paid') {
+    console.warn(JSON.stringify({
+      event: 'stripe_checkout_ignored',
+      stripe_event: parsed.id,
+      payment_status: session?.payment_status,
+      has_account: Boolean(userId),
+      has_package: Boolean(pack),
+    }))
     return NextResponse.json({ received: true, handled: false })
   }
 
   try {
-    const admin = billingAdmin()
-    const userId = await accountFor(admin, subscription)
-    if (!userId) {
-      // A subscription created directly in the Stripe dashboard for someone who
-      // has never been through checkout. There is no account to credit, and
-      // retrying will not produce one.
-      console.warn(JSON.stringify({
-        event: 'stripe_webhook_unattributed',
-        stripe_event: parsed.id,
-        subscription: subscription.id,
-      }))
-      return NextResponse.json({ received: true, handled: false })
+    const granted = await grantPurchasedCredits({
+      userId,
+      credits: pack.credits,
+      sessionId: session.id,
+      detail: `Paket ${pack.label}`,
+    })
+
+    // Kept so the next top-up reuses the same customer instead of making a new
+    // one. Deliberately after the grant: a failure here must not cost anyone
+    // their credits, and the next checkout simply creates a customer again.
+    const customer = customerId(session.customer ?? null)
+    if (customer) {
+      try {
+        await rememberCustomer(userId, customer)
+      } catch (error) {
+        console.warn(JSON.stringify({
+          event: 'stripe_customer_not_stored',
+          error: error instanceof Error ? error.message : 'unknown',
+        }))
+      }
     }
 
-    await applySubscription(admin, userId, subscription)
     console.log(JSON.stringify({
-      event: 'stripe_subscription_applied',
+      event: 'credits_purchased',
       stripe_event: parsed.id,
-      type: parsed.type,
-      status: subscription.status,
+      package: pack.id,
+      credits: pack.credits,
+      // False means the event was a replay and the credits were already there.
+      granted,
     }))
     return NextResponse.json({ received: true, handled: true })
   } catch (error) {
-    // 500 on purpose: this one Stripe should retry, because the account is now
-    // paying for something it has not been given.
+    // 500 on purpose: this one Stripe should retry, because the account has
+    // paid for something it has not been given.
     console.error(JSON.stringify({
       event: 'stripe_webhook_failed',
       stripe_event: parsed.id,
