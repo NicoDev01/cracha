@@ -33,9 +33,9 @@
     // src/lib/server/credits.ts: 2.500 / 7.000 / 15.000 credits for 10 / 25 /
     // 50 EUR. STRIPE_API_KEY, STRIPE_WEBHOOK_SECRET and
     // SUPABASE_SERVICE_ROLE_KEY are secrets and are set on the Worker itself.
-    "STRIPE_PRICE_CREDITS_S": "",
-    "STRIPE_PRICE_CREDITS_M": "",
-    "STRIPE_PRICE_CREDITS_L": ""
+    "STRIPE_PRICE_CREDITS_S": "price_1U45HmKErihln31nI18CKkEz",
+    "STRIPE_PRICE_CREDITS_M": "price_1U45HsKErihln31n71w9wdKG",
+    "STRIPE_PRICE_CREDITS_L": "price_1U45HwKErihln31n00NaCUAU"
   },
   "observability": {
     "enabled": true,

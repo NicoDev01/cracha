@@ -20,14 +20,27 @@ interface StripeEvent {
 }
 
 /**
- * Only `checkout.session.completed` is handled, and that is enough: credits are
- * bought outright, so there is no renewal, no dunning and no cancellation to
- * follow. Everything else is answered with 200 — an error would make Stripe
- * retry an event this app has no interest in, for days.
+ * Two events, both carrying a Checkout Session, both meaning the same thing:
+ * the money is there, hand over the credits. There is no renewal, no dunning
+ * and no cancellation to follow, because credits are bought outright.
+ *
+ * `async_payment_succeeded` is the one that is easy to forget. A delayed
+ * payment method — SEPA, and PayPal in the cases where it does not settle at
+ * once — makes `completed` arrive with `payment_status: unpaid`, and the money
+ * lands days later. Without this second event that customer pays and never
+ * receives anything.
+ *
+ * Everything else is answered with 200: an error would make Stripe retry an
+ * event this app has no interest in, for days.
  *
  * The amount is never taken from the event. The session carries the package id;
  * how many credits that is worth is looked up from the tariff here.
  */
+const CREDITING_EVENTS = new Set([
+  'checkout.session.completed',
+  'checkout.session.async_payment_succeeded',
+])
+
 export async function POST(request: NextRequest) {
   const env = getWorkerEnv()
 
@@ -45,7 +58,7 @@ export async function POST(request: NextRequest) {
   }
 
   const parsed = JSON.parse(payload) as StripeEvent
-  if (parsed.type !== 'checkout.session.completed') {
+  if (!parsed.type || !CREDITING_EVENTS.has(parsed.type)) {
     return NextResponse.json({ received: true, handled: false })
   }
 
@@ -54,9 +67,9 @@ export async function POST(request: NextRequest) {
   const pack = findPackage(session?.metadata?.package)
 
   // A session that is completed but not paid is a delayed payment method that
-  // has not settled. Crediting it now would hand out credits for money that may
-  // never arrive; Stripe sends `checkout.session.async_payment_succeeded` when
-  // it does, and until this app sells to such methods there is nothing to do.
+  // has not settled yet. Crediting it now would hand out credits for money that
+  // may never arrive, so it is dropped here and picked up again when
+  // `async_payment_succeeded` reports the same session as paid.
   if (!session?.id || !userId || !pack || session.payment_status !== 'paid') {
     console.warn(JSON.stringify({
       event: 'stripe_checkout_ignored',
