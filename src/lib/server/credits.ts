@@ -28,8 +28,8 @@ import { listOwnedDatabaseIds } from './database-registry'
  *
  * The charged ratio is 5, not 25, on purpose. Metering the core interaction at
  * its true relative cost would make people ration the one thing the product is
- * for. The margin holds anyway, because the mixture pays for itself: at 0.4
- * cents a credit, a page earns 95 percent and an answer 75 percent.
+ * for. The margin holds anyway, because the mixture pays for itself: at 0.8
+ * cents a credit, a page earns 98 percent and an answer 88 percent.
  */
 export const CREDITS = {
   /** One page fetched and indexed. The unit the whole scale is built on. */
@@ -37,12 +37,13 @@ export const CREDITS = {
   /** One answered question, regardless of how long the answer turns out. */
   perChatMessage: 5,
   /**
-   * Handed to a new account. Enough for a 200-page site and twenty questions.
-   * Repeated here for display only — the number that is actually granted lives
-   * in the migration that created the trigger, because what a new account is
-   * worth must not be something a caller can name.
+   * Handed to a new account. Enough to crawl a small site and ask a handful of
+   * questions — a trial, not a free tier. Repeated here for display only: the
+   * number that is actually granted lives in the migration that owns the
+   * signup trigger, because what a new account is worth must not be something
+   * a caller can name.
    */
-  welcome: 300,
+  welcome: 100,
   /**
    * Knowledge bases per account. Not a money limit: every knowledge base holds
    * an AI Search instance, and the account-wide ceiling for those is 5 000.
@@ -62,13 +63,13 @@ export interface CreditPackage {
 
 /**
  * Three sizes, with the discount growing on the larger ones. The smallest is
- * the anchor: ten euros buys 2 500 credits, so a credit is 0.4 cents and the
- * headline is legible — 2 500 pages, or 500 questions, or any mix of the two.
+ * the anchor: ten euros buys 1 250 credits, so a credit is 0.8 cents and the
+ * headline is legible — 1 250 pages, or 250 questions, or any mix of the two.
  */
 export const CREDIT_PACKAGES: readonly CreditPackage[] = [
-  { id: 'S', credits: 2_500, priceCents: 1_000, priceEnvKey: 'STRIPE_PRICE_CREDITS_S', label: 'Start' },
-  { id: 'M', credits: 7_000, priceCents: 2_500, priceEnvKey: 'STRIPE_PRICE_CREDITS_M', label: 'Plus' },
-  { id: 'L', credits: 15_000, priceCents: 5_000, priceEnvKey: 'STRIPE_PRICE_CREDITS_L', label: 'Pro' },
+  { id: 'S', credits: 1_250, priceCents: 1_000, priceEnvKey: 'STRIPE_PRICE_CREDITS_S', label: 'Start' },
+  { id: 'M', credits: 3_500, priceCents: 2_500, priceEnvKey: 'STRIPE_PRICE_CREDITS_M', label: 'Plus' },
+  { id: 'L', credits: 7_500, priceCents: 5_000, priceEnvKey: 'STRIPE_PRICE_CREDITS_L', label: 'Pro' },
 ] as const
 
 export function findPackage(id: unknown): CreditPackage | null {

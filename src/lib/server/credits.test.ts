@@ -87,7 +87,7 @@ describe('every package earns its keep', () => {
 
 describe('which package a request asked for', () => {
   it('finds the ones that exist', () => {
-    expect(findPackage('S')?.credits).toBe(2_500)
+    expect(findPackage('S')?.credits).toBe(1_250)
   })
 
   it('refuses anything else, whatever shape it arrives in', () => {
