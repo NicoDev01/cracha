@@ -12,7 +12,7 @@ const site_url = process.env.NEXT_PUBLIC_APP_URL || "https://cracha-app.com";
 export const siteConfig: SiteConfig = {
   name: "CraCha",
   description:
-    "CraCha kämpft sich durch jede Unterseite einer Webseite und baut daraus deine eigene Wissensdatenbank. Du fragst, CraCha antwortet – hunderte Seiten in einem Chat.",
+    "CraCha kämpft sich durch jede Unterseite einer Website und baut dir daraus einen Chatbot. Du fragst, CraCha antwortet – hunderte Seiten in einem Chat.",
   url: site_url,
   links: {
     twitter: "https://twitter.com/cracha_ai",
