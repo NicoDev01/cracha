@@ -23,9 +23,9 @@ export default function HeroLanding() {
     <section className="space-y-8 py-12 sm:py-20 lg:py-16">
       <div className="mx-auto flex w-full max-w-5xl flex-col items-center gap-5 px-4 text-center sm:px-6 lg:px-8">
         <h1 className="reveal text-balance font-urban text-4xl font-extrabold tracking-tight sm:text-5xl md:text-6xl lg:text-[66px] leading-tight [animation-delay:80ms]">
-          <div className="mb-1">Verwandle Webseiten</div>
+          <div className="mb-1">Verwandle Websites</div>
           <div className="text-gradient_indigo-purple font-extrabold">
-            in einen Chatbot
+            in Chatbots
           </div>
         </h1>
 
@@ -36,8 +36,8 @@ export default function HeroLanding() {
                time left a stub of two or three words on its own line. */}
            <strong>CraCha</strong> kämpft sich durch jede Unterseite einer Website{" "}
            <br className="hidden sm:inline" />
-           und baut dir daraus eine Datenbank. <br />
-           Nie wieder lästiges Geklicke durch einen Website-Dschungel.
+           und baut dir daraus einen Chatbot. <br />
+           Nie wieder lästiges Geklicke durch einen wilden Website-Dschungel.
          </p>
 
         <div className="flex justify-center">
