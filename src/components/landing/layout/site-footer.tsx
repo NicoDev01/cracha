@@ -14,11 +14,16 @@ import { cn } from "@/lib/utils";
  * Google's OAuth branding review — what the app does, and which Google fields
  * it receives. The second one is still on /datenschutz, which the review form
  * links to directly; the first is what the hero says.
+ *
+ * There is deliberately no product column: Chat, Crawl and Datenbanken live
+ * behind the login, and listing them on the public page promised more than
+ * a visitor could reach — and crowded out the legal links that do belong
+ * here.
  */
 export function SiteFooter({ className }: React.HTMLAttributes<HTMLElement>) {
   return (
     <footer className={cn("border-t bg-background", className)}>
-      <div className="mx-auto grid w-full max-w-6xl grid-cols-2 gap-6 px-4 py-14 sm:px-6 md:grid-cols-5 lg:px-8">
+      <div className="mx-auto grid w-full max-w-6xl grid-cols-2 gap-6 px-4 py-14 sm:px-6 md:grid-cols-4 lg:px-8">
         <div className="col-span-full flex flex-col items-start md:col-span-2">
           <Link href="/" className="flex items-center space-x-2">
             <Image
@@ -58,26 +63,6 @@ export function SiteFooter({ className }: React.HTMLAttributes<HTMLElement>) {
             <li>
               <Link href="/#canvas-section" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
                 Jetzt loslegen
-              </Link>
-            </li>
-          </ul>
-        </div>
-        <div>
-          <Link href="/dashboard" className="text-sm font-medium text-foreground transition-colors hover:text-foreground">Dashboard</Link>
-          <ul className="mt-4 list-none space-y-3">
-            <li>
-              <Link href="/dashboard/chat" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-                Chat
-              </Link>
-            </li>
-            <li>
-              <Link href="/dashboard/crawl" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-                Crawl
-              </Link>
-            </li>
-            <li>
-              <Link href="/dashboard/data" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-                Datenbanken
               </Link>
             </li>
           </ul>

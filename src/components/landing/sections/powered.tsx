@@ -3,14 +3,13 @@
 import Link from "next/link";
 import MaxWidthWrapper from "@/components/shared/max-width-wrapper";
 import { InfiniteSlider } from "@/components/landing/ui/infinite-slider";
-import { ProgressiveBlur } from "@/components/landing/ui/progressive-blur";
 
 const logos = [
   {
     title: "Next.js 15",
     href: "https://nextjs.org/",
     icon: (
-      <svg role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" className="h-[32px] w-auto">
+      <svg role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" className="h-6 w-auto sm:h-[32px]">
         <title>Next.js</title>
         <path
           d="M18.665 21.978C16.758 23.255 14.465 24 12 24 5.377 24 0 18.623 0 12S5.377 0 12 0s12 5.377 12 12c0 3.583-1.574 6.801-4.067 9.001L9.219 7.2H7.2v9.596h1.615V9.251l9.85 12.727Zm-3.332-8.533 1.6 2.061V7.2h-1.6v6.245Z"
@@ -24,7 +23,7 @@ const logos = [
     href: "https://www.cloudflare.com/",
     icon: (
       <svg
-        className="h-[50px] w-auto"
+        className="h-[38px] w-auto sm:h-[50px]"
         xmlns="http://www.w3.org/2000/svg"
         fill="currentColor"
         viewBox="0 0 24 24"
@@ -41,7 +40,7 @@ const logos = [
         viewBox="0 0 24 24"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
-        className="h-[55px] w-auto"
+        className="h-[42px] w-auto sm:h-[55px]"
       >
         <path
           fillRule="evenodd"
@@ -60,7 +59,7 @@ const logos = [
         viewBox="0 0 24 24"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
-        className="h-[32px] w-auto"
+        className="h-6 w-auto sm:h-[32px]"
       >
         <path
           fillRule="evenodd"
@@ -81,11 +80,11 @@ const logos = [
           fill="currentColor"
           stroke="currentColor"
           strokeWidth="1"
-          className="size-[32px]"
+          className="size-6 sm:size-[32px]"
         >
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
         </svg>
-        <span className="text-[20px] font-bold tracking-tight">Auth.js</span>
+        <span className="text-[16px] font-bold tracking-tight sm:text-[20px]">Auth.js</span>
       </div>
     ),
   },
@@ -96,7 +95,7 @@ const logos = [
       <svg
         viewBox="0 0 65 16"
         fill="none"
-        className="h-[25px] w-auto"
+        className="h-5 w-auto sm:h-[25px]"
         xmlns="http://www.w3.org/2000/svg"
       >
         <path
@@ -134,7 +133,7 @@ const logos = [
         <svg
           xmlns="http://www.w3.org/2000/svg"
           viewBox="0 0 256 256"
-          className="size-[32px]"
+          className="size-6 sm:size-[32px]"
         >
           <rect width="256" height="256" fill="none"></rect>
           <line
@@ -162,7 +161,7 @@ const logos = [
         </svg>
         {/* Geist would be the wordmark's own typeface; it is not worth a
             57 KB font file preloaded ahead of the hero for nine characters. */}
-        <span className="font-sans text-[20px] font-bold">shadcn/ui</span>
+        <span className="font-sans text-[16px] font-bold sm:text-[20px]">shadcn/ui</span>
       </div>
     ),
   },
@@ -171,7 +170,7 @@ const logos = [
     href: "https://stripe.com/",
     icon: (
       <svg
-        className="h-[32px] w-auto"
+        className="h-6 w-auto sm:h-[32px]"
         viewBox="0 0 60 25"
         xmlns="http://www.w3.org/2000/svg"
       >
@@ -194,42 +193,41 @@ const logos = [
  */
 export default function Powered() {
   return (
-    <section className="pb-0 md:py-0 text-muted-foreground overflow-hidden">
+    <section className="pb-0 pt-6 md:pt-10 text-muted-foreground overflow-hidden">
       <MaxWidthWrapper>
         <h2 className="text-center text-sm font-semibold uppercase">
           Powered by
         </h2>
-
-        <div className="relative pt-12 pb-0 -ml-2 sm:-ml-4">
-          <InfiniteSlider speedOnHover={20} speed={50} gap={100}>
-            {logos.map((logo) => (
-              <div key={logo.title} className="flex">
-                <Link
-                  target="_blank"
-                  href={logo.href}
-                  aria-label={logo.title}
-                  className="duration-250 grayscale transition hover:text-foreground hover:grayscale-0"
-                >
-                  {logo.icon}
-                </Link>
-              </div>
-            ))}
-          </InfiniteSlider>
-
-          <div className="pointer-events-none absolute inset-y-0 left-0 w-20 bg-gradient-to-r from-background to-transparent"></div>
-          <div className="pointer-events-none absolute inset-y-0 right-0 w-20 bg-gradient-to-l from-background to-transparent"></div>
-          <ProgressiveBlur
-            className="pointer-events-none absolute left-0 top-0 h-full w-20"
-            direction="left"
-            blurIntensity={1}
-          />
-          <ProgressiveBlur
-            className="pointer-events-none absolute right-0 top-0 h-full w-20"
-            direction="right"
-            blurIntensity={1}
-          />
-        </div>
       </MaxWidthWrapper>
+
+      {/*
+       * Volle Breite statt Wrapper: ein Streifen, der mitten auf der Seite
+       * endet, zeigt seine Ränder. Die Gradienten färben nach Weiß/Schwarz
+       * aus und nicht nach --background, weil der Seitenhintergrund genau
+       * diese Farbe hat (site-shell.tsx) und --background im Dark Mode ein
+       * Grau ist — die alten Overlays haben sichtbar graue Streifen auf
+       * Schwarz gemalt. Der ProgressiveBlur ist ganz weg: er verschmiert
+       * helle Logos zu einem Grauschleier, ein reines Ausblenden tut es.
+       */}
+      <div className="relative mt-6 md:mt-8">
+        <InfiniteSlider speedOnHover={20} speed={50} gap={100}>
+          {logos.map((logo) => (
+            <div key={logo.title} className="flex">
+              <Link
+                target="_blank"
+                href={logo.href}
+                aria-label={logo.title}
+                className="duration-250 grayscale transition hover:text-foreground hover:grayscale-0"
+              >
+                {logo.icon}
+              </Link>
+            </div>
+          ))}
+        </InfiniteSlider>
+
+        <div className="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-white to-transparent dark:from-black"></div>
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-24 bg-gradient-to-l from-white to-transparent dark:from-black"></div>
+      </div>
     </section>
   );
 }

@@ -26,9 +26,9 @@ interface Feature {
  */
 const features: Feature[] = [
   {
-    title: "Kein Müll in deinen Antworten",
+    title: "Aus hunderten Seiten wird Wissen",
     description:
-      "Menüs, Cookie-Banner, Werbung und Footer wirft CraCha beim Einlesen raus. Übrig bleibt nur das, worum es auf der Seite wirklich geht.",
+      "CraCha crawlt deine Website — Seite für Seite, bis zu hunderte. Menüs, Cookie-Banner und Werbung fallen weg, vom Rest bleibt das Wesentliche, kondensiert und bereit für Fragen.",
     icon: <Filter className="h-4 w-4" />,
   },
   {
