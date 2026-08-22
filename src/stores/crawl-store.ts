@@ -281,6 +281,7 @@ export const useCrawlStore = create<CrawlState>()(
 
         const poll = async () => {
           if (polledRemoteJobId !== remoteJobId) return
+          let nextDelay = 5000
           try {
             const response = await apiFetch(`/api/admin/crawl-queue/status/${remoteJobId}`)
             const result = (await response.json().catch(() => ({}))) as CrawlStatusResponse
@@ -294,6 +295,9 @@ export const useCrawlStore = create<CrawlState>()(
             }
 
             const phase = result.phase ?? phaseFromStatus(result.status)
+            // Indexing moves in small steps that deserve a live feel; crawling
+            // reports whole pages and does not benefit from asking sooner.
+            if (phase === 'indexing') nextDelay = 3000
             const status = statusFromResponse(result.status, phase)
             const terminal = !activeStatuses.has(status)
             const updatedJob: CrawlJob = {
@@ -329,7 +333,7 @@ export const useCrawlStore = create<CrawlState>()(
             }
           }
 
-          if (polledRemoteJobId === remoteJobId) pollTimer = setTimeout(poll, 5000)
+          if (polledRemoteJobId === remoteJobId) pollTimer = setTimeout(poll, nextDelay)
         }
 
         void poll()

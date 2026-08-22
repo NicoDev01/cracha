@@ -144,10 +144,12 @@ async def test_waiting_gives_up_once_indexing_stops_progressing(no_sleep: None) 
         return SimpleNamespace(
             json=lambda: {
                 "ready": False,
-                "pending": 7,
+                "pending": 8,
                 "failures": [],
                 "chunks_count": 180,
-                "searchable": 98,
+                # Ninety of ninety-eight answer questions; the last eight have
+                # stopped moving entirely. That is a stall, not a finish.
+                "searchable": 90,
             }
         )
 
@@ -163,9 +165,105 @@ async def test_waiting_gives_up_once_indexing_stops_progressing(no_sleep: None) 
     )
 
     assert result.complete is False
-    assert result.searchable_count == 98
+    assert result.searchable_count == 90
     # It must stop long before the attempt budget, not poll 250 times.
     assert polls < 5
+
+
+@pytest.mark.asyncio
+async def test_full_coverage_on_two_polls_finishes_without_status_flips(no_sleep: None) -> None:
+    # Every page's chunks are searchable while AI Search still reports the
+    # items as "running". Waiting for the flip once kept a finished knowledge
+    # base locked for half an hour; two agreeing polls are enough evidence.
+    ingest = object.__new__(RagIngestClient)
+
+    async def post(*_args, **_kwargs):
+        return SimpleNamespace(
+            json=lambda: {
+                "ready": False,
+                "pending": 3,
+                "failures": [],
+                "chunks_count": 12,
+                "searchable": 3,
+            }
+        )
+
+    ingest._post = post
+    result = await ingest._wait_for_index(
+        object(),
+        "database",
+        "user",
+        ["a.md", "b.md", "c.md"],
+        attempts=10,
+    )
+
+    assert result.complete is True
+    assert result.searchable_count == 3
+
+
+@pytest.mark.asyncio
+async def test_one_full_coverage_poll_is_not_enough(no_sleep: None) -> None:
+    # A single poll can catch a page mid-embedding: chunks exist, more are
+    # coming. Only agreement across two polls may end the wait early, so one
+    # full-coverage poll on its own changes nothing.
+    ingest = object.__new__(RagIngestClient)
+
+    async def post(*_args, **_kwargs):
+        return SimpleNamespace(
+            json=lambda: {
+                "ready": False,
+                "pending": 0,
+                "failures": [],
+                "chunks_count": 4,
+                "searchable": 2,
+            }
+        )
+
+    ingest._post = post
+    result = await ingest._wait_for_index(
+        object(),
+        "database",
+        "user",
+        ["a.md", "b.md"],
+        attempts=1,
+    )
+
+    assert result.complete is False
+
+
+@pytest.mark.asyncio
+async def test_upload_threads_the_listing_into_the_next_batch() -> None:
+    ingest = object.__new__(RagIngestClient)
+    payloads: list[dict] = []
+
+    async def post(_client, path, payload):
+        payloads.append(payload)
+        # The worker answers every upload with what its scan found; only the
+        # first batch of a job actually triggers that scan.
+        listing: dict = {}
+        if len(payloads) == 1:
+            listing["known_items"] = {
+                "page-a.md": {"checksum": "y", "title": "A", "status": "completed", "chunks": 1}
+            }
+        return SimpleNamespace(json=lambda: {"active_keys": ["k"], **listing})
+
+    ingest._post = post
+    pages = [
+        SimpleNamespace(model_dump=lambda index=index: {"url": f"https://example.com/{index}"})
+        for index in range(30)
+    ]
+
+    result = await ingest.upload("db", "user", pages)  # type: ignore[arg-type]
+
+    assert len(payloads) == 2
+    assert "known_items" not in payloads[0]
+    assert payloads[1]["known_items"] == {
+        "page-a.md": {"checksum": "y", "title": "A", "status": "completed", "chunks": 1}
+    }
+    assert result.active_keys == ["k", "k"]
+    assert result.known_items == {
+        "page-a.md": {"checksum": "y", "title": "A", "status": "completed", "chunks": 1}
+    }
 
 
 @pytest.mark.asyncio
@@ -245,3 +343,46 @@ def test_a_large_job_still_backs_off() -> None:
     # Polling every two seconds for half an hour cost 900 full item listings.
     assert ingest_module.index_poll_ceiling(500) == ingest_module.INDEX_STATUS_MAX_INTERVAL_SECONDS
     assert ingest_module.index_poll_ceiling(120) >= 15
+
+
+@pytest.mark.asyncio
+async def test_an_empty_listing_still_travels_to_the_next_batch() -> None:
+    # A first crawl scans an empty instance. That empty answer is a real
+    # answer, and treating it as "nothing learned yet" made every batch of a
+    # first crawl re-scan an instance that was growing under it -- the case the
+    # threading was written for in the first place.
+    ingest = object.__new__(RagIngestClient)
+    payloads: list[dict] = []
+
+    async def post(_client, _path, payload):
+        payloads.append(payload)
+        return SimpleNamespace(json=lambda: {"active_keys": ["k"], "known_items": {}})
+
+    ingest._post = post
+    pages = [
+        SimpleNamespace(model_dump=lambda index=index: {"url": f"https://example.com/{index}"})
+        for index in range(30)
+    ]
+
+    result = await ingest.upload("db", "user", pages)  # type: ignore[arg-type]
+
+    assert "known_items" not in payloads[0]
+    assert payloads[1]["known_items"] == {}
+    assert result.known_items == {}
+
+
+@pytest.mark.asyncio
+async def test_upload_reports_no_listing_when_the_worker_sent_none() -> None:
+    # Without a listing in the response there is nothing to hand on, and the
+    # next batch has to scan for itself rather than be told the index is empty.
+    ingest = object.__new__(RagIngestClient)
+
+    async def post(_client, _path, _payload):
+        return SimpleNamespace(json=lambda: {"active_keys": ["k"]})
+
+    ingest._post = post
+    pages = [SimpleNamespace(model_dump=lambda: {"url": "https://example.com/"})]
+
+    result = await ingest.upload("db", "user", pages)  # type: ignore[arg-type]
+
+    assert result.known_items is None

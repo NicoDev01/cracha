@@ -8,12 +8,17 @@ from typing import Annotated
 import modal
 
 from cracha_crawler.crawl import CrawlBlockedError, analyze_site, crawl_pages
-from cracha_crawler.ingest import RagIngestClient
-from cracha_crawler.models import AnalyzeRequest, CrawlRequest, SiteAnalysis
+from cracha_crawler.ingest import INDEX_STATUS_ATTEMPTS, RagIngestClient
+from cracha_crawler.models import AnalyzeRequest, CrawlRequest, Page, SiteAnalysis
 from cracha_crawler.status import stale_job_ids
 
 APP_NAME = "cracha-crawler"
 ANALYZE_TIMEOUT_SECONDS = 120
+# Pages are handed to Cloudflare while the crawl is still running: AI Search
+# needs seconds to minutes per page, and every second of that spent during the
+# crawl is a second the user does not wait through afterwards.
+INGEST_BATCH_SIZE = 25
+MAX_PARALLEL_UPLOADS = 3
 image = (
     modal.Image.debian_slim(python_version="3.12")
     .apt_install("curl")
@@ -185,13 +190,49 @@ async def process_crawl(payload: dict, job_id: str) -> dict:
             result["chunks_count"] = progress["chunks_count"]
         if progress.get("stage") == "indexing":
             indexed = int(progress.get("current") or 0)
-            total = int(progress.get("total") or len(pages))
+            total = int(progress.get("total") or 0)
             result.update(
                 indexed_pages=indexed,
                 indexing_pending=max(0, total - indexed),
                 indexing_complete=False,
             )
         await update_status(job_id, progress=progress, result=result)
+
+    # Crawled pages stream into upload batches instead of waiting for the crawl
+    # to finish: by the time the last page is fetched, most of them are already
+    # inside Cloudflare's indexing pipeline. The listing each batch returns
+    # travels to the next one, so the dedupe scan runs once per job.
+    buffer: list[Page] = []
+    upload_tasks: list[asyncio.Task] = []
+    known_items: dict[str, dict] | None = None
+    upload_slots = asyncio.Semaphore(MAX_PARALLEL_UPLOADS)
+    # The first batch is the one that scans the instance, and everything after
+    # it reuses that listing. Letting three start at once would mean three
+    # scans, so the rest wait for the first to hand its listing over.
+    scanned = asyncio.Event()
+    async def upload_batch(batch: list[Page], first: bool) -> list[str]:
+        nonlocal known_items
+        if not first:
+            await scanned.wait()
+        async with upload_slots:
+            uploaded = await ingest_client.upload(
+                request.tenant_id, request.user_id, batch, known_items
+            )
+        if uploaded.known_items is not None:
+            known_items = uploaded.known_items
+        scanned.set()
+        return uploaded.active_keys
+
+    def queue(batch: list[Page]) -> None:
+        first = not upload_tasks
+        upload_tasks.append(asyncio.create_task(upload_batch(batch, first)))
+
+    async def accept_page(page: Page) -> None:
+        buffer.append(page)
+        if len(buffer) >= INGEST_BATCH_SIZE:
+            batch = buffer[:]
+            buffer.clear()
+            queue(batch)
 
     try:
         await update_status(
@@ -206,42 +247,64 @@ async def process_crawl(payload: dict, job_id: str) -> dict:
                 "percent": 0,
             },
         )
-        pages, skipped = await crawl_pages(request, report_progress)
+        pages, skipped = await crawl_pages(request, report_progress, accept_page)
         if not pages:
             raise RuntimeError("No indexable content was found.")
+
+        if buffer:
+            batch = buffer[:]
+            buffer.clear()
+            queue(batch)
+        # Nothing may wait on a scan that will never happen: if the crawl ended
+        # before a single batch went out, the gate has to open by itself.
+        scanned.set()
+        try:
+            key_lists = await asyncio.gather(*upload_tasks)
+        except BaseException:
+            for task in upload_tasks:
+                task.cancel()
+            raise
+        active_keys = list(dict.fromkeys(key for keys in key_lists for key in keys))
+        # `pages` is what the last crawl pass returned; `active_keys` is
+        # everything that reached Cloudflare, which after a mid-crawl fallback
+        # can be the larger of the two. Only a genuine shortfall is a skip.
+        skipped += max(0, len(pages) - len(active_keys))
 
         await update_status(
             job_id,
             status="running",
             phase="indexing",
-            result={"pages_count": len(pages), "skipped_count": skipped},
+            result={"pages_count": len(active_keys), "skipped_count": skipped},
             progress={
                 "stage": "indexing",
                 "current": 0,
-                "total": len(pages),
+                "total": len(active_keys),
                 "percent": 0,
             },
         )
-        ingest_result = await ingest_client.ingest(
-            request.tenant_id, request.user_id, pages, report_progress
+        index_status = await ingest_client.finalize(
+            request.tenant_id,
+            request.user_id,
+            active_keys,
+            attempts=INDEX_STATUS_ATTEMPTS,
+            on_progress=report_progress,
         )
-        skipped += len(pages) - len(ingest_result.active_keys)
         result = {
             "success": True,
-            "pages_count": len(ingest_result.active_keys),
+            "pages_count": len(active_keys),
             "skipped_count": skipped,
-            "chunks_count": ingest_result.chunks_count,
-            "indexed_pages": ingest_result.indexed_count,
-            "indexing_pending": ingest_result.pending_count,
-            "indexing_complete": ingest_result.indexing_complete,
-            "active_keys": ingest_result.active_keys,
+            "chunks_count": index_status.chunks_count,
+            "indexed_pages": index_status.indexed_count,
+            "indexing_pending": index_status.pending_count,
+            "indexing_complete": index_status.complete,
+            "active_keys": active_keys,
         }
-        if not ingest_result.indexing_complete:
+        if not index_status.complete:
             finalizer = await finalize_index.spawn.aio(
                 job_id,
                 request.tenant_id,
                 request.user_id,
-                ingest_result.active_keys,
+                active_keys,
                 skipped,
             )
             await update_status(
@@ -253,14 +316,12 @@ async def process_crawl(payload: dict, job_id: str) -> dict:
                 result=result,
                 progress={
                     "stage": "indexing",
-                    "current": ingest_result.indexed_count,
-                    "total": len(ingest_result.active_keys),
+                    "current": index_status.indexed_count,
+                    "total": len(active_keys),
                     "percent": round(
-                        ingest_result.indexed_count
-                        / max(1, len(ingest_result.active_keys))
-                        * 100
+                        index_status.indexed_count / max(1, len(active_keys)) * 100
                     ),
-                    "chunks_count": ingest_result.chunks_count,
+                    "chunks_count": index_status.chunks_count,
                 },
             )
         else:
@@ -272,14 +333,16 @@ async def process_crawl(payload: dict, job_id: str) -> dict:
                 result=result,
                 progress={
                     "stage": "completed",
-                    "current": ingest_result.indexed_count,
-                    "total": len(ingest_result.active_keys),
+                    "current": index_status.indexed_count,
+                    "total": len(active_keys),
                     "percent": 100,
-                    "chunks_count": ingest_result.chunks_count,
+                    "chunks_count": index_status.chunks_count,
                 },
             )
         return result
     except Exception as error:
+        for task in upload_tasks:
+            task.cancel()
         # A site that refused us is not a site with nothing to index, and the
         # reader cannot open the Modal log to tell the two apart. When the
         # crawler knows which it was, that sentence is the error.

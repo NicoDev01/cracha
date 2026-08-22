@@ -2,7 +2,7 @@ import asyncio
 import os
 import time
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import httpx
 
@@ -46,6 +46,21 @@ class IngestResult:
 
 
 @dataclass(frozen=True)
+class UploadResult:
+    """What one upload call queued, plus the item listing it learned.
+
+    The listing travels into the next batch, which is what keeps the dedupe
+    scan to once per job instead of once per batch.
+    """
+
+    active_keys: list[str]
+    #: ``None`` until some batch has actually scanned. An *empty* dict is a
+    #: real answer -- a fresh instance holds nothing -- so it must not be
+    #: confused with "not scanned yet", or every batch pays for its own scan.
+    known_items: dict[str, dict] | None
+
+
+@dataclass(frozen=True)
 class IndexStatus:
     chunks_count: int
     indexed_count: int
@@ -85,43 +100,40 @@ class RagIngestClient:
         assert last_error is not None
         raise last_error
 
-    async def ingest(
+    async def upload(
         self,
         database_id: str,
         user_id: str,
         pages: list[Page],
-        on_progress: ProgressCallback | None = None,
-    ) -> IngestResult:
+        known_items: dict[str, dict] | None = None,
+    ) -> UploadResult:
+        """Queue pages for indexing and return immediately.
+
+        Waiting happens separately (`finalize`), so a crawl can keep fetching
+        while Cloudflare chunks and embeds what it already has.
+        """
         active_keys: list[str] = []
+        carried = dict(known_items) if known_items is not None else None
         async with httpx.AsyncClient(timeout=180) as client:
             for offset in range(0, len(pages), 25):
                 batch = pages[offset : offset + 25]
-                response = await self._post(
-                    client,
-                    "/ingest/pages",
-                    {
-                        "database_id": database_id,
-                        "user_id": user_id,
-                        "pages": [page.model_dump() for page in batch],
-                    },
-                )
-                active_keys.extend(response.json()["active_keys"])
-
-            index_status = await self._wait_for_index(
-                client, database_id, user_id, active_keys, on_progress
-            )
-
-            if index_status.complete:
-                await self._complete(
-                    client, database_id, user_id, active_keys, index_status.chunks_count
-                )
-        return IngestResult(
-            active_keys=active_keys,
-            chunks_count=index_status.chunks_count,
-            indexed_count=index_status.indexed_count,
-            pending_count=index_status.pending_count,
-            indexing_complete=index_status.complete,
-        )
+                payload: dict[str, object] = {
+                    "database_id": database_id,
+                    "user_id": user_id,
+                    "pages": [page.model_dump() for page in batch],
+                }
+                # The first batch of a job pays for the one scan; every later
+                # batch reuses what came back, including the empty listing a
+                # first crawl produces.
+                if carried is not None:
+                    payload["known_items"] = carried
+                response = await self._post(client, "/ingest/pages", payload)
+                body = response.json()
+                active_keys.extend(body["active_keys"])
+                returned = body.get("known_items")
+                if isinstance(returned, dict):
+                    carried = {**(carried or {}), **returned}
+        return UploadResult(active_keys=active_keys, known_items=carried)
 
     async def finalize(
         self,
@@ -199,6 +211,7 @@ class RagIngestClient:
         # From the starting count: failed keys are dropped from active_keys as
         # we go, and the pace should not change because of that.
         ceiling = index_poll_ceiling(len(active_keys))
+        searchable_streak = 0
         for attempt in range(attempts):
             response = await self._post(client, "/ingest/status", payload)
             status = response.json()
@@ -242,6 +255,17 @@ class RagIngestClient:
                     )
             if latest.complete:
                 return latest
+            # Chunks are searchable the moment they exist; the item status can
+            # lag minutes behind. One poll could catch a page mid-embedding, so
+            # full coverage has to hold on two consecutive polls before this
+            # counts as done — that is what once turned a finished crawl into
+            # half an hour of waiting for statuses that never flipped.
+            if total > 0 and latest.searchable_count >= total:
+                if searchable_streak >= 1:
+                    return replace(latest, complete=True)
+                searchable_streak += 1
+            else:
+                searchable_streak = 0
             if stall_seconds is not None and _monotonic() - last_change >= stall_seconds:
                 print(
                     f"[WARN] AI Search stopped progressing with {pending} item(s) pending; "

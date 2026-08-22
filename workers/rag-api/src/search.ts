@@ -163,20 +163,54 @@ export function needsUpload(page: IngestPage, current: IndexedItem | undefined):
   return current.checksum !== page.checksum || current.title !== page.title
 }
 
+/** The listing covers the crawler's 500-page ceiling with room to spare. */
+const KNOWN_ITEMS_LIMIT = 1_000
+
+function sanitizeKnownItems(value: unknown): Map<string, IndexedItem> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const entries = Object.entries(value as Record<string, unknown>)
+  if (entries.length > KNOWN_ITEMS_LIMIT) return null
+  const map = new Map<string, IndexedItem>()
+  for (const [key, raw] of entries) {
+    if (typeof key !== 'string' || !raw || typeof raw !== 'object') return null
+    const item = raw as Partial<IndexedItem>
+    if (
+      typeof item.checksum !== 'string'
+      || typeof item.title !== 'string'
+      || typeof item.status !== 'string'
+      || typeof item.chunks !== 'number'
+      || !Number.isFinite(item.chunks)
+    ) return null
+    map.set(key, { checksum: item.checksum, title: item.title, status: item.status, chunks: item.chunks })
+  }
+  return map
+}
+
+function knownItemsPayload(map: Map<string, IndexedItem>): Record<string, IndexedItem> {
+  const payload: Record<string, IndexedItem> = {}
+  for (const [key, item] of map) payload[key] = item
+  return payload
+}
+
 export async function uploadPages(
   instance: Pick<AiSearchInstance, 'items'>,
   pages: IngestPage[],
-): Promise<string[]> {
+  knownItems?: unknown,
+): Promise<{ keys: string[]; known_items: Record<string, IndexedItem> }> {
   // Skipping is an optimisation, never a precondition: if the listing fails,
-  // every page is uploaded exactly as before.
-  const existing = await indexedItemsByKey(instance.items).catch((error) => {
-    console.log(JSON.stringify({
-      event: 'item_index_unavailable',
-      error: error instanceof Error ? error.message : 'unknown',
-    }))
-    return new Map<string, IndexedItem>()
-  })
-  return Promise.all(
+  // every page is uploaded exactly as before. A crawl's later batches carry
+  // the first batch's listing with them, so the scan runs once per job.
+  let existing = sanitizeKnownItems(knownItems)
+  if (!existing) {
+    existing = await indexedItemsByKey(instance.items).catch((error) => {
+      console.log(JSON.stringify({
+        event: 'item_index_unavailable',
+        error: error instanceof Error ? error.message : 'unknown',
+      }))
+      return new Map<string, IndexedItem>()
+    })
+  }
+  const keys = await Promise.all(
     pages.map(async (page) => {
       const key = await itemKeyFor(page.url)
       if (!needsUpload(page, existing.get(key))) return key
@@ -196,7 +230,13 @@ export async function uploadPages(
       return key
     }),
   )
+  // The map stays the scan-time snapshot: a crawl never sends the same URL in
+  // two batches, so nothing here can go stale within one job.
+  return { keys, known_items: knownItemsPayload(existing) }
 }
+
+/** How many item deletions may be in flight at once. */
+const DELETE_WINDOW = 6
 
 export async function deleteStaleItems(
   instance: { items: Pick<AiSearchInstance['items'], 'list' | 'delete'> },
@@ -216,7 +256,15 @@ export async function deleteStaleItems(
     page += 1
   }
 
-  for (const id of staleIds) await instance.items.delete(id)
+  // Deletions are independent, so they overlap; one at a time made a large
+  // re-crawl pay a round trip per removed page. The window is small on
+  // purpose -- a Worker holds six connections open, and firing hundreds of
+  // deletes at once trades one slow endpoint for a rate-limited one.
+  for (let start = 0; start < staleIds.length; start += DELETE_WINDOW) {
+    await Promise.all(
+      staleIds.slice(start, start + DELETE_WINDOW).map((id) => instance.items.delete(id)),
+    )
+  }
   return staleIds.length
 }
 

@@ -106,10 +106,14 @@ async def test_browser_failure_uses_http_fallback(monkeypatch) -> None:
     async def allow_url(_url: str) -> None:
         return None
 
-    async def failed_browser(_request: CrawlRequest, _on_progress=None) -> tuple[list[Page], int]:
+    async def failed_browser(
+        _request: CrawlRequest, _on_progress=None, _on_page=None
+    ) -> tuple[list[Page], int]:
         raise RuntimeError("Browser is not available")
 
-    async def fallback(_request: CrawlRequest, _on_progress=None) -> tuple[list[Page], int]:
+    async def fallback(
+        _request: CrawlRequest, _on_progress=None, _on_page=None
+    ) -> tuple[list[Page], int]:
         return [fallback_page], 0
 
     monkeypatch.setattr(crawl, "assert_public_url", allow_url)
@@ -134,11 +138,13 @@ async def test_successful_browser_result_skips_fallback(monkeypatch) -> None:
     async def allow_url(_url: str) -> None:
         return None
 
-    async def browser(_request: CrawlRequest, _on_progress=None) -> tuple[list[Page], int]:
+    async def browser(
+        _request: CrawlRequest, _on_progress=None, _on_page=None
+    ) -> tuple[list[Page], int]:
         return [browser_page], 1
 
     async def unexpected_fallback(
-        _request: CrawlRequest, _on_progress=None
+        _request: CrawlRequest, _on_progress=None, _on_page=None
     ) -> tuple[list[Page], int]:
         raise AssertionError("fallback must not run")
 
@@ -345,3 +351,51 @@ def test_a_short_list_of_links_inside_prose_survives() -> None:
     assert page is not None
     assert "Dokumentation" in page.markdown
     assert "Leitfaden" in page.markdown
+
+
+@pytest.mark.asyncio
+async def test_fallback_does_not_stream_a_page_the_browser_pass_already_sent(monkeypatch) -> None:
+    # The browser pass hands over two pages and then dies; the HTTP fallback
+    # re-crawls the same site from the start. The caller uploads and bills what
+    # it is streamed, so a shared page must arrive exactly once.
+    streamed: list[str] = []
+
+    async def allow_url(_url: str) -> None:
+        return None
+
+    def page(url: str) -> Page:
+        return Page(
+            url=url,
+            title="Titel",
+            content="Inhalt " * 20,
+            markdown="Inhalt",
+            checksum="abc",
+            crawled_at="2026-08-22T00:00:00+00:00",
+        )
+
+    async def dying_browser(_request, _on_progress=None, on_page=None):
+        for url in ("https://example.com/a", "https://example.com/b"):
+            await on_page(page(url))
+        raise TimeoutError("browser ran out of time")
+
+    async def fallback(_request, _on_progress=None, on_page=None):
+        pages = [page(f"https://example.com/{name}") for name in ("a", "b", "c")]
+        for candidate in pages:
+            await on_page(candidate)
+        return pages, 0
+
+    monkeypatch.setattr(crawl, "assert_public_url", allow_url)
+    monkeypatch.setattr(crawl, "_crawl4ai_pages", dying_browser)
+    monkeypatch.setattr(crawl, "_http_fallback_pages", fallback)
+
+    async def record(candidate: Page) -> None:
+        streamed.append(candidate.url)
+
+    pages, _ = await crawl.crawl_pages(request(), None, record)
+
+    assert streamed == [
+        "https://example.com/a",
+        "https://example.com/b",
+        "https://example.com/c",
+    ]
+    assert len(streamed) == len(pages)

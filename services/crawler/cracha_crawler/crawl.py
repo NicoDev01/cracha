@@ -444,7 +444,9 @@ def _html_page(
 
 
 async def _http_fallback_pages(
-    request: CrawlRequest, on_progress: ProgressCallback | None = None
+    request: CrawlRequest,
+    on_progress: ProgressCallback | None = None,
+    on_page: Callable[[Page], Awaitable[None]] | None = None,
 ) -> tuple[list[Page], int]:
     start_url = canonical_url(str(request.url))
     source_host = urlsplit(start_url).hostname
@@ -509,6 +511,8 @@ async def _http_fallback_pages(
                 continue
             if page:
                 pages[page.url] = page
+                if on_page:
+                    await on_page(page)
             else:
                 print(
                     f"[WARN] HTTP fallback found no indexable content at {final_url} "
@@ -538,6 +542,7 @@ async def _http_direct_pages(
     request: CrawlRequest,
     urls: list[str],
     on_progress: ProgressCallback | None = None,
+    on_page: Callable[[Page], Awaitable[None]] | None = None,
 ) -> tuple[list[Page], int]:
     pages: dict[str, Page] = {}
     skipped = 0
@@ -570,6 +575,8 @@ async def _http_direct_pages(
             async with lock:
                 if page:
                     pages[page.url] = page
+                    if on_page:
+                        await on_page(page)
                 else:
                     skipped += 1
                 await _report_progress(
@@ -587,7 +594,9 @@ async def _http_direct_pages(
 
 
 async def _crawl4ai_pages(
-    request: CrawlRequest, on_progress: ProgressCallback | None = None
+    request: CrawlRequest,
+    on_progress: ProgressCallback | None = None,
+    on_page: Callable[[Page], Awaitable[None]] | None = None,
 ) -> tuple[list[Page], int]:
     from crawl4ai import AsyncWebCrawler, BrowserConfig, CacheMode, CrawlerRunConfig
     from crawl4ai.content_filter_strategy import PruningContentFilter
@@ -665,7 +674,7 @@ async def _crawl4ai_pages(
     )
     if dynamic_page_urls:
         return await _http_direct_pages(
-            request, dynamic_page_urls[: request.limit], on_progress
+            request, dynamic_page_urls[: request.limit], on_progress, on_page
         )
 
     async def collect(result, depth: int = 0) -> tuple[list[str], list[str]]:
@@ -693,6 +702,8 @@ async def _crawl4ai_pages(
                 if page:
                     page.depth = depth
                     pages_by_url[page.url] = page
+                    if on_page:
+                        await on_page(page)
                 elif not route_wrapper:
                     # "Crawl4AI returned no indexable pages" was the only trace
                     # this left, which is true of a refused request and of a
@@ -835,17 +846,33 @@ async def _crawl4ai_pages(
 
 
 async def crawl_pages(
-    request: CrawlRequest, on_progress: ProgressCallback | None = None
+    request: CrawlRequest,
+    on_progress: ProgressCallback | None = None,
+    on_page: Callable[[Page], Awaitable[None]] | None = None,
 ) -> tuple[list[Page], int]:
     await assert_public_url(str(request.url))
     browser_timeout = min(
         MAX_BROWSER_TIMEOUT_SECONDS,
         max(MIN_BROWSER_TIMEOUT_SECONDS, request.limit * 5),
     )
+    # A page is streamed to the caller once per crawl, never once per pass.
+    # The browser pass hands over what it collected before it dies, and the
+    # HTTP fallback then re-crawls the same site from the start: without this
+    # the caller sees every shared page twice, and a caller that counts pages
+    # is billing for the retry.
+    streamed: set[str] = set()
+
+    async def stream_once(page: Page) -> None:
+        if on_page is None or page.url in streamed:
+            return
+        streamed.add(page.url)
+        await on_page(page)
+
+    forward = stream_once if on_page else None
 
     try:
         async with asyncio.timeout(browser_timeout):
-            pages, skipped = await _crawl4ai_pages(request, on_progress)
+            pages, skipped = await _crawl4ai_pages(request, on_progress, forward)
         if pages:
             return pages, skipped
         print("[WARN] Crawl4AI returned no indexable pages; using the HTTP fallback.")
@@ -855,4 +882,4 @@ async def crawl_pages(
             "using the HTTP fallback."
         )
 
-    return await _http_fallback_pages(request, on_progress)
+    return await _http_fallback_pages(request, on_progress, forward)

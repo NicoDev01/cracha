@@ -14,6 +14,8 @@ interface IngestBody {
   database_id: string
   user_id: string
   pages: IngestPage[]
+  /** The previous batch's item listing, so the scan runs once per crawl. */
+  known_items?: Record<string, { checksum: string; title: string; status: string; chunks: number }>
 }
 
 interface CompleteBody {
@@ -122,7 +124,7 @@ async function handleIngest(request: Request, env: Env): Promise<Response> {
 
   const database = await databaseForIngest(env, databaseId, userId)
   const instance = await ensureInstance(env, databaseId)
-  const activeKeys = await uploadPages(instance, body.pages)
+  const { keys, known_items } = await uploadPages(instance, body.pages, body.known_items)
   await saveDatabase(env, {
     ...database,
     status: 'crawling',
@@ -130,7 +132,7 @@ async function handleIngest(request: Request, env: Env): Promise<Response> {
     updated_at: new Date().toISOString(),
   })
 
-  return json(request, env, { success: true, active_keys: activeKeys }, 202)
+  return json(request, env, { success: true, active_keys: keys, known_items }, 202)
 }
 
 async function handleComplete(request: Request, env: Env): Promise<Response> {

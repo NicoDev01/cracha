@@ -705,14 +705,80 @@ describe('unchanged page upload', () => {
       },
     } as unknown as Pick<AiSearchInstance, 'items'>
 
-    const keys = await uploadPages(instance, [unchanged, changed])
+    const { keys } = await uploadPages(instance, [unchanged, changed])
     expect(keys).toEqual([await itemKeyFor(unchanged.url), await itemKeyFor(changed.url)])
     // Both stay active so the stale-item cleanup keeps them.
     expect(uploaded).toEqual([await itemKeyFor(changed.url)])
   })
+
+  it('a later batch reuses the listing its predecessor handed over', async () => {
+    const uploaded: string[] = []
+    const unchanged = page()
+    const changed = page({ url: 'https://example.com/blog', title: 'Blog', checksum: 'xyz' })
+    const instance = {
+      items: {
+        // A batch that arrives with a listing must not list again: twenty
+        // batches re-listing the whole instance is what made large re-crawls
+        // pay hundreds of API calls before the first upload.
+        list: async () => { throw new Error('listing must not run when known_items are supplied') },
+        upload: async (key: string) => { uploaded.push(key) },
+      },
+    } as unknown as Pick<AiSearchInstance, 'items'>
+
+    const known = { [await itemKeyFor(unchanged.url)]: { checksum: 'abc', title: 'Unser Team', status: 'completed', chunks: 2 } }
+    const { keys, known_items } = await uploadPages(instance, [unchanged, changed], known)
+    expect(keys).toEqual([await itemKeyFor(unchanged.url), await itemKeyFor(changed.url)])
+    expect(uploaded).toEqual([await itemKeyFor(changed.url)])
+    // The snapshot travels on so the next batch can skip its own scan too.
+    expect(Object.keys(known_items)).toContain(await itemKeyFor(unchanged.url))
+  })
+
+  it('falls back to listing when the handed-over listing is malformed', async () => {
+    const unchanged = page()
+    const instance = {
+      items: {
+        list: async () => ({
+          result: [
+            { id: '1', key: await itemKeyFor(unchanged.url), status: 'completed' as const, chunks_count: 2, metadata: { checksum: 'abc', title: 'Unser Team' } },
+          ],
+          result_info: { count: 1, page: 1, per_page: 50, total_count: 1 },
+        }),
+        upload: async () => {},
+      },
+    } as unknown as Pick<AiSearchInstance, 'items'>
+
+    const { keys } = await uploadPages(instance, [unchanged], { broken: 'not-an-item' })
+    expect(keys).toEqual([await itemKeyFor(unchanged.url)])
+  })
 })
 
 describe('stale item cleanup', () => {
+  it('keeps at most six deletions in flight', async () => {
+    // A five-hundred-page re-crawl deletes hundreds of items. Firing them all
+    // at once trades one slow endpoint for a rate-limited one, and a Worker
+    // holds six connections open anyway.
+    let inFlight = 0
+    let peak = 0
+    const instance = {
+      items: {
+        list: async () => ({
+          result: Array.from({ length: 30 }, (_unused, index) => ({ id: `id-${index}`, key: `gone-${index}` })),
+          result_info: { count: 30, page: 1, per_page: 50, total_count: 30 },
+        }),
+        delete: async () => {
+          inFlight += 1
+          peak = Math.max(peak, inFlight)
+          await new Promise((resolve) => setTimeout(resolve, 1))
+          inFlight -= 1
+        },
+      },
+    } as unknown as Parameters<typeof deleteStaleItems>[0]
+
+    expect(await deleteStaleItems(instance, new Set())).toBe(30)
+    expect(peak).toBeGreaterThan(1)
+    expect(peak).toBeLessThanOrEqual(6)
+  })
+
   it('collects all pages before deleting so pagination is stable', async () => {
     const deleted: string[] = []
     const instance: { items: Pick<AiSearchInstance['items'], 'list' | 'delete'> } = {

@@ -38,6 +38,19 @@ export interface IngestPage {
   published_at?: string
 }
 
+/**
+ * What a previous ingest call of the same crawl job already learned from the
+ * Items listing. The crawler threads it forward so the dedupe scan runs once
+ * per job instead of once per batch — on a 500-page re-crawl that is the
+ * difference between twenty full item listings and one.
+ */
+export interface KnownItem {
+  checksum: string
+  title: string
+  status: string
+  chunks: number
+}
+
 export interface QueryBody {
   question: string
   tenant_id: string

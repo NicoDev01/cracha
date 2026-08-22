@@ -73,6 +73,14 @@ export function CrawlMonitor() {
   const successful = currentJob.status === "completed"
   const currentPhaseIndex = phaseOrder.indexOf(currentJob.phase)
   const progress = currentJob.progress
+  const percent = Math.min(100, Math.max(0, progress?.percent ?? 0))
+  const chunks = progress?.chunks_count ?? currentJob.chunks_created ?? 0
+  // Only indexing knows its total: it counts against the pages it was handed.
+  // A recursive crawl reports progress against the page *limit*, so a site with
+  // forty pages and a limit of five hundred would creep to eight percent and
+  // then jump to a hundred. A bar that does that is worse than no bar, so the
+  // crawl phase keeps the indeterminate pulse it had.
+  const determinate = !terminal && currentJob.phase === "indexing" && percent > 0
   const progressLabel = currentJob.phase === "queued"
     ? "Crawler wird gestartet"
     : currentJob.phase === "indexing"
@@ -100,7 +108,16 @@ export function CrawlMonitor() {
       )}
       aria-live="polite"
     >
-      <div className={cn("h-1 w-full", successful ? "bg-success-500" : terminal ? "bg-error-500" : "animate-pulse bg-brand-500")} />
+      {determinate ? (
+        <div className="h-1 w-full bg-gray-100 dark:bg-gray-800">
+          <div
+            className="h-full bg-brand-500 transition-[width] duration-700 ease-out"
+            style={{ width: `${percent}%` }}
+          />
+        </div>
+      ) : (
+        <div className={cn("h-1 w-full", successful ? "bg-success-500" : terminal ? "bg-error-500" : "animate-pulse bg-brand-500")} />
+      )}
       <div className="p-5 sm:p-6">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-3">
@@ -137,12 +154,18 @@ export function CrawlMonitor() {
         {isRunning && (
           <div className="mt-5 flex items-start gap-2.5 text-xs" aria-label="Crawl-Fortschritt">
             <Loader2 className="mt-0.5 size-3.5 shrink-0 animate-spin text-brand-500" />
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="font-medium text-gray-700 dark:text-gray-200">{progressLabel}</p>
               {progress?.url && currentJob.phase === "crawling" && (
                 <p className="mt-1 truncate font-mono text-[11px] text-gray-400">{progress.url}</p>
               )}
+              {currentJob.phase === "indexing" && chunks > 0 && (
+                <p className="mt-1 text-[11px] tabular-nums text-gray-400">{chunks} Chunks erstellt</p>
+              )}
             </div>
+            {determinate && (
+              <span className="shrink-0 font-mono text-xs tabular-nums text-gray-400">{percent}%</span>
+            )}
           </div>
         )}
 
