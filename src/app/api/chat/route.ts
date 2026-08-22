@@ -92,7 +92,9 @@ export async function POST(request: NextRequest) {
   if (!retrieval.context || sources.length === 0) {
     return streamResponse(new ReadableStream({
       start(controller) {
-        const model = 'Cloudflare AI Search'
+        // No model ran, so the answer line names none. It used to carry the
+        // search service, which is the one place the reader saw it.
+        const model = ''
         controller.enqueue(encodeEvent('meta', { sources: [], model }))
         controller.enqueue(encodeEvent('delta', { text: 'Ich konnte in dieser Wissensbasis keine ausreichend relevanten Informationen finden.' }))
         controller.enqueue(encodeEvent('done', {
@@ -119,7 +121,7 @@ export async function POST(request: NextRequest) {
           context: retrieval.context as string,
           blocks: retrieval.blocks ?? [],
         })
-        const model = `${generated.model} + Cloudflare AI Search`
+        const model = generated.model
         controller.enqueue(encodeEvent('meta', { sources, model, fallback: generated.fallback }))
 
         for await (const text of generated.text) {

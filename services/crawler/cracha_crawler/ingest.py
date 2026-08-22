@@ -60,6 +60,41 @@ class UploadResult:
     known_items: dict[str, dict] | None
 
 
+class PageBuffer:
+    """Collects crawled pages until a batch is worth sending.
+
+    Two releases, because one is not enough. A batch that only ever leaves
+    when it is full never leaves at all on a small crawl -- ten pages sat here
+    until the crawl ended, which is the pipeline doing nothing for the most
+    common job size. So a partial batch also leaves once its oldest page has
+    waited `max_age` seconds, and a large crawl still fills its batches long
+    before that clock runs out.
+    """
+
+    def __init__(self, size: int, max_age: float) -> None:
+        self._size = size
+        self._max_age = max_age
+        self._pages: list[Page] = []
+        self._since: float | None = None
+
+    def add(self, page: Page, now: float) -> list[Page] | None:
+        """Takes one page, and hands back a batch once it is full."""
+        if self._since is None:
+            self._since = now
+        self._pages.append(page)
+        return self.drain() if len(self._pages) >= self._size else None
+
+    def due(self, now: float) -> bool:
+        """Whether a partial batch has waited long enough to go out anyway."""
+        return self._since is not None and now - self._since >= self._max_age
+
+    def drain(self) -> list[Page]:
+        batch = self._pages[:]
+        self._pages.clear()
+        self._since = None
+        return batch
+
+
 @dataclass(frozen=True)
 class IndexStatus:
     chunks_count: int
@@ -264,6 +299,10 @@ class RagIngestClient:
                 if searchable_streak >= 1:
                     return replace(latest, complete=True)
                 searchable_streak += 1
+                # The confirming poll is the last thing between a finished
+                # index and the user, so it does not wait out a backoff that
+                # exists for a job still grinding. Ask again straight away.
+                delay = float(INDEX_STATUS_INTERVAL_SECONDS)
             else:
                 searchable_streak = 0
             if stall_seconds is not None and _monotonic() - last_change >= stall_seconds:

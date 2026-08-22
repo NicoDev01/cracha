@@ -54,7 +54,22 @@ export function DataDashboard() {
   const [isDeleting, setIsDeleting] = useState(false)
   const [recrawlingIds, setRecrawlingIds] = useState<Set<string>>(new Set())
 
-  const loadDatabases = useCallback(async (showLoading = true) => {
+  // `background` is true for the poll that runs during a crawl. It never shows
+  // the spinner and never clears the list, so one dropped request mid-crawl
+  // does not look like the dashboard breaking. The spinner itself is switched
+  // on by whoever asks for a visible reload -- never in an effect, where it
+  // would render the page once and then immediately render it again.
+  const pruneSelection = useCallback((current: Database[]) => {
+    const live = new Set(current.map((database) => database.id))
+    setSelectedIds((selected) => {
+      const kept = [...selected].filter((id) => live.has(id))
+      // Same set, same object: a poll every ten seconds must not re-render the
+      // table just because it looked.
+      return kept.length === selected.size ? selected : new Set(kept)
+    })
+  }, [])
+
+  const loadDatabases = useCallback(async (background = false) => {
     if (!user) {
       setDatabases([])
       setIsLoading(false)
@@ -62,24 +77,33 @@ export function DataDashboard() {
     }
 
     try {
-      if (showLoading) setIsLoading(true)
-      setDatabases(await getDatabases())
+      const fresh = await getDatabases()
+      setDatabases(fresh)
+      // Pruned here, where the list actually changes, rather than in an effect
+      // watching it afterwards. A selection that outlives its row drives the
+      // bulk bar and its delete button, so it must not survive the refresh
+      // that removed the row -- including the failure below, which empties the
+      // list entirely.
+      pruneSelection(fresh)
       setError(null)
     } catch (loadError) {
-      // A dropped background refresh keeps the last known list. Clearing it and
-      // surfacing the raw fetch error made one failed poll during a crawl look
-      // like the whole dashboard had broken.
-      if (!showLoading) return
+      if (background) return
       setError(loadError instanceof Error ? loadError.message : "Fehler beim Laden der Datenbanken")
       setDatabases([])
+      pruneSelection([])
     } finally {
-      if (showLoading) setIsLoading(false)
+      setIsLoading(false)
     }
-  }, [user])
+  }, [pruneSelection, user])
 
   const isCrawling = databases.some((database) => databaseStatus(database) === "crawling")
 
   useEffect(() => {
+    // Fetching on mount is what an effect is for, and this one sets no state
+    // synchronously: with a user signed in the first statement is the await.
+    // The rule cannot see that, because the signed-out branch it also contains
+    // does set state -- and that branch is the one that never runs here.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadDatabases()
   }, [loadDatabases])
 
@@ -87,14 +111,9 @@ export function DataDashboard() {
     if (!isCrawling) return
     // Keyed on the boolean, not on the array: every poll produced a new array,
     // which tore the interval down and rebuilt it on each response.
-    const timer = window.setInterval(() => void loadDatabases(false), 10_000)
+    const timer = window.setInterval(() => void loadDatabases(true), 10_000)
     return () => window.clearInterval(timer)
   }, [isCrawling, loadDatabases])
-
-  useEffect(() => {
-    const currentIds = new Set(databases.map((database) => database.id))
-    setSelectedIds((selected) => new Set([...selected].filter((id) => currentIds.has(id))))
-  }, [databases])
 
   const filteredDatabases = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
@@ -240,7 +259,7 @@ export function DataDashboard() {
                 <TableHead>Quelle</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Seiten</TableHead>
-                <TableHead className="text-right">Chunks</TableHead>
+                <TableHead className="text-right">Abschnitte</TableHead>
                 <TableHead>Letzter Crawl</TableHead>
                 <TableHead className="w-24 text-right">Aktionen</TableHead>
               </TableRow>
@@ -320,7 +339,7 @@ export function DataDashboard() {
           <AlertDialogHeader>
             <AlertDialogTitle>{deleteIds.length === 1 ? "Wissensbasis löschen?" : `${deleteIds.length} Wissensbasen löschen?`}</AlertDialogTitle>
             <AlertDialogDescription>
-              Seiten, Chunks und Suchindex werden dauerhaft entfernt. Diese Aktion kann nicht rückgängig gemacht werden.
+              Alle Inhalte dieser Wissensbasis werden dauerhaft entfernt. Diese Aktion kann nicht rückgängig gemacht werden.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

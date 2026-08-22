@@ -3,7 +3,8 @@ from types import SimpleNamespace
 import pytest
 
 from cracha_crawler import ingest as ingest_module
-from cracha_crawler.ingest import RagIngestClient
+from cracha_crawler.ingest import INDEX_STATUS_INTERVAL_SECONDS, PageBuffer, RagIngestClient
+from cracha_crawler.models import Page
 
 
 @pytest.fixture
@@ -386,3 +387,101 @@ async def test_upload_reports_no_listing_when_the_worker_sent_none() -> None:
     result = await ingest.upload("db", "user", pages)  # type: ignore[arg-type]
 
     assert result.known_items is None
+
+
+def _buffered_page(index: int) -> Page:
+    return Page(
+        url=f"https://example.com/{index}",
+        title="Titel",
+        content="Inhalt " * 20,
+        markdown="Inhalt",
+        checksum="abc",
+        crawled_at="2026-08-22T00:00:00+00:00",
+    )
+
+
+def test_a_full_buffer_releases_its_batch() -> None:
+    buffer = PageBuffer(size=3, max_age=5)
+
+    assert buffer.add(_buffered_page(0), now=0) is None
+    assert buffer.add(_buffered_page(1), now=1) is None
+    batch = buffer.add(_buffered_page(2), now=2)
+
+    assert batch is not None
+    assert len(batch) == 3
+    # Drained: the released pages must not travel a second time.
+    assert buffer.drain() == []
+
+
+def test_a_partial_buffer_goes_out_once_its_oldest_page_has_waited() -> None:
+    # The ten-page crawl: the batch never fills, so without the clock the whole
+    # pipeline waits for the crawl to end and does nothing at all.
+    buffer = PageBuffer(size=25, max_age=5)
+    buffer.add(_buffered_page(0), now=100)
+    buffer.add(_buffered_page(1), now=102)
+
+    assert buffer.due(now=104) is False
+    assert buffer.due(now=105) is True
+    assert len(buffer.drain()) == 2
+
+
+def test_the_clock_starts_again_with_the_next_page() -> None:
+    # Age is measured from the oldest page still waiting, not from the crawl.
+    buffer = PageBuffer(size=25, max_age=5)
+    buffer.add(_buffered_page(0), now=0)
+    buffer.drain()
+
+    assert buffer.due(now=100) is False
+    buffer.add(_buffered_page(1), now=100)
+    assert buffer.due(now=104) is False
+    assert buffer.due(now=106) is True
+
+
+def test_an_empty_buffer_is_never_due() -> None:
+    assert PageBuffer(size=25, max_age=5).due(now=10_000) is False
+
+
+@pytest.mark.asyncio
+async def test_the_confirming_poll_does_not_wait_out_the_backoff(monkeypatch) -> None:
+    # By the time every page is searchable the backoff has grown for a job that
+    # is now finished, and one more long sleep is pure waiting. The poll that
+    # confirms it comes at the short interval instead.
+    ingest = object.__new__(RagIngestClient)
+    sleeps: list[float] = []
+    polls = 0
+
+    async def record_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    monkeypatch.setattr(ingest_module.asyncio, "sleep", record_sleep)
+
+    async def post(*_args, **_kwargs):
+        nonlocal polls
+        polls += 1
+        # The item statuses never move -- two stay "running" to the end -- so
+        # the backoff grows exactly as it does for a job that has stalled. What
+        # changes is that the chunks of every page become searchable.
+        searchable = 4 if polls >= 5 else 0
+        return SimpleNamespace(
+            json=lambda: {
+                "ready": False,
+                "pending": 2,
+                "failures": [],
+                "chunks_count": 10,
+                "searchable": searchable,
+            }
+        )
+
+    ingest._post = post
+    result = await ingest._wait_for_index(
+        object(),
+        "database",
+        "user",
+        ["a.md", "b.md", "c.md", "d.md"],
+        attempts=10,
+    )
+
+    assert result.complete is True
+    # The wait before the confirming poll is the short one, not the grown one.
+    assert sleeps[-1] == INDEX_STATUS_INTERVAL_SECONDS
+    assert max(sleeps) > INDEX_STATUS_INTERVAL_SECONDS

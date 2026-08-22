@@ -12,6 +12,12 @@ export function formatDuration(ms: number): string {
  * Model ids arrive as routing paths — `google/gemini-3.5-flash-lite`,
  * `@cf/meta/llama-3.3-70b`. The route is noise the reader cannot act on, so only
  * the model name survives. The raw id stays in the tooltip for debugging.
+ *
+ * The search backend used to be appended here and stripped again by name. It is
+ * not composed into the label any more, because a formatter that has to know a
+ * product name only removes the spellings it was told about — and the one it
+ * was not told about, a standalone label with nothing to strip it from, is what
+ * a reader saw whenever a question found no relevant sources.
  */
 export function formatModel(model: string): string {
   return model.replace(/(^|\s)(@?[\w.-]+\/)+/g, '$1')
@@ -33,10 +39,12 @@ export function answerMetaParts(metadata: Metadata | undefined, sourceCount: num
       ? `${total} (davon ${formatDuration(metadata.retrieval_time)} Suche)`
       : total
   return [
+    // Empty when no model ran, which is the case for a question that found
+    // nothing to answer from. A blank part would render as a stray separator.
     formatModel(metadata.model_used),
     timing,
     sourceCount > 0 ? `${sourceCount} ${sourceCount === 1 ? 'Quelle' : 'Quellen'}` : null,
-  ].filter((part): part is string => part !== null)
+  ].filter((part): part is string => Boolean(part))
 }
 
 /**

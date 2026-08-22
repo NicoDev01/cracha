@@ -1,6 +1,7 @@
 import asyncio
 import hmac
 import os
+import time
 import uuid
 from datetime import UTC, datetime
 from typing import Annotated
@@ -8,7 +9,7 @@ from typing import Annotated
 import modal
 
 from cracha_crawler.crawl import CrawlBlockedError, analyze_site, crawl_pages
-from cracha_crawler.ingest import INDEX_STATUS_ATTEMPTS, RagIngestClient
+from cracha_crawler.ingest import INDEX_STATUS_ATTEMPTS, PageBuffer, RagIngestClient
 from cracha_crawler.models import AnalyzeRequest, CrawlRequest, Page, SiteAnalysis
 from cracha_crawler.status import stale_job_ids
 
@@ -19,6 +20,12 @@ ANALYZE_TIMEOUT_SECONDS = 120
 # crawl is a second the user does not wait through afterwards.
 INGEST_BATCH_SIZE = 25
 MAX_PARALLEL_UPLOADS = 3
+# A batch that only ever leaves when it is full never leaves at all on a small
+# crawl: ten pages sat in the buffer until the crawl ended, which is the whole
+# pipeline doing nothing for the most common job size. A partial batch goes out
+# once its oldest page has waited this long, so a small crawl starts indexing
+# while it is still fetching and a large one still fills its batches first.
+INGEST_MAX_BUFFER_SECONDS = 5.0
 image = (
     modal.Image.debian_slim(python_version="3.12")
     .apt_install("curl")
@@ -152,9 +159,12 @@ async def finalize_index(
                 phase="failed",
                 call_id=None,
                 finalizer_call_id=None,
+                # This sentence is what the reader of the crawl monitor sees.
+                # No service names, no infrastructure: what happened to their
+                # knowledge base, and what to do next.
                 error=(
-                    "Cloudflare konnte die Wissensbasis nicht vollständig indexieren. "
-                    "Details stehen im Modal-Log."
+                    "Deine Wissensbasis konnte nicht fertiggestellt werden. "
+                    "Bitte versuche es erneut."
                 ),
             )
         raise
@@ -202,7 +212,7 @@ async def process_crawl(payload: dict, job_id: str) -> dict:
     # to finish: by the time the last page is fetched, most of them are already
     # inside Cloudflare's indexing pipeline. The listing each batch returns
     # travels to the next one, so the dedupe scan runs once per job.
-    buffer: list[Page] = []
+    buffer = PageBuffer(INGEST_BATCH_SIZE, INGEST_MAX_BUFFER_SECONDS)
     upload_tasks: list[asyncio.Task] = []
     known_items: dict[str, dict] | None = None
     upload_slots = asyncio.Semaphore(MAX_PARALLEL_UPLOADS)
@@ -210,6 +220,7 @@ async def process_crawl(payload: dict, job_id: str) -> dict:
     # it reuses that listing. Letting three start at once would mean three
     # scans, so the rest wait for the first to hand its listing over.
     scanned = asyncio.Event()
+
     async def upload_batch(batch: list[Page], first: bool) -> list[str]:
         nonlocal known_items
         if not first:
@@ -223,16 +234,22 @@ async def process_crawl(payload: dict, job_id: str) -> dict:
         scanned.set()
         return uploaded.active_keys
 
-    def queue(batch: list[Page]) -> None:
+    def send(batch: list[Page]) -> None:
+        if not batch:
+            return
         first = not upload_tasks
         upload_tasks.append(asyncio.create_task(upload_batch(batch, first)))
 
     async def accept_page(page: Page) -> None:
-        buffer.append(page)
-        if len(buffer) >= INGEST_BATCH_SIZE:
-            batch = buffer[:]
-            buffer.clear()
-            queue(batch)
+        send(buffer.add(page, time.monotonic()) or [])
+
+    async def flush_when_stale() -> None:
+        # A crawl that slows down must not leave its last few pages waiting for
+        # a batch that will never fill, so the clock releases them instead.
+        while True:
+            await asyncio.sleep(1)
+            if buffer.due(time.monotonic()):
+                send(buffer.drain())
 
     try:
         await update_status(
@@ -247,14 +264,15 @@ async def process_crawl(payload: dict, job_id: str) -> dict:
                 "percent": 0,
             },
         )
-        pages, skipped = await crawl_pages(request, report_progress, accept_page)
+        stale_flusher = asyncio.create_task(flush_when_stale())
+        try:
+            pages, skipped = await crawl_pages(request, report_progress, accept_page)
+        finally:
+            stale_flusher.cancel()
         if not pages:
             raise RuntimeError("No indexable content was found.")
 
-        if buffer:
-            batch = buffer[:]
-            buffer.clear()
-            queue(batch)
+        send(buffer.drain())
         # Nothing may wait on a scan that will never happen: if the crawl ended
         # before a single batch went out, the gate has to open by itself.
         scanned.set()
@@ -344,12 +362,12 @@ async def process_crawl(payload: dict, job_id: str) -> dict:
         for task in upload_tasks:
             task.cancel()
         # A site that refused us is not a site with nothing to index, and the
-        # reader cannot open the Modal log to tell the two apart. When the
-        # crawler knows which it was, that sentence is the error.
+        # reader cannot open a log to tell the two apart. When the crawler
+        # knows which it was, that sentence is the error.
         message = (
             f"{error} Die Quelle lässt sich nicht automatisiert abrufen."
             if isinstance(error, CrawlBlockedError)
-            else "Crawl oder Indexierung ist fehlgeschlagen. Details stehen im Modal-Log."
+            else "Der Aufbau der Wissensbasis ist fehlgeschlagen. Bitte versuche es erneut."
         )
         try:
             await ingest_client.mark_failed(request.tenant_id, request.user_id, str(error))
@@ -436,8 +454,8 @@ def api():
                         status="failed",
                         phase="failed",
                         error=(
-                            "Crawl oder Indexierung ist fehlgeschlagen. "
-                            "Details stehen im Modal-Log."
+                            "Der Aufbau der Wissensbasis ist fehlgeschlagen. "
+                            "Bitte versuche es erneut."
                         ),
                     )
                 else:

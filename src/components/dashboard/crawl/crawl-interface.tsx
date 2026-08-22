@@ -17,9 +17,16 @@ export function CrawlInterface() {
     resumeCurrentCrawl()
   }, [resumeCurrentCrawl])
 
-  useEffect(() => {
+  // Adjusted while rendering rather than in an effect. A crawl starting is a
+  // change the tab has to follow, and an effect would render the old tab once
+  // and then replace it -- deferring that by a microtask hides the second pass
+  // from the linter without removing it. React re-runs this component before
+  // anything reaches the screen instead.
+  const [wasRunning, setWasRunning] = useState(isRunning)
+  if (isRunning !== wasRunning) {
+    setWasRunning(isRunning)
     if (isRunning) setActiveTab("status")
-  }, [isRunning])
+  }
 
   return (
     <section className="flex h-full min-h-0 flex-col" aria-label="Website-Crawler">

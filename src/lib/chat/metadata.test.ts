@@ -11,8 +11,15 @@ describe('formatModel', () => {
   })
 
   it('drops the vendor prefix but keeps the rest of the line', () => {
-    expect(formatModel('google/gemini-3.5-flash-lite + Cloudflare AI Search'))
-      .toBe('gemini-3.5-flash-lite + Cloudflare AI Search')
+    expect(formatModel('google/gemini-3.5-flash-lite')).toBe('gemini-3.5-flash-lite')
+  })
+
+  it('leaves a name it was never meant to carry alone', () => {
+    // The search service is not composed into the label any more. A formatter
+    // that strips it by name only knows the spellings it was told about, and
+    // the standalone one -- what a question with no relevant sources reported
+    // -- was not among them.
+    expect(formatModel('Cloudflare AI Search')).toBe('Cloudflare AI Search')
   })
 
   it('leaves a plain model name untouched', () => {
@@ -34,12 +41,20 @@ describe('answerMetaParts', () => {
   const metadata = {
     query_time: 18_800,
     retrieval_time: 11_600,
-    model_used: 'google/gemini-3.5-flash-lite + Cloudflare AI Search',
+    model_used: 'google/gemini-3.5-flash-lite',
   }
+
+  it('leaves the model out when none ran', () => {
+    // The no-relevant-sources answer names no model. An empty part would show
+    // up as a stray separator in the line under the answer.
+    expect(answerMetaParts({ ...metadata, model_used: '' }, 0)).toEqual([
+      '18,8 s (davon 11,6 s Suche)',
+    ])
+  })
 
   it('names the model, the split timing and the source count', () => {
     expect(answerMetaParts(metadata, 12)).toEqual([
-      'gemini-3.5-flash-lite + Cloudflare AI Search',
+      'gemini-3.5-flash-lite',
       '18,8 s (davon 11,6 s Suche)',
       '12 Quellen',
     ])

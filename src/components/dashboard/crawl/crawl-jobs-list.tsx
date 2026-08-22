@@ -99,7 +99,7 @@ export function CrawlJobsList() {
                 <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">{hostname(job.url)}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-400">
                   <span>{mode.label}</span>
-                  {job.status === "completed" && <span>{job.pages_crawled} Seiten · {job.chunks_created} Chunks</span>}
+                  {job.status === "completed" && <span>{job.pages_crawled} Seiten · {job.chunks_created} Abschnitte</span>}
                   <span>{formatDuration(job)}</span>
                   <span>{formatDate(job.created_at)}</span>
                 </div>

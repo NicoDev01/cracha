@@ -13,7 +13,7 @@ const phaseOrder: CrawlPhase[] = ["queued", "crawling", "indexing", "completed"]
 const phases = [
   { value: "queued" as const, label: "Vorbereiten" },
   { value: "crawling" as const, label: "Seiten erfassen" },
-  { value: "indexing" as const, label: "Inhalte indexieren" },
+  { value: "indexing" as const, label: "Wissensbasis aufbauen" },
 ]
 
 function formatDuration(seconds: number) {
@@ -74,19 +74,20 @@ export function CrawlMonitor() {
   const currentPhaseIndex = phaseOrder.indexOf(currentJob.phase)
   const progress = currentJob.progress
   const percent = Math.min(100, Math.max(0, progress?.percent ?? 0))
-  const chunks = progress?.chunks_count ?? currentJob.chunks_created ?? 0
   // Only indexing knows its total: it counts against the pages it was handed.
   // A recursive crawl reports progress against the page *limit*, so a site with
   // forty pages and a limit of five hundred would creep to eight percent and
   // then jump to a hundred. A bar that does that is worse than no bar, so the
   // crawl phase keeps the indeterminate pulse it had.
   const determinate = !terminal && currentJob.phase === "indexing" && percent > 0
+  // The reader pays for a product, not for an architecture: no service names,
+  // no pipeline stages, only what their own website is doing in plain words.
   const progressLabel = currentJob.phase === "queued"
-    ? "Crawler wird gestartet"
+    ? "Wird gestartet"
     : currentJob.phase === "indexing"
       ? (progress?.current ?? 0) === 0
-        ? "Inhalte werden an Cloudflare übergeben"
-        : `${progress?.current ?? 0} von ${progress?.total ?? currentJob.pages_crawled} Seiten verfügbar`
+        ? "Seiten werden aufbereitet"
+        : `${progress?.current ?? 0} von ${progress?.total ?? currentJob.pages_crawled} Seiten bereit`
       : (progress?.current ?? 0) === 0
         ? "Seiten werden gesucht"
         : `${progress?.current ?? 0} Seiten erfasst`
@@ -159,9 +160,6 @@ export function CrawlMonitor() {
               {progress?.url && currentJob.phase === "crawling" && (
                 <p className="mt-1 truncate font-mono text-[11px] text-gray-400">{progress.url}</p>
               )}
-              {currentJob.phase === "indexing" && chunks > 0 && (
-                <p className="mt-1 text-[11px] tabular-nums text-gray-400">{chunks} Chunks erstellt</p>
-              )}
             </div>
             {determinate && (
               <span className="shrink-0 font-mono text-xs tabular-nums text-gray-400">{percent}%</span>
@@ -201,7 +199,7 @@ export function CrawlMonitor() {
             </div>
             <div className="rounded-xl bg-gray-50 p-3 dark:bg-gray-800/60">
               <strong className="block text-lg text-gray-900 dark:text-white">{currentJob.chunks_created}</strong>
-              <span className="text-[11px] text-gray-500">Chunks</span>
+              <span className="text-[11px] text-gray-500">Abschnitte</span>
             </div>
           </div>
         )}

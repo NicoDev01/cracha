@@ -77,7 +77,7 @@ class ChatAPIClient {
       const dataBody = (await response.json().catch(() => ({}))) as RAGWorkerResponse
       if (!response.ok) throw new Error(dataBody.error ?? `RAG-Anfrage fehlgeschlagen (${response.status}).`)
 
-      const model = dataBody.model ?? 'Cloudflare AI Search'
+      const model = dataBody.model ?? ''
       handlers.onStart({ sources: mapSources(dataBody.sources), model })
       handlers.onDelta(dataBody.answer ?? 'Keine Antwort erhalten.')
       handlers.onDone({
@@ -96,7 +96,7 @@ class ChatAPIClient {
     const decoder = new TextDecoder()
     let buffer = ''
     let finished = false
-    let currentModel = 'Cloudflare AI Search'
+    let currentModel = ''
     let usedFallback = false
 
     const processFrame = (frame: string) => {
@@ -153,7 +153,7 @@ class ChatAPIClient {
     let sources: Source[] = []
     let metadata: ChatResponse['metadata'] = {
       query_time: 0,
-      model_used: 'Cloudflare AI Search',
+      model_used: '',
     }
     await this.streamChatQuery(request, {
       onStart: (data) => {
