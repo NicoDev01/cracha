@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, ArrowRight, Globe, Loader2, MessageSquare, RefreshCw } from 'lucide-react'
+import { AlertTriangle, ArrowRight, Loader2, MessageSquare, Plus, RefreshCw } from 'lucide-react'
 
 import { StatusBadge } from '@/components/dashboard/common/StatusBadge'
 import { CreditCard } from '@/components/dashboard/overview/credit-card'
@@ -98,18 +98,42 @@ export function DashboardOverview() {
 
   return (
     <div className="space-y-4">
+      {/*
+        The page answers three questions in order: what do I have (the credit
+        hero below), what do I do next (the pill CTA here, always reachable,
+        also inside the empty state), and what needs attention (the notices
+        and the low-balance hint). The greeting replaces the old "Übersicht"
+        label — a returning user and a brand-new account should not read the
+        same headline.
+      */}
       <div className="flex items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold text-gray-800 dark:text-white/90">Übersicht</h1>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void load()}
-          disabled={isLoading}
-          className="h-9 gap-2 rounded-xl"
-        >
-          <RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />
-          Aktualisieren
-        </Button>
+        <h1 className="text-xl font-semibold text-gray-800 dark:text-white/90">
+          {databases.length > 0 ? 'Willkommen zurück' : 'Willkommen zu CraCha'}
+        </h1>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => void load()}
+            disabled={isLoading}
+            aria-label="Aktualisieren"
+            title="Aktualisieren"
+            className="size-9 shrink-0 rounded-full text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+          >
+            <RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />
+          </Button>
+          <Button
+            asChild
+            size="sm"
+            rounded="full"
+            className="h-10 gap-1.5 bg-brand-500 px-5 !text-white shadow-sm hover:bg-brand-600"
+          >
+            <Link href="/dashboard/crawl">
+              <Plus className="size-4" />
+              Neuen Crawl starten
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -120,24 +144,17 @@ export function DashboardOverview() {
       )}
 
       {/*
-        This replaces a row that counted knowledge bases and pages without
-        saying how many were allowed. The same two numbers are here, now next to
-        the ceiling they are approaching — and outside the empty-state branch,
-        because a new account benefits most from seeing what it may use.
+        What do I have? One number, big and first — the balance. Everything
+        else the old card explained (what a credit buys, the ledger) moved out;
+        the two units it is spent on are visible where they are spent.
       */}
       <CreditCard />
 
       {!error && !isLoading && databases.length === 0 ? (
-        <div className="flex flex-col items-center rounded-2xl border border-gray-200 bg-white px-6 py-14 text-center dark:border-gray-800 dark:bg-white/[0.03]">
-          <div className="flex size-12 items-center justify-center rounded-2xl bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-400">
-            <Globe className="size-6" />
-          </div>
-          <h2 className="mt-4 text-base font-semibold text-gray-900 dark:text-white">Noch keine Wissensbasis</h2>
-          <p className="mt-1 max-w-sm text-sm text-gray-500 dark:text-gray-400">
-            Crawle eine Website, um Inhalte zu indexieren. Danach kannst du Fragen dazu stellen.
-          </p>
-          <Button asChild className="mt-5 gap-2 rounded-xl bg-brand-500 !text-white hover:bg-brand-600">
-            <Link href="/dashboard/crawl"><Globe className="size-4" />Website crawlen</Link>
+        <div className="flex flex-col items-center rounded-2xl border border-gray-200 bg-white px-6 py-16 text-center dark:border-gray-800 dark:bg-white/[0.03]">
+          <h2 className="text-base font-semibold text-gray-900 dark:text-white">Noch keine Wissensbasis</h2>
+          <Button asChild className="mt-5 h-10 gap-1.5 rounded-full bg-brand-500 px-5 !text-white shadow-sm hover:bg-brand-600">
+            <Link href="/dashboard/crawl"><Plus className="size-4" />Neuen Crawl starten</Link>
           </Button>
         </div>
       ) : !error && (
@@ -197,7 +214,7 @@ export function DashboardOverview() {
                         size="sm"
                         onClick={() => openInChat(database)}
                         disabled={status !== 'active'}
-                        className="h-9 shrink-0 gap-2 rounded-xl"
+                        className="h-9 shrink-0 gap-2 rounded-full px-4"
                         title={status === 'active' ? undefined : 'Diese Wissensbasis ist noch nicht durchsuchbar.'}
                       >
                         <MessageSquare className="size-4" />
