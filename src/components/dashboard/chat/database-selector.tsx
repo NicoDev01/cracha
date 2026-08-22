@@ -58,10 +58,34 @@ export function DatabaseSelector() {
     }
   }, [user])
 
-  // Load databases only on component mount and when user changes
+  // Load databases only on component mount and when user changes. Inline with
+  // a cancelled flag rather than calling loadDatabases(): that helper flips
+  // loading state synchronously, which inside an effect body is exactly the
+  // cascading-render pattern React warns about.
   useEffect(() => {
-    loadDatabases()
-  }, [loadDatabases])
+    let cancelled = false
+    void (async () => {
+      if (!user) return
+      try {
+        const dbs = await getDatabases()
+        if (!cancelled) {
+          setError(null)
+          setDatabases(dbs)
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          const errorMessage = loadError instanceof Error ? loadError.message : 'Fehler beim Laden der Datenbanken'
+          setError(errorMessage)
+          setDatabases([])
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [user])
 
   // Manual refresh function
   const handleRefresh = () => {
@@ -75,7 +99,7 @@ export function DatabaseSelector() {
       <DropdownMenuTrigger asChild>
         <Button
           variant="outline"
-          className="w-[10.5rem] justify-between border-gray-200 bg-white/80 backdrop-blur-sm transition-all duration-200 hover:border-gray-300 hover:bg-white sm:w-[13rem] dark:border-gray-700 dark:bg-white/[0.03] dark:text-white/90 dark:hover:border-gray-600 dark:hover:bg-white/[0.06]"
+          className="w-[10.5rem] justify-between rounded-full border-gray-200 bg-white/80 px-4 backdrop-blur-sm transition-all duration-200 hover:border-gray-300 hover:bg-white sm:w-[13rem] dark:border-gray-700 dark:bg-white/[0.03] dark:text-white/90 dark:hover:border-gray-600 dark:hover:bg-white/[0.06]"
         >
           <div className="flex items-center gap-2">
             <Database className="w-4 h-4 text-gray-500 dark:text-gray-400" />
@@ -104,7 +128,8 @@ export function DatabaseSelector() {
             size="sm"
             onClick={handleRefresh}
             disabled={isLoading || isRefreshing}
-            className="h-6 w-6 p-0 hover:bg-gray-100 dark:hover:bg-gray-800"
+            aria-label="Datenbanken aktualisieren"
+            className="size-6 rounded-full p-0 hover:bg-gray-100 dark:hover:bg-gray-800"
           >
             <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin' : ''}`} />
           </Button>
@@ -115,15 +140,15 @@ export function DatabaseSelector() {
           <div className="p-4 text-center text-red-500">
             <div className="text-red-400 mb-2">⚠️</div>
             <p className="text-sm">{error}</p>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleRefresh}
-              className="mt-2 text-red-600 hover:text-red-700"
-            >
-              <RefreshCw className="w-3 h-3 mr-1" />
-              Erneut versuchen
-            </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleRefresh}
+            className="mt-2 rounded-full text-red-600 hover:text-red-700"
+          >
+            <RefreshCw className="w-3 h-3 mr-1" />
+            Erneut versuchen
+          </Button>
           </div>
         ) : isLoading ? (
           <div className="p-4 text-center text-gray-500">
@@ -190,7 +215,7 @@ export function DatabaseSelector() {
           <Button
             variant="ghost"
             size="sm"
-            className="w-full justify-start text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+            className="w-full justify-start rounded-full text-blue-600 hover:text-blue-700 hover:bg-blue-50"
             onClick={() => router.push('/dashboard/crawl')}
           >
             <Database className="w-4 h-4 mr-2" />

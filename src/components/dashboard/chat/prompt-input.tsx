@@ -166,7 +166,7 @@ export const PromptInputSubmit = ({
 
   return (
     <Button
-      className={cn('gap-1.5 rounded-xl bg-brand-500 text-white shadow-theme-xs hover:bg-brand-600', className)}
+      className={cn('gap-1.5 rounded-full bg-brand-500 text-white shadow-theme-xs hover:bg-brand-600', className)}
       size={size}
       type="submit"
       variant={variant}

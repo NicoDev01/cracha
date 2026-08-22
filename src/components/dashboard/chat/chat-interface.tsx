@@ -8,7 +8,6 @@ import {
   Copy,
   ExternalLink,
   MessageSquare,
-  Sparkles,
   Trash2,
 } from 'lucide-react';
 import {
@@ -32,11 +31,8 @@ import {
 } from '@/lib/chat/citations';
 import { answerMetaParts, FALLBACK_NOTICE } from '@/lib/chat/metadata';
 import type { Message as ChatMessage } from '@/types/chat';
-import {
-  Conversation,
-  ConversationContent,
-  ConversationScrollButton,
-} from './conversation';
+import { Conversation, ConversationContent, ConversationScrollButton } from './conversation';
+import { DatabasePicker } from './database-picker';
 import { DatabaseSelector } from './database-selector';
 import { Loader } from './loader';
 import { Message, MessageContent } from './message';
@@ -244,10 +240,10 @@ export function ChatInterface() {
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                  <AlertDialogCancel className="rounded-full">Abbrechen</AlertDialogCancel>
                   <AlertDialogAction
                     onClick={clearChat}
-                    className="bg-error-600 text-white hover:bg-error-700"
+                    className="rounded-full bg-error-600 text-white hover:bg-error-700"
                   >
                     Löschen
                   </AlertDialogAction>
@@ -266,36 +262,32 @@ export function ChatInterface() {
         <Conversation className="min-h-0 flex-1 custom-scrollbar">
           <ConversationContent className="mx-auto flex min-h-full w-full max-w-5xl flex-col px-3 py-4 sm:px-6 sm:py-6">
             {messages.length === 0 ? (
-              <div className="m-auto flex w-full max-w-xl flex-col items-center py-8 text-center">
-                <div className="mb-5 flex size-14 items-center justify-center rounded-2xl border border-brand-100 bg-brand-50 text-brand-600 shadow-theme-xs dark:border-brand-800 dark:bg-brand-500/10 dark:text-brand-400">
-                  <Sparkles className="size-6" />
+              selectedDatabase ? (
+                /*
+                 * A base is picked: no icon, no headline, no explanation — the
+                 * starter chips are the message. Tapping one fills the input,
+                 * so the first answer is two taps away.
+                 */
+                <div className="m-auto grid w-full max-w-xl gap-2 py-8 sm:grid-cols-3">
+                  {starters.map((question) => (
+                    <button
+                      key={question}
+                      type="button"
+                      onClick={() => {
+                        setInput(question);
+                        inputRef.current?.focus();
+                      }}
+                      className="rounded-2xl border border-gray-200 bg-white px-4 py-4 text-left text-xs leading-5 text-gray-600 shadow-theme-xs transition-all hover:-translate-y-0.5 hover:border-brand-200 hover:text-brand-600 hover:shadow-theme-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-brand-700 dark:hover:text-brand-400"
+                    >
+                      {question}
+                    </button>
+                  ))}
                 </div>
-                <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-white">
-                  Was möchtest du wissen?
-                </h2>
-                <p className="mt-2 max-w-md text-sm leading-6 text-gray-500 dark:text-gray-400">
-                  {selectedDatabase
-                    ? 'Ich beantworte Fragen ausschließlich anhand der Inhalte deiner ausgewählten Wissensbasis.'
-                    : 'Wähle oben eine Wissensbasis aus, um quellenbasierte Antworten zu erhalten.'}
-                </p>
-                {selectedDatabase && (
-                  <div className="mt-6 grid w-full gap-2 sm:grid-cols-3">
-                    {starters.map((question) => (
-                      <button
-                        key={question}
-                        type="button"
-                        onClick={() => {
-                          setInput(question);
-                          inputRef.current?.focus();
-                        }}
-                        className="rounded-xl border border-gray-200 bg-white px-3 py-3 text-left text-xs leading-5 text-gray-600 shadow-theme-xs transition-all hover:-translate-y-0.5 hover:border-brand-200 hover:text-brand-600 hover:shadow-theme-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-brand-700 dark:hover:text-brand-400"
-                      >
-                        {question}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+              ) : (
+                <div className="m-auto flex w-full max-w-md flex-col px-1 py-8">
+                  <DatabasePicker />
+                </div>
+              )
             ) : (
               <div className="mt-auto">
                 {messages.map((message) => {
@@ -377,7 +369,7 @@ export function ChatInterface() {
                               variant="ghost"
                               size="sm"
                               onClick={() => handleCopy(message)}
-                              className="h-8 rounded-lg px-2 text-xs text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                              className="h-8 rounded-full px-3 text-xs text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
                               aria-label="Antwort kopieren"
                             >
                               {copiedId === message.id ? <Check className="mr-1 size-3.5 text-success-600" /> : <Copy className="mr-1 size-3.5" />}
@@ -431,7 +423,7 @@ export function ChatInterface() {
                 ref={inputRef}
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
-                placeholder={selectedDatabase ? 'Frage etwas zu deiner Wissensbasis …' : 'Wähle zuerst eine Wissensbasis aus'}
+                placeholder={selectedDatabase ? 'Frage etwas zu deiner Wissensbasis …' : 'Erst eine Wissensbasis wählen'}
                 disabled={!selectedDatabase}
                 className="min-h-7 px-0 py-0 pr-2"
                 aria-label="Nachricht"
