@@ -8,14 +8,14 @@ import {
 import { databaseForIngest, databaseForUser, removeOwnership, saveDatabase } from './database'
 import { assertText, HttpError, json, readJson } from './http'
 import { deleteInstanceIfExists, deleteStaleItems, ensureInstance, instanceIdFor, retrieve, uploadPages } from './search'
-import type { ConversationMessage, DatabaseRecord, Env, IngestPage, QueryBody } from './types'
+import type { ConversationMessage, DatabaseRecord, Env, IngestPage, KnownItem, QueryBody } from './types'
 
 interface IngestBody {
   database_id: string
   user_id: string
   pages: IngestPage[]
   /** The previous batch's item listing, so the scan runs once per crawl. */
-  known_items?: Record<string, { checksum: string; title: string; status: string; chunks: number }>
+  known_items?: Record<string, KnownItem>
 }
 
 interface CompleteBody {
