@@ -863,7 +863,11 @@ async def crawl_pages(
     streamed: set[str] = set()
 
     async def stream_once(page: Page) -> None:
-        if on_page is None or page.url in streamed:
+        # Each pass keeps to the limit on its own, but their union need not.
+        # The limit is what the crawl's credits were held against, and the
+        # status endpoint refuses more than five hundred keys, so the ceiling
+        # has to hold across passes rather than within one.
+        if on_page is None or page.url in streamed or len(streamed) >= request.limit:
             return
         streamed.add(page.url)
         await on_page(page)

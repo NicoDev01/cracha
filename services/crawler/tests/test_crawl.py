@@ -391,7 +391,9 @@ async def test_fallback_does_not_stream_a_page_the_browser_pass_already_sent(mon
     async def record(candidate: Page) -> None:
         streamed.append(candidate.url)
 
-    pages, _ = await crawl.crawl_pages(request(), None, record)
+    pages, _ = await crawl.crawl_pages(
+        request().model_copy(update={"limit": 10}), None, record
+    )
 
     assert streamed == [
         "https://example.com/a",
@@ -399,3 +401,47 @@ async def test_fallback_does_not_stream_a_page_the_browser_pass_already_sent(mon
         "https://example.com/c",
     ]
     assert len(streamed) == len(pages)
+
+
+@pytest.mark.asyncio
+async def test_streaming_stops_at_the_page_limit_across_both_passes(monkeypatch) -> None:
+    # Each pass keeps to the limit by itself; the union of a half-finished
+    # browser pass and a full fallback need not. The limit is what the crawl's
+    # credits were held against, so it has to hold across both.
+    streamed: list[str] = []
+
+    async def allow_url(_url: str) -> None:
+        return None
+
+    def page(url: str) -> Page:
+        return Page(
+            url=url,
+            title="Titel",
+            content="Inhalt " * 20,
+            markdown="Inhalt",
+            checksum="abc",
+            crawled_at="2026-08-22T00:00:00+00:00",
+        )
+
+    async def dying_browser(_request, _on_progress=None, on_page=None):
+        for index in range(3):
+            await on_page(page(f"https://example.com/browser-{index}"))
+        raise TimeoutError("browser ran out of time")
+
+    async def fallback(_request, _on_progress=None, on_page=None):
+        pages = [page(f"https://example.com/fallback-{index}") for index in range(3)]
+        for candidate in pages:
+            await on_page(candidate)
+        return pages, 0
+
+    monkeypatch.setattr(crawl, "assert_public_url", allow_url)
+    monkeypatch.setattr(crawl, "_crawl4ai_pages", dying_browser)
+    monkeypatch.setattr(crawl, "_http_fallback_pages", fallback)
+
+    async def record(candidate: Page) -> None:
+        streamed.append(candidate.url)
+
+    wanted = request().model_copy(update={"limit": 4})
+    await crawl.crawl_pages(wanted, None, record)
+
+    assert len(streamed) == 4
