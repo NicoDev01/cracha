@@ -31,7 +31,7 @@
 import MaxWidthWrapper from "@/components/shared/max-width-wrapper";
 import ImaginationCanvas from "@/components/ui/ImaginationCanvas";
 import { RainbowButton } from "@/components/landing/ui/rainbow-button";
-import Link from "next/link";
+import { AppEntryLink } from "@/components/landing/app-entry-link";
 import { Icons } from "@/components/shared/icons";
 
 export default function CanvasSection() {
@@ -48,12 +48,12 @@ export default function CanvasSection() {
               Mach jede Website zu <br /> deinem{" "}
               <span className="text-gradient_indigo-purple">persönlichen Chatbot</span>
             </h2>
-            <Link href="/login" prefetch={true}>
+            <AppEntryLink prefetch={true}>
               <RainbowButton className="gap-2">
                 <span>Jetzt loslegen</span>
                 <Icons.arrowRight className="size-4" />
               </RainbowButton>
-            </Link>
+            </AppEntryLink>
           </div>
         </MaxWidthWrapper>
       </div>
@@ -65,12 +65,12 @@ export default function CanvasSection() {
             Verwandle das Internet in <br /> deinen{" "}
             <span className="text-gradient_indigo-purple">persönlichen Chatbot</span>
           </h2>
-          <Link href="/login" prefetch={true}>
+          <AppEntryLink prefetch={true}>
             <RainbowButton className="gap-2">
               <span>Jetzt loslegen</span>
               <Icons.arrowRight className="size-4" />
             </RainbowButton>
-          </Link>
+          </AppEntryLink>
         </div>
       </div>
     </>

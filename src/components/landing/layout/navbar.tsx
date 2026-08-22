@@ -7,9 +7,9 @@ import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
 // import { useScroll } from "@/hooks/use-scroll";
-import { Icons } from "@/components/shared/icons";
 import MaxWidthWrapper from "@/components/shared/max-width-wrapper";
 import { ThemeToggleButton } from "@/components/dashboard/common/ThemeToggleButton";
+import { AppEntryLink } from "@/components/landing/app-entry-link";
 import { Button } from "@/components/ui/button";
 
 interface NavBarProps {
@@ -135,7 +135,7 @@ export function NavBar({ scroll = false }: NavBarProps) {
             id="gooey-btn"
             className="relative flex items-center group gooey-filter"
           >
-            <Link href="/login" className="hidden md:block">
+            <AppEntryLink className="hidden md:block">
               <Button
                 className="gap-2 px-5 z-20 relative"
                   variant="default"
@@ -143,8 +143,8 @@ export function NavBar({ scroll = false }: NavBarProps) {
                   rounded="full"
                 >
                   <span>Login</span>
-                </Button>
-              </Link>
+              </Button>
+            </AppEntryLink>
               {/* Decorative arrow bubble appears to the RIGHT, behind the Login button */}
               <span
                 aria-hidden="true"

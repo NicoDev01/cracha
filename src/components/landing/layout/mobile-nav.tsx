@@ -17,6 +17,7 @@ import {
     SheetDescription,
 } from "@/components/ui/sheet";
 import { ThemeToggleButton } from "@/components/dashboard/common/ThemeToggleButton";
+import { AppEntryLink } from "@/components/landing/app-entry-link";
 
 export function NavMobile() {
     const pathname = usePathname();
@@ -90,7 +91,7 @@ export function NavMobile() {
                     {/* Right side: Theme toggle + Login */}
                     <div className="flex items-center gap-2">
                         <ThemeToggleButton className="h-10 w-10" />
-                        <Link href="/login">
+                        <AppEntryLink>
                             <Button
                                 className="h-10 gap-2 px-4"
                                 variant="default"
@@ -99,7 +100,7 @@ export function NavMobile() {
                             >
                                 <span>Login</span>
                             </Button>
-                        </Link>
+                        </AppEntryLink>
                     </div>
                 </div>
             </div>

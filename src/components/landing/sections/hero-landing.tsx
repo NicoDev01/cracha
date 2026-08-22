@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { Icons } from "@/components/shared/icons";
 import { RainbowButton } from "@/components/landing/ui/rainbow-button";
+import { AppEntryLink } from "@/components/landing/app-entry-link";
 
 /**
  * The first screen.
@@ -41,12 +41,12 @@ export default function HeroLanding() {
          </p>
 
         <div className="flex justify-center">
-          <Link href="/login" prefetch={true}>
+          <AppEntryLink prefetch={true}>
             <RainbowButton className="reveal gap-2 [animation-delay:240ms]">
               <span>Jetzt ausprobieren</span>
               <Icons.arrowRight className="size-4" />
             </RainbowButton>
-          </Link>
+          </AppEntryLink>
         </div>
       </div>
     </section>
