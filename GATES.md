@@ -3,7 +3,7 @@
 Stand: 2026-09-19. Bestehende 100 Start-Credits bleiben gemäß aktuellem Fahrplan unverändert.
 
 - [ ] G1: Registrierungseinstieg, Rechtstexte und dauerhafte Bestätigungsanweisung funktionieren.
-  EVIDENCE: pending
+  EVIDENCE: Live-Links und Bundle bestätigt; vollständiger interaktiver Registrierungs- und Bestätigungsablauf nicht durchgeführt.
 - [x] G2: Frontend und RAG bestehen Typprüfung und Tests.
   CHECK: npm run check
   EXPECT: passed
@@ -12,11 +12,13 @@ Stand: 2026-09-19. Bestehende 100 Start-Credits bleiben gemäß aktuellem Fahrpl
   CHECK: venv\Scripts\python.exe -m pytest services/crawler/tests evals/test_evaluate.py -q
   EXPECT: passed
   EVIDENCE: exit=0; shell=C:\windows\system32\cmd.exe; cwd=C:\Users\nico_\Desktop\Projekte\cracha; path=3e8a513af202/39 entries; EXPECT=matched; output-sha256=a9b8db4200209af456218105e6e47e9a99c751bc299761d155872bd5a9243f0c; output-bytes=1027
-- [ ] G4: Cloudflare-Produktionsbuild ist erfolgreich und veröffentlichtes Verhalten ist geprüft.
-  EVIDENCE: pending
+- [x] G4: Cloudflare-Produktionsbuild ist erfolgreich und veröffentlichtes Verhalten ist geprüft.
+  EVIDENCE: Commit 04b0fc8; npm run build:cf exit=0; GitHub Deploy 35454540547 success; HTTP 200 auf /, /register und beiden Rechtstextseiten, drei Register-Links, neuer CTA und Registrierungsbundle 3vesijrfrdhog.js nachgewiesen.
 - [x] G5: DNS-Befund und Grenzen der Spam-Diagnose sind anhand öffentlicher Antworten dokumentiert.
   EVIDENCE: 2026-09-19; Resolve-DnsName gegen 1.1.1.1, 8.8.8.8 und arvind.ns.cloudflare.com; send/rsend CNAME sichtbar, DKIM TXT vorhanden; DMARC zunächst NXDOMAIN, bei Nachprüfung auch autoritativ TXT mit p=none vorhanden. Dokumentiert in docs/saas-startplan-und-analyse.md.
 - [ ] G6: Fehlgeschlagene und unbeantwortbare Chats erstatten Credits idempotent; Crawl-Abbruch bereinigt den Hold.
   EVIDENCE: Anwendungstests für Refund und Cancel bestanden; reale SQL-Nebenläufigkeit und Prozessabbrüche sind nicht abgenommen.
 - [ ] G7: Übrige Freigabepunkte des SaaS-Plans sind implementiert und praktisch abgenommen.
   EVIDENCE: pending; Kontolöschung, verifizierte Bonusvergabe, serverseitiger Crawl-Abschluss, Netzwerkschutz, Zahlungsabgleich, RAG-Evaluation und echte Pilotnutzer bleiben eigenständige offene Ergebnisse. Eine Dokumentation dieser Punkte bedeutet keine Implementierung.
+
+Aktualisierte CI-Evidenz für G2/G3: Commit 04b0fc8, Lauf https://github.com/NicoDev01/cracha/actions/runs/35454540394 erfolgreich; 122 Frontend-, 70 RAG- und 91 Python-Tests. Die oben gespeicherten lokalen Fingerprints stammen vom vorhergehenden Testlauf; die zusätzliche CI bezieht sich auf den veröffentlichten Code.

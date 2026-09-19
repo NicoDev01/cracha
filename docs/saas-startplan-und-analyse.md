@@ -81,7 +81,7 @@ Quellen: [Google-Absenderrichtlinien](https://support.google.com/mail/answer/811
 ### Phase 1: Spam-Check & Deploy (Sofort)
 1. DMARC ist inzwischen vorhanden. Vorhandene Resend-Einträge nicht blind ersetzen. Die öffentliche DNS-Prüfung zeigt keinen Proxy-Fehler.
 2. Gmail-Originalheader prüfen; DNS-Auflösbarkeit allein beweist keine bestandene Mail-Authentifizierung.
-3. Lokale Frontend-Änderungen (`RegisterForm.tsx`, `hero-landing.tsx`, `app-entry-link.tsx`) commiten und auf Cloudflare deployen.
+3. Erledigt: Frontend, RAG-Worker und Crawler mit Commit `04b0fc8` veröffentlicht; Live-Auslieferung der neuen Registrierungslinks und des Formularbundles geprüft.
 
 ### Phase 2: Fairness-Fixes im Code
 1. **Implementiert, Veröffentlichung separat nachweisen:** Chat-Eingaben und Eigentum werden vor Abbuchung geprüft. Fehler bei Retrieval/Generation, leere Generierung und fehlende Quellen erstatten die Originalabbuchung über einen stabilen Refund-Schlüssel. Fehlgeschlagene Erstattungen werden mit Referenz protokolliert und nicht als erfolgreich ausgegeben.
@@ -110,3 +110,9 @@ Quellen: [Google-Absenderrichtlinien](https://support.google.com/mail/answer/811
 - **Korrektur:** Das Deployment-Gate heißt `verify`, nicht `check`. `needs: verify` erfüllt die beschriebene Reihenfolge. Die 106 API-/Frontend-Tests verwendeten für Geldflüsse Mocks, keine echte SQL-Integration.
 - **Weitere Codebefunde:** Passwort-Reset verwies auf die fehlende Route `/auth/confirm`; OAuth-Callback übernahm `next` ungeprüft in `router.push`. Korrektur auf `/confirm`, lokale normalisierte Weiterleitungen, Entfernung von Token-Präfixen aus Logs und Regressionstests wurden ergänzt.
 - **Offen:** Das SMTP-Setup allein belegt weder Zustellung im Posteingang noch einen funktionierenden vollständigen SaaS-Ablauf. Die verbleibenden Freigabepunkte oben gelten weiter.
+
+### Nachprüfung nach Korrektur
+
+Commit `04b0fc8`: [CI erfolgreich](https://github.com/NicoDev01/cracha/actions/runs/35454540394), [vollständiger Deploy erfolgreich](https://github.com/NicoDev01/cracha/actions/runs/35454540547). Lokal bestanden 122 Frontend-/Server-, 70 RAG-, 80 Crawler- und 11 Eval-Tests (283 insgesamt); Typprüfung, gezieltes ESLint, Wrangler-Dry-Run und Cloudflare-Build erfolgreich.
+
+HTTP-Prüfung nach Veröffentlichung: `/` liefert drei `/register`-Links und „Kostenlos starten“; `/register` liefert das neue Bundle mit dauerhaftem Bestätigungshinweis und deutschen Rechtstextlinks. `/datenschutz` und `/nutzungsbedingungen` liefern HTTP 200. Das bestätigt die ausgelieferten Änderungen, aber keinen durchgespielten Registrierungs-/Mail-/RAG-Ablauf. SMTP-Dashboard-Konfiguration und empfangene Mailheader bleiben ungeprüft.
