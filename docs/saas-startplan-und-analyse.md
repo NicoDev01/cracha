@@ -6,10 +6,10 @@ Stand: 19. September 2026
 
 ## 1. Aktueller Projektstatus
 
-* **Codebase & Tests:** Prüfung nach den Fairness-Korrekturen: 106 Frontend-/Server-Tests, 70 RAG-Tests, 80 Crawler-Tests und 11 Eval-Tests bestanden (267 gesamt), beide TypeScript-Prüfungen erfolgreich. Das ist kein Nachweis vollständiger Produktionsreife: reale Registrierung, SQL-Nebenläufigkeit, Zahlungen und Zustellbarkeit sind dadurch nicht abgedeckt.
+* **Codebase & Tests:** Prüfung nach den Fairness-Korrekturen: 122 Frontend-/Server-Tests, 70 RAG-Tests, 80 Crawler-Tests und 11 Eval-Tests bestanden (283 gesamt), beide TypeScript-Prüfungen erfolgreich. Das ist kein Nachweis vollständiger Produktionsreife: reale Registrierung, SQL-Nebenläufigkeit, Zahlungen und Zustellbarkeit sind dadurch nicht abgedeckt.
 * **E-Mail-Infrastruktur:**
   * Eigener Resend-Account eingerichtet (`smtp.resend.com`).
-  * Öffentlicher DNS-Check am 19.09.2026: DKIM und SPF auffindbar; `_dmarc.cracha-app.com` liefert NXDOMAIN bei 1.1.1.1, 8.8.8.8 und dem autoritativen Nameserver `arvind.ns.cloudflare.com`.
+  * Öffentlicher DNS-Check am 19.09.2026: DKIM und SPF auffindbar. DMARC lieferte zunächst NXDOMAIN; bei der späteren Nachprüfung nach der Gemini-Übergabe ist `v=DMARC1; p=none` mit Cloudflare-Reportingadresse veröffentlicht (Google-Resolver und autoritativer Nameserver bestätigen dies).
   * Laut Nutzerübergabe ist Custom SMTP im Supabase-Dashboard aktiv und versendet als `auth@cracha-app.com`. In dieser Prüfung nicht erneut im Dashboard verifiziert.
   * *Aktuelle Hürde:* Erste Testmails landen im Spam-Ordner (Ursachen & Lösung in Abschnitt 4).
 * **Lokaler Frontend-Stand:**
@@ -62,11 +62,11 @@ Astra hat eine tiefgehende Bestandsaufnahme geliefert, verfällt jedoch in **kla
 | `send.cracha-app.com` | CNAME `send.forge.rmta.net`; Ziel liefert SPF-TXT und MX |
 | `rsend.cracha-app.com` | CNAME `rsend.forge.rmta.net` |
 | `resend._domainkey.cracha-app.com` | Öffentlicher DKIM-Schlüssel als TXT vorhanden |
-| `_dmarc.cracha-app.com` | NXDOMAIN, auch am autoritativen Cloudflare-Nameserver |
+| `_dmarc.cracha-app.com` | Zunächst NXDOMAIN; bei Nachprüfung TXT mit `v=DMARC1; p=none` und Cloudflare-Reportingadresse vorhanden |
 
 Die sichtbaren CNAME-Ziele sprechen gegen den behaupteten Proxy-Fehler. TXT- und MX-Einträge besitzen ohnehin keinen HTTP-Proxy-Schalter. DNS-Werte immer mit den tatsächlich von Resend angezeigten Vorgaben vergleichen, nicht durch pauschale Beispielwerte ersetzen.
 
-Als vorsichtiger Einstieg ist ein TXT-Eintrag `_dmarc` mit `v=DMARC1; p=none` vorgesehen. Er veröffentlicht eine DMARC-Policy ohne Zurückweisung von Nachrichten. Er garantiert weder DMARC-PASS noch Posteingangszustellung. Keine nicht existierende Reporting-Mailbox eintragen.
+Der inzwischen veröffentlichte DMARC-Eintrag verwendet `p=none`. Er veröffentlicht eine DMARC-Policy ohne Zurückweisung von Nachrichten. Er garantiert weder DMARC-PASS noch Posteingangszustellung. Die Aussage, damit sei der Hauptgrund für Spam beseitigt, ist ohne Originalheader und weitere Zustellbelege nicht nachgewiesen.
 
 Die konkrete Mail muss separat untersucht werden: Gmail → „Original anzeigen“ → `Authentication-Results`, `From`, `Return-Path` und DKIM-Signatur. SPF prüft den Envelope-Absender, der eine Subdomain sein kann. DMARC benötigt einen bestandenen, zur sichtbaren From-Domain ausgerichteten SPF- oder DKIM-Nachweis. Weiterleitungen können die Auswertung beeinflussen.
 
@@ -79,7 +79,7 @@ Quellen: [Google-Absenderrichtlinien](https://support.google.com/mail/answer/811
 ## 5. Nächste Schritte
 
 ### Phase 1: Spam-Check & Deploy (Sofort)
-1. Fehlenden DMARC-Eintrag ergänzen; vorhandene Resend-Einträge nicht blind ersetzen. Die öffentliche DNS-Prüfung zeigt keinen Proxy-Fehler.
+1. DMARC ist inzwischen vorhanden. Vorhandene Resend-Einträge nicht blind ersetzen. Die öffentliche DNS-Prüfung zeigt keinen Proxy-Fehler.
 2. Gmail-Originalheader prüfen; DNS-Auflösbarkeit allein beweist keine bestandene Mail-Authentifizierung.
 3. Lokale Frontend-Änderungen (`RegisterForm.tsx`, `hero-landing.tsx`, `app-entry-link.tsx`) commiten und auf Cloudflare deployen.
 
@@ -92,7 +92,7 @@ Quellen: [Google-Absenderrichtlinien](https://support.google.com/mail/answer/811
 
 ### Weiterhin offene Freigabepunkte
 - Vollständige externe Registrierung einschließlich Bestätigung und erster Quellenantwort praktisch nachweisen.
-- DMARC ergänzen und tatsächliche Mailheader prüfen; keine Garantie für Posteingangszustellung.
+- Tatsächliche Mailheader prüfen; der vorhandene DMARC-Eintrag garantiert keine Posteingangszustellung.
 - Crawl-Abrechnung unabhängig vom Browser, Reservierungsabgleich und konkurrierende Vorgänge testen.
 - SQL-Buchungsinvarianten an echter Datenbank prüfen; die neuen Refund-Tests prüfen Anwendungscode und RPC-Aufrufe, nicht PostgreSQL-Nebenläufigkeit.
 - Kontolöschung, verifizierte Bonusvergabe, SSRF-/DNS-Rebinding-Schutz, Zahlungen und Rückerstattungen sowie RAG-Qualitätskriterien vollständig abnehmen.
@@ -101,3 +101,12 @@ Quellen: [Google-Absenderrichtlinien](https://support.google.com/mail/answer/811
 ### Phase 3: Echte Nutzergewinnung (Validierung)
 1. 5 Personen aus dem eigenen Netzwerk einladen, eine eigene Website zu crawlen und Fragen zu stellen.
 2. Beobachten, an welcher Stelle Nutzer hängenbleiben (Verständlichkeit, Crawl-Dauer, Antwortqualität).
+
+## 6. Kritische Nachprüfung der Gemini-Übergabe
+
+- **Bestätigt:** DMARC ist nun öffentlich vorhanden, Resend-CNAME und DKIM-TXT sind auflösbar. Die Codeänderungen für Einstieg, Refunds und Cancel-Freigabe stehen in `origin/main`. Die CI von `6091b41` ist erfolgreich.
+- **Zum Zeitpunkt der Übergabe falsch:** „Alles live“. Deploy `35409664955` scheiterte beim RAG-Worker mit `Cannot apply deleted_classes migration to non-existent class TenantManager`; Frontend und Crawler wurden übersprungen. Die öffentliche Seite zeigte den alten CTA und das alte Registrierungsbundle. Die nicht mehr benötigte Löschmigration wird entfernt; Erfolg erst nach neuem Deploy und HTTP-Prüfung behaupten.
+- **Nicht unabhängig verifiziert:** Aktuelle Supabase-SMTP-Einstellungen, aktiv gespeichertes E-Mail-Template und Redirect-Allowlist. Das Template im Repository ist vorhanden; das beweist nicht seinen Dashboard-Stand. Ein vollständiger externer Registrierungs-/Bestätigungstest fehlt.
+- **Korrektur:** Das Deployment-Gate heißt `verify`, nicht `check`. `needs: verify` erfüllt die beschriebene Reihenfolge. Die 106 API-/Frontend-Tests verwendeten für Geldflüsse Mocks, keine echte SQL-Integration.
+- **Weitere Codebefunde:** Passwort-Reset verwies auf die fehlende Route `/auth/confirm`; OAuth-Callback übernahm `next` ungeprüft in `router.push`. Korrektur auf `/confirm`, lokale normalisierte Weiterleitungen, Entfernung von Token-Präfixen aus Logs und Regressionstests wurden ergänzt.
+- **Offen:** Das SMTP-Setup allein belegt weder Zustellung im Posteingang noch einen funktionierenden vollständigen SaaS-Ablauf. Die verbleibenden Freigabepunkte oben gelten weiter.

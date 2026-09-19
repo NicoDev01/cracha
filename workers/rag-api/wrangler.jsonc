@@ -16,12 +16,8 @@
       "id": "417ae907fb8547758b969c5eeaa635dd"
     }
   ],
-  "migrations": [
-    {
-      "tag": "remove-legacy-tenant-manager-2026-08-04",
-      "deleted_classes": ["TenantManager"]
-    }
-  ],
+  // The legacy TenantManager has already been removed. This Worker exports no
+  // Durable Object classes; replaying its old deletion blocks current Wrangler.
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1

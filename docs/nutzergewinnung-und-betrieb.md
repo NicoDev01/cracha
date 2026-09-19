@@ -13,7 +13,8 @@ für eine Conversion-Rate. Die 70.780 Requests stammen aus der kontoweiten
 Bei der Prüfung am 18.09. verwendete Supabase trotz E-Mail-Bestätigung den
 eingebauten Maildienst, der nur an Team-Adressen liefert. Laut Übergabe vom
 19.09. ist inzwischen Resend SMTP aktiv; erste Bestätigungsmails landen im Spam.
-Die öffentliche DNS-Prüfung findet SPF und DKIM, aber noch keinen DMARC-Eintrag.
+Die öffentliche DNS-Prüfung findet SPF und DKIM; DMARC war zunächst nicht vorhanden
+und ist bei der späteren Nachprüfung am 19.09. mit `p=none` öffentlich auflösbar.
 Der Google-Einstieg wurde bis zur Google-Anmeldeseite geprüft; ein vollständiger
 neuer Account wurde in dieser Prüfung nicht angelegt.
 

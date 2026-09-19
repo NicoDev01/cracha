@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { safeAuthNext } from '@/lib/supabase/redirect'
 import { Card, CardContent } from '@/components/ui/card'
 import { Loader2, AlertCircle } from 'lucide-react'
 import { useLightOnly } from '@/lib/theme/use-light-only'
@@ -46,7 +47,7 @@ function CallbackPageContent() {
       }
 
       const code = searchParams.get('code')
-      const next = searchParams.get('next') || '/dashboard'
+      const next = safeAuthNext(searchParams.get('next'))
 
       try {
         const supabase = createClient()
