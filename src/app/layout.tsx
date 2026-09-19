@@ -16,7 +16,7 @@ import { siteConfig } from "@/config/site";
 export const metadata: Metadata = {
   metadataBase: new URL(siteConfig.url),
   title: {
-    default: "CraCha – verwandle Websites in Chatbots",
+    default: "CraCha – Websites mit KI durchsuchen",
     template: "%s | CraCha",
   },
   description: siteConfig.description,

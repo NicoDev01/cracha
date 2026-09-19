@@ -72,7 +72,8 @@ export function CrawlConfigForm({ onStarted }: { onStarted?: () => void }) {
       name: "",
       type: "recursive",
       max_depth: 2,
-      limit: 100,
+      // Leave the 100-credit trial enough room for questions after indexing.
+      limit: 20,
       include_patterns: "",
       exclude_domains: "",
       respect_robots_txt: true,
@@ -336,6 +337,7 @@ export function CrawlConfigForm({ onStarted }: { onStarted?: () => void }) {
                       className="py-2"
                     />
                   </FormControl>
+                  <FormDescription>Für den ersten Test empfehlen wir 20 Seiten. So bleibt von 100 Start-Credits Guthaben für bis zu 16 Fragen übrig (1 Credit pro Seite, 5 pro Frage).</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

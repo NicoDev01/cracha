@@ -33,24 +33,11 @@ export function NavMobile() {
         return () => window.removeEventListener("scroll", handleScroll);
     }, []);
 
-    const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
-        e.preventDefault();
-        setOpen(false);
-        
-        if (href.startsWith("#")) {
-            const element = document.getElementById(href.substring(1));
-            if (element) {
-                element.scrollIntoView({ behavior: "smooth" });
-            }
-        } else {
-            window.location.href = href;
-        }
-    };
 
     return (
         <Sheet open={open} onOpenChange={setOpen}>
             {/* Mobile Top Bar */}
-            <div className={`sticky top-0 z-50 md:hidden px-4 pt-8 backdrop-blur-xl transition-all ${
+            <div className={`sticky top-0 z-50 lg:hidden px-4 pt-8 backdrop-blur-xl transition-all ${
                 scrolled ? "bg-background/60" : "bg-transparent"
             }`}>
                 {/* Logo above */}
@@ -84,7 +71,7 @@ export function NavMobile() {
                             className="h-10 w-10 p-0 text-base hover:bg-transparent focus-visible:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
                         >
                             <Icons.menu className="h-6 w-6" />
-                            <span className="sr-only">Toggle Menu</span>
+                            <span className="sr-only">Menü öffnen</span>
                         </Button>
                     </SheetTrigger>
 
@@ -110,7 +97,7 @@ export function NavMobile() {
                     <SheetTitle>Mobile Navigation</SheetTitle>
                 </SheetHeader>
                 <SheetDescription className="sr-only">
-                    Mobile Navigation Drawer
+                    Navigation für Mobilgeräte
                 </SheetDescription>
                 <Link
                     href="/"
@@ -137,44 +124,44 @@ export function NavMobile() {
                 <div className="my-4 h-[calc(100vh-8rem)] pb-10 pl-6">
                     <div className="flex flex-col space-y-4">
                         <Link
-                            href="#how-to-use"
+                            href="/#how-to-use"
                             className={cn(
                                 "py-2 font-semibold transition-colors hover:text-foreground/80",
                                 pathname === "/#how-to-use" ? "text-foreground" : "text-foreground/60"
                             )}
-                            onClick={(e) => handleNavClick(e, "#how-to-use")}
+                            onClick={() => setOpen(false)}
                         >
                             Nutzung
                         </Link>
                         <Link
-                            href="#why-cracha"
+                            href="/#why-cracha"
                             className={cn(
                                 "py-2 font-semibold transition-colors hover:text-foreground/80",
                                 pathname === "/#why-cracha" ? "text-foreground" : "text-foreground/60"
                             )}
-                            onClick={(e) => handleNavClick(e, "#why-cracha")}
+                            onClick={() => setOpen(false)}
                         >
                             Warum CraCha?
                         </Link>
                         <Link
-                            href="#features"
+                            href="/#kosten"
                             className={cn(
                                 "py-2 font-semibold transition-colors hover:text-foreground/80",
-                                pathname === "/#features" ? "text-foreground" : "text-foreground/60"
+                                pathname === "/#kosten" ? "text-foreground" : "text-foreground/60"
                             )}
-                            onClick={(e) => handleNavClick(e, "#features")}
+                            onClick={() => setOpen(false)}
                         >
-                            Features
+                            Kosten & Fragen
                         </Link>
                         <Link
-                            href="#canvas-section"
+                            href="/website-mit-ki-durchsuchen"
                             className={cn(
                                 "py-2 font-semibold transition-colors hover:text-foreground/80",
-                                pathname === "/#canvas-section" ? "text-foreground" : "text-foreground/60"
+                                pathname === "/website-mit-ki-durchsuchen" ? "text-foreground" : "text-foreground/60"
                             )}
-                            onClick={(e) => handleNavClick(e, "#canvas-section")}
+                            onClick={() => setOpen(false)}
                         >
-                            Jetzt loslegen
+                            Anleitung
                         </Link>
                     </div>
                 </div>

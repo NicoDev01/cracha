@@ -30,18 +30,18 @@ export function BentoGrid() {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-8">
           <GridItem
             icon={<Search className="h-4 w-4" />}
-            title="1. Website Crawlen"
-            description="Gib CraCha ein Website link, bestimme die Tiefe und die maximale Seitenanzahl. CraCha crawlt sich durch jede Unterseite und legt alle Texte in einer eigenen Datenbank ab."
+            title="1. Website auswählen"
+            description="Konto erstellen, E-Mail bestätigen und eine öffentliche Website auswählen. Beginne mit einem passenden Bereich und höchstens 20 Seiten."
           />
           <GridItem
             icon={<Settings className="h-4 w-4" />}
-            title="2. Chatte mit der Website"
-            description="CraCha baut dir einen Chatbot, der die Inhalte der Website kennt. Quellenangaben und Links zu den Unterseiten sind inklusive, damit du die Antwort überprüfen kannst."
+            title="2. Inhalte einlesen"
+            description="CraCha liest erreichbare Seiten ein und bereitet sie für Fragen auf. Warte, bis deine Wissensbasis bereit ist; gesperrte Inhalte werden nicht automatisch zugänglich."
           />
           <GridItem
             icon={<MessageSquare className="h-4 w-4" />}
-            title="3. Datenbanken verwalten"
-            description="CraCha speichert jede Website in einer eigenen Datenbank. Du kannst beliebig viele Datenbanken anlegen und zwischen ihnen wechseln."
+            title="3. Fragen und Quellen prüfen"
+            description="Öffne die Wissensbasis im Chat, stelle eine konkrete Frage und prüfe die Antwort an den verlinkten Originalseiten. Deine Wissensbasen bleiben in deinem Konto erreichbar."
           />
         </div>
       </MaxWidthWrapper>

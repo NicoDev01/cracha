@@ -22,3 +22,16 @@ Stand: 2026-09-19. Bestehende 100 Start-Credits bleiben gemäß aktuellem Fahrpl
   EVIDENCE: pending; Kontolöschung, verifizierte Bonusvergabe, serverseitiger Crawl-Abschluss, Netzwerkschutz, Zahlungsabgleich, RAG-Evaluation und echte Pilotnutzer bleiben eigenständige offene Ergebnisse. Eine Dokumentation dieser Punkte bedeutet keine Implementierung.
 
 Aktualisierte CI-Evidenz für G2/G3: Commit 04b0fc8, Lauf https://github.com/NicoDev01/cracha/actions/runs/35454540394 erfolgreich; 122 Frontend-, 70 RAG- und 91 Python-Tests. Die oben gespeicherten lokalen Fingerprints stammen vom vorhergehenden Testlauf; die zusätzliche CI bezieht sich auf den veröffentlichten Code.
+
+## DACH-Einstieg und Auffindbarkeit (19.09.2026)
+
+- [ ] D1: Nutzen, Grenzen, Kosten und erster Ablauf sind vor der Anmeldung verständlich sichtbar.
+  EVIDENCE: pending
+- [ ] D2: Ein verlinkter deutscher Leitfaden besitzt eigene Metadaten und ist in der Sitemap enthalten.
+  EVIDENCE: pending
+- [ ] D3: Der Crawl-Standard lässt vom Startguthaben Raum für erste Fragen; das leere Dashboard erklärt den Einstieg.
+  EVIDENCE: pending
+- [ ] D4: Typprüfung, relevante Tests und Build bestehen; Veröffentlichung und öffentliches HTML sind geprüft.
+  EVIDENCE: pending
+- [ ] D5: Priorisierter DACH-Gewinnungsplan und Messlücken sind dokumentiert, ohne Traffic oder Nachfrage zu erfinden.
+  EVIDENCE: pending

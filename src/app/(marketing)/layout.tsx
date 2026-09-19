@@ -17,11 +17,11 @@ export const metadata: Metadata = {
   // Absolute, because the root layout carries a "%s | CraCha" template and the
   // brand is already the first word here — otherwise the tab reads
   // "CraCha – … | CraCha".
-  title: { absolute: "CraCha – verwandle Websites in Chatbots" },
+  title: { absolute: "CraCha – Websites mit KI durchsuchen" },
   description: siteConfig.description,
   keywords: [
-    "Website in Chatbot verwandeln",
-    "Chatbot für eigene Website",
+    "Website mit KI durchsuchen",
+    "Fragen an eine Website stellen",
     "KI Wissensdatenbank",
     "Website crawlen KI",
     "RAG Chatbot deutsch",
@@ -32,12 +32,12 @@ export const metadata: Metadata = {
     locale: "de_DE",
     url: "/",
     siteName: siteConfig.name,
-    title: "CraCha – verwandle Websites in Chatbots",
+    title: "CraCha – Websites mit KI durchsuchen",
     description: siteConfig.description,
   },
   twitter: {
     card: "summary_large_image",
-    title: "CraCha – verwandle Websites in Chatbots",
+    title: "CraCha – Websites mit KI durchsuchen",
     description: siteConfig.description,
   },
 };

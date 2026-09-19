@@ -39,26 +39,26 @@ export function NavBar({ scroll = false }: NavBarProps) {
   const mainNavLinks = [
     {
       title: "Nutzung",
-      href: "#how-to-use",
+      href: "/#how-to-use",
     },
     {
       title: "Warum CraCha?",
-      href: "#why-cracha",
+      href: "/#why-cracha",
     },
     {
-      title: "Features",
-      href: "#features",
+      title: "Kosten & Fragen",
+      href: "/#kosten",
     },
     {
-      title: "Jetzt loslegen",
-      href: "#canvas-section",
+      title: "Anleitung",
+      href: "/website-mit-ki-durchsuchen",
     },
   ];
 
   return (
     <>
       {/* SVG Filters */}
-      <svg className="absolute w-0 h-0 pointer-events-none hidden md:block">
+      <svg className="absolute w-0 h-0 pointer-events-none hidden lg:block">
         <defs>
           <filter id="gooey-filter" x="-50%" y="-50%" width="200%" height="200%">
             <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur" />
@@ -75,7 +75,7 @@ export function NavBar({ scroll = false }: NavBarProps) {
 
       <header
         className={cn(
-          "sticky top-0 z-50 w-full hidden md:flex justify-center backdrop-blur-xl transition-all duration-300",
+          "sticky top-0 z-50 w-full hidden lg:flex justify-center backdrop-blur-xl transition-all duration-300",
           scrolled ? "bg-background/80 border-b border-border/40" : "bg-transparent"
         )}
       >
@@ -107,14 +107,14 @@ export function NavBar({ scroll = false }: NavBarProps) {
               />
             </Link>
 
-            <nav className="hidden md:flex items-center gap-3">
+            <nav className="hidden lg:flex items-center gap-3">
               {mainNavLinks.map((item, index) => (
                 <Link
                   key={index}
                   href={item.href}
                   prefetch={true}
                   className={cn(
-                    "inline-flex items-center h-9 px-5 rounded-full text-sm leading-none font-medium transition-colors duration-200 hover:text-foreground/80 hover:bg-foreground/10 whitespace-nowrap",
+                    "inline-flex items-center h-9 px-3 rounded-full text-sm leading-none font-medium transition-colors duration-200 hover:text-foreground/80 hover:bg-foreground/10 whitespace-nowrap",
                     pathname === item.href
                       ? "text-foreground"
                       : "text-foreground/60"
@@ -127,7 +127,7 @@ export function NavBar({ scroll = false }: NavBarProps) {
           </div>
 
           {/* Hide right controls on mobile; they are provided by NavMobile */}
-          <div className="hidden items-center gap-2 md:flex">
+          <div className="hidden items-center gap-2 lg:flex">
             {/* Dark/Light Toggle */}
             <ThemeToggleButton />
             {/* Login CTA */}
@@ -135,7 +135,7 @@ export function NavBar({ scroll = false }: NavBarProps) {
             id="gooey-btn"
             className="relative flex items-center group gooey-filter"
           >
-            <AppEntryLink className="hidden md:block">
+            <AppEntryLink className="hidden lg:block">
               <Button
                 className="gap-2 px-5 z-20 relative"
                   variant="default"

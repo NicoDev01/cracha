@@ -28,13 +28,13 @@ const features: Feature[] = [
   {
     title: "Aus hunderten Seiten wird Wissen",
     description:
-      "CraCha crawlt deine Website — Seite für Seite, bis zu hunderte. Menüs, Cookie-Banner und Werbung fallen weg, vom Rest bleibt das Wesentliche, kondensiert und bereit für Fragen.",
+      "CraCha liest erreichbare Seiten ein und bereitet deren Text für deine Fragen auf. Wähle einen passenden Website-Bereich statt Inhalte einzulesen, die du gar nicht brauchst.",
     icon: <Filter className="h-4 w-4" />,
   },
   {
-    title: "Auch die Seiten, die sonst keiner findet",
+    title: "Du bestimmst den Umfang",
     description:
-      "CraCha klickt sich bis zu fünf Ebenen tief durch die Website — auch in Unterseiten, die im Menü nirgends verlinkt sind. Bis zu 500 Seiten pro Wissensdatenbank.",
+      "Folge Links bis zu fünf Ebenen tief oder nutze eine Sitemap. Pro Crawl sind bis zu 500 Seiten möglich, sofern sie erreichbar sind und dein Guthaben ausreicht.",
     icon: <Network className="h-4 w-4" />,
   },
   {
@@ -44,15 +44,15 @@ const features: Feature[] = [
     icon: <SlidersHorizontal className="h-4 w-4" />,
   },
   {
-    title: "Du siehst immer, woher es kommt",
+    title: "Quellen zum Nachprüfen",
     description:
-      "Zu jeder Antwort gehört die Seite, auf der es steht — ein Klick, und du liest es im Original nach. Und steht etwas nirgends, sagt CraCha das, statt sich etwas auszudenken.",
+      "Öffne die verlinkten Quellen und prüfe Aussagen im Original. Auch eine KI-Antwort mit Quellen kann Fehler enthalten oder wichtige Details auslassen.",
     icon: <BadgeCheck className="h-4 w-4" />,
   },
   {
-    title: "In Minuten fertig, nicht in Tagen",
+    title: "Fortschritt im Blick",
     description:
-      "Eine mittelgroße Website ist in wenigen Minuten durch. Du siehst live, wie weit CraCha ist, und legst danach sofort los.",
+      "Verfolge das Einlesen und die Aufbereitung im Dashboard. Die Dauer hängt von Umfang und Erreichbarkeit der Website ab. Sobald deine Wissensbasis bereit ist, kannst du Fragen stellen.",
     icon: <Zap className="h-4 w-4" />,
   },
 ];

@@ -26,12 +26,11 @@ export default function ProductShowcase() {
                            Warum <span className="text-gradient_indigo-purple">CraCha</span>?
                         </h2>
                         <p className="mt-4 text-base text-muted-foreground">
-                            Eine normale KI kennt nur die eine Seite, die du ihr
-                            zeigst. CraCha kennt die ganze Website — jede
-                            Unterseite, auch die, die im Menü nirgends auftaucht.
-                            Du fragst einmal und hast die Antwort. <br />
-                            <strong> Kein Suchen, kein Scrollen, keine zwanzig offenen Tabs.</strong>
-                            
+                            Recherchiere gezielt in den Seiten, die du eingelesen hast.
+                            CraCha hält diese Inhalte in deiner Wissensbasis bereit,
+                            damit du wiederholt Fragen dazu stellen kannst.
+                            Die verlinkten Originalseiten helfen dir, Aussagen nachzuprüfen.
+                            <br /><strong>Eine Website, deine Fragen, nachvollziehbare Quellen.</strong>
                         </p>
                     </div>
                     <div
