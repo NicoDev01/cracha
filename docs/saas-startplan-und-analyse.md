@@ -88,6 +88,7 @@ Quellen: [Google-Absenderrichtlinien](https://support.google.com/mail/answer/811
 2. **Implementiert:** Nach bestätigtem Crawl-Abbruch wird der Hold freigegeben. Bei fehlgeschlagener Freigabe bleibt der Job für einen erneuten Versuch erhalten. Bereits abgeschlossene Modal-Jobs lassen sich nicht nachträglich in einen kostenlosen Abbruch umwandeln.
 3. **Abgrenzung:** Diese Korrekturen sind kein dauerhaftes, browserunabhängiges Auftragsmodell. Verlorene Erstattungen bei Prozessabbruch, der 24h-Reaper, gleichzeitiger Abschluss/Abbruch und automatische Nachbearbeitung bleiben offen. Eine Modellantwort ohne tatsächlichen Beleg trotz vorhandener Suchtreffer wird damit noch nicht zuverlässig erkannt.
 4. **Deployment:** Der Workflow wartet jetzt auf die wiederverwendete CI des gleichen Commits. Python-Eval-Tests sind ebenfalls Teil dieser Prüfung.
+5. **Sicherheitsupdates:** Der erste Deploy-Versuch wurde vor jeder Produktionsänderung durch den bestehenden Audit gestoppt. Next.js/ESLint-Konfiguration wurden auf 16.3.5, Wrangler auf 4.131.0 und passende Workers-Typen aktualisiert; betroffene transitive Pakete wurden innerhalb ihrer Versionsbereiche aktualisiert. Der Frontend-Audit ist jetzt ebenfalls verpflichtend. Produktionsabhängigkeiten: kein npm-Audit-Befund; Entwicklungsabhängigkeiten: zwei moderate Vitest-Befunde, keine hohen/kritischen Befunde. Kein öffentlich erreichbarer Vitest-Server wird betrieben.
 
 ### Weiterhin offene Freigabepunkte
 - Vollständige externe Registrierung einschließlich Bestätigung und erster Quellenantwort praktisch nachweisen.
