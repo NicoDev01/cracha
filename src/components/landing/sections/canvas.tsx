@@ -48,7 +48,7 @@ export default function CanvasSection() {
               Mach jede Website zu <br /> deinem{" "}
               <span className="text-gradient_indigo-purple">persönlichen Chatbot</span>
             </h2>
-            <AppEntryLink prefetch={true}>
+            <AppEntryLink prefetch={true} signedOutHref="/register">
               <RainbowButton className="gap-2">
                 <span>Jetzt loslegen</span>
                 <Icons.arrowRight className="size-4" />
@@ -65,7 +65,7 @@ export default function CanvasSection() {
             Verwandle das Internet in <br /> deinen{" "}
             <span className="text-gradient_indigo-purple">persönlichen Chatbot</span>
           </h2>
-          <AppEntryLink prefetch={true}>
+          <AppEntryLink prefetch={true} signedOutHref="/register">
             <RainbowButton className="gap-2">
               <span>Jetzt loslegen</span>
               <Icons.arrowRight className="size-4" />

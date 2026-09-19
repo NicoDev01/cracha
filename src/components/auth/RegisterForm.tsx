@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,8 +11,9 @@ import { Eye, EyeOff, Mail, Lock, User, AlertCircle, Loader2, CheckCircle } from
 import { GoogleAuthButton } from './GoogleAuthButton'
 
 export function RegisterForm() {
-  const router = useRouter()
   const { register, isLoading, error, clearError } = useAuthStore()
+  const [registrationComplete, setRegistrationComplete] = useState(false)
+  const [confirmationMessage, setConfirmationMessage] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [formData, setFormData] = useState({
@@ -62,10 +62,9 @@ export function RegisterForm() {
     try {
       await register(formData.email, formData.password, formData.name)
       
-      // Registration successful - redirect to login after showing message
-      setTimeout(() => {
-        router.push('/login')
-      }, 2500) // Give user time to read the success message
+      // Keep confirmation instructions visible until the visitor chooses to leave.
+      setConfirmationMessage(useAuthStore.getState().error || 'Bitte prüfe dein Postfach und bestätige deine E-Mail-Adresse.')
+      setRegistrationComplete(true)
       
     } catch (registrationError) {
       // Only actual errors (not success messages) will reach here
@@ -86,6 +85,27 @@ export function RegisterForm() {
 
   const isFormValid = formData.name && formData.email && formData.password && formData.confirmPassword
 
+  if (registrationComplete) {
+    return (
+      <Card className="border-0 shadow-2xl bg-white/80 backdrop-blur-xl">
+        <CardHeader>
+          <CardTitle>Dein nächster Schritt</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <p role="status" className="rounded-lg border border-green-200 bg-green-50 p-4 text-green-800">
+            {confirmationMessage}
+          </p>
+          <p className="text-sm text-gray-600">
+            Keine E-Mail gefunden? Prüfe auch den Spam-Ordner. Öffne den Bestätigungslink, bevor du dich anmeldest.
+          </p>
+          <Link href="/login" className="block font-semibold text-blue-600 hover:underline">
+            Weiter zur Anmeldung
+          </Link>
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <Card className="border-0 shadow-2xl bg-white/80 backdrop-blur-xl">
       <CardHeader className="text-center pb-6">
@@ -93,7 +113,7 @@ export function RegisterForm() {
           Account erstellen
         </CardTitle>
         <CardDescription className="text-gray-600">
-          Erstelle deinen CraCha Account und starte sofort
+          Starte mit kostenlosem Testguthaben. Keine Kreditkarte erforderlich.
         </CardDescription>
       </CardHeader>
       
@@ -239,11 +259,11 @@ export function RegisterForm() {
             <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
             <p>
               Mit der Registrierung stimmst du unseren{' '}
-              <Link href="/terms" className="text-blue-600 hover:underline">
+              <Link href="/nutzungsbedingungen" className="text-blue-600 hover:underline">
                 Nutzungsbedingungen
               </Link>{' '}
               und der{' '}
-              <Link href="/privacy" className="text-blue-600 hover:underline">
+              <Link href="/datenschutz" className="text-blue-600 hover:underline">
                 Datenschutzerklärung
               </Link>{' '}
               zu.

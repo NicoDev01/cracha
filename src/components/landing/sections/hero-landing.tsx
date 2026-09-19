@@ -41,13 +41,17 @@ export default function HeroLanding() {
          </p>
 
         <div className="flex justify-center">
-          <AppEntryLink prefetch={true}>
+          <AppEntryLink prefetch={true} signedOutHref="/register">
             <RainbowButton className="reveal gap-2 [animation-delay:240ms]">
-              <span>Jetzt ausprobieren</span>
+              <span>Kostenlos starten</span>
               <Icons.arrowRight className="size-4" />
             </RainbowButton>
           </AppEntryLink>
         </div>
+        <p className="max-w-xl text-sm text-muted-foreground">
+          Mit Startguthaben ausprobieren. Keine Kreditkarte für den Einstieg.
+          Stelle Fragen zu einer öffentlichen Website und prüfe die verlinkten Quellen.
+        </p>
       </div>
     </section>
   );

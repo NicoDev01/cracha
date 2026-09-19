@@ -30,7 +30,7 @@
     // The three credit packages, as one-off prices in EUR. A price id is not a
     // secret, and keeping them here means the tariff the code charges is
     // visible in the diff that changes it. The amounts they must match are in
-    // src/lib/server/credits.ts: 2.500 / 7.000 / 15.000 credits for 10 / 25 /
+    // src/lib/server/credits.ts: 1.250 / 3.500 / 7.500 credits for 10 / 25 /
     // 50 EUR. STRIPE_API_KEY, STRIPE_WEBHOOK_SECRET and
     // SUPABASE_SERVICE_ROLE_KEY are secrets and are set on the Worker itself.
     "STRIPE_PRICE_CREDITS_S": "price_1U45HmKErihln31nI18CKkEz",

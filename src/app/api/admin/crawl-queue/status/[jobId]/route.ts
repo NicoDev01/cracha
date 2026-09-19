@@ -63,7 +63,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   let settledCredits: number | undefined
   if (job.hold_reference && TERMINAL.has(status)) {
     try {
-      const settlement = await settleCrawlCredits(job.hold_reference, result.result?.pages_count ?? 0)
+      const settlement = await settleCrawlCredits(job.hold_reference, status === 'cancelled' ? 0 : (result.result?.indexed_pages ?? result.result?.pages_count ?? 0))
       if (settlement.settled) settledCredits = settlement.spent
     } catch (error) {
       // A failed settlement must not hide the crawl result from the user. The

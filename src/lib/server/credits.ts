@@ -139,8 +139,8 @@ export async function getCreditState(userId: string): Promise<CreditState> {
  * Charges for one answer. Decided and booked in a single statement, so two
  * questions sent at the same instant cannot both find the last credit unspent.
  *
- * The reference is fresh per request, which is what makes a retry after a
- * network failure cost once rather than twice.
+ * References identify bookings. A new HTTP request currently receives a new
+ * reference; end-to-end request idempotency is a separate outstanding change.
  */
 export async function spendChatCredits(userId: string, reference: string): Promise<boolean> {
   const result = await rpc<{ allowed?: boolean }>('credit_spend', {
@@ -151,6 +151,26 @@ export async function spendChatCredits(userId: string, reference: string): Promi
     p_detail: null,
   })
   return result?.allowed === true
+}
+
+/** Refund only an existing debit, at most once through the ledger's unique key. */
+export async function refundChatCredits(userId: string, reference: string): Promise<void> {
+  const { data, error } = await creditsAdmin()
+    .from('credit_entries')
+    .select('amount')
+    .eq('user_id', userId)
+    .eq('kind', 'chat')
+    .eq('reference', reference)
+    .maybeSingle()
+  if (error) throw new Error('Chat-Abbuchung konnte nicht geprüft werden.')
+  if (!data || !Number.isSafeInteger(data.amount) || data.amount >= 0) return
+  await rpc('credit_grant', {
+    p_user: userId,
+    p_amount: -data.amount,
+    p_kind: 'refund',
+    p_reference: `chat:${reference}`,
+    p_detail: 'Keine vollständige Antwort geliefert',
+  })
 }
 
 /** Holds the ceiling a crawl is allowed to reach. Settled when it finishes. */

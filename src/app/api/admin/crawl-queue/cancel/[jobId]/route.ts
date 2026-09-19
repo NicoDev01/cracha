@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getWorkerEnv } from '@/lib/server/cloudflare'
+import { releaseCrawlCredits } from '@/lib/server/credits'
 import { getOwnedDatabase, saveDatabase } from '@/lib/server/database-registry'
 import { getAuthenticatedUser } from '@/lib/supabase/server'
 
@@ -10,7 +11,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
 
   const { jobId } = await params
   const env = getWorkerEnv()
-  const job = await env.DATABASE_REGISTRY.get<{ user_id: string; database_id: string }>(`crawl_job:${jobId}`, 'json')
+  const job = await env.DATABASE_REGISTRY.get<{ user_id: string; database_id: string; hold_reference?: string }>(`crawl_job:${jobId}`, 'json')
   if (!job || job.user_id !== user.id) {
     return NextResponse.json({ success: false, error: 'Crawl-Auftrag nicht gefunden.' }, { status: 404 })
   }
@@ -19,8 +20,19 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
     method: 'POST',
     headers: { Authorization: `Bearer ${env.CRAWLER_API_SECRET}` },
   })
-  if (!response.ok) {
+  const result = await response.json().catch(() => null) as { status?: unknown } | null
+  if (!response.ok || result?.status !== 'cancelled') {
     return NextResponse.json({ success: false, error: 'Crawl konnte nicht abgebrochen werden.' }, { status: 502 })
+  }
+
+  // Keep the job record until the idempotent release succeeds, so retrying a
+  // failed refund can still locate the hold. Never release on a failed cancel.
+  if (job.hold_reference) {
+    try {
+      await releaseCrawlCredits(job.hold_reference)
+    } catch {
+      return NextResponse.json({ success: false, error: 'Crawl gestoppt. Guthabenfreigabe fehlgeschlagen; bitte erneut abbrechen.' }, { status: 503 })
+    }
   }
 
   const database = await getOwnedDatabase(job.database_id, user.id)

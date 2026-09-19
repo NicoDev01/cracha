@@ -5,12 +5,11 @@
  * instead of hard-coding /login. A visitor whose Supabase session is still
  * live skips the login screen and lands directly on the dashboard — the same
  * session that lets them type /dashboard into the address bar. Everyone else
- * keeps seeing /login.
+ * sees the destination appropriate to the button: login or registration.
  *
  * The auth store only initializes inside the guarded area of the app, so the
  * marketing page has to kick it off itself. Until that resolves (a claims
- * round-trip) the link points at /login, which stays the safe default for
- * first-time visitors.
+ * round-trip) the link points at the requested unauthenticated destination.
  */
 
 import Link from 'next/link'
@@ -25,10 +24,12 @@ export function AppEntryLink({
   className,
   children,
   prefetch,
+  signedOutHref = '/login',
 }: {
   className?: string
   children: ReactNode
   prefetch?: boolean
+  signedOutHref?: '/login' | '/register'
 }) {
   const { isAuthenticated, isInitialized, initialize } = useAuthStore()
 
@@ -41,7 +42,7 @@ export function AppEntryLink({
   }, [isInitialized, initialize])
 
   return (
-    <Link href={isAuthenticated ? '/dashboard' : '/login'} className={className} prefetch={prefetch}>
+    <Link href={isAuthenticated ? '/dashboard' : signedOutHref} className={className} prefetch={prefetch}>
       {children}
     </Link>
   )

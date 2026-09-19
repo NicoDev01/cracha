@@ -494,6 +494,10 @@ def api():
         status = await crawl_statuses.get.aio(job_id)
         if not status:
             raise HTTPException(status_code=404, detail="Crawl job not found")
+        if status.get("status") in {"completed", "failed"}:
+            raise HTTPException(status_code=409, detail="Crawl job already finished")
+        if status.get("status") == "cancelled":
+            return {"success": True, "job_id": job_id, "status": "cancelled", "phase": "cancelled"}
         for call_id in {status.get("call_id"), status.get("finalizer_call_id")} - {None}:
             call = modal.FunctionCall.from_id(call_id)
             await call.cancel.aio()
