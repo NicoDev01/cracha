@@ -25,13 +25,13 @@ Aktualisierte CI-Evidenz für G2/G3: Commit 04b0fc8, Lauf https://github.com/Nic
 
 ## DACH-Einstieg und Auffindbarkeit (19.09.2026)
 
-- [ ] D1: Nutzen, Grenzen, Kosten und erster Ablauf sind vor der Anmeldung verständlich sichtbar.
-  EVIDENCE: pending
-- [ ] D2: Ein verlinkter deutscher Leitfaden besitzt eigene Metadaten und ist in der Sitemap enthalten.
-  EVIDENCE: pending
-- [ ] D3: Der Crawl-Standard lässt vom Startguthaben Raum für erste Fragen; das leere Dashboard erklärt den Einstieg.
-  EVIDENCE: pending
+- [x] D1: Nutzen, Grenzen, Kosten und erster Ablauf sind vor der Anmeldung verständlich sichtbar.
+  EVIDENCE: Commit 4d4e2c7; serverseitig erzeugtes HTML enthält Nutzen, 100-Credit-Erklärung, fünf FAQ und Ablauf. Redaktionell geprüft, kein gemessener Nutzereffekt; Veröffentlichung durch D4 noch offen.
+- [x] D2: Ein verlinkter deutscher Leitfaden besitzt eigene Metadaten und ist in der Sitemap enthalten.
+  EVIDENCE: Build-Prüfung tmp/check-dach.py exit=0, PUBLIC_PAGES_PASS build: /website-mit-ki-durchsuchen mit deutschem HTML, einem H1, eigenem Canonical, Beschreibung, OG-Bild, intakten Startseitenankern und Sitemap-Eintrag. Noch nicht live.
+- [x] D3: Der Crawl-Standard lässt vom Startguthaben Raum für erste Fragen; das leere Dashboard erklärt den Einstieg.
+  EVIDENCE: CrawlConfigForm defaultValues.limit=20; Hilfetext und Dashboard-Anleitung im erfolgreichen Produktionsbuild. 100 - 20 = 80 Credits für 16 Fragen. Kein interaktiver Browsernachweis.
 - [ ] D4: Typprüfung, relevante Tests und Build bestehen; Veröffentlichung und öffentliches HTML sind geprüft.
-  EVIDENCE: pending
-- [ ] D5: Priorisierter DACH-Gewinnungsplan und Messlücken sind dokumentiert, ohne Traffic oder Nachfrage zu erfinden.
-  EVIDENCE: pending
+  EVIDENCE: Lokal 122 Tests und Typprüfung erfolgreich, finaler npm run build:cf exit=0, HTML-Prüfung bestanden. Deploy 35457983521 blockiert: npm audit liefert HTTP 503/Wartung; alle Veröffentlichungsjobs übersprungen. Keine Live-Verifikation des neuen Stands möglich; erneut starten, sobald npm verfügbar ist.
+- [x] D5: Priorisierter DACH-Gewinnungsplan und Messlücken sind dokumentiert, ohne Traffic oder Nachfrage zu erfinden.
+  EVIDENCE: docs/dach-aktivierung-und-seo.md enthält priorisierte Zielgruppenhypothese, fünf qualitative Piloten, Messkonzept, Search-Console-Schritte und ausdrücklich begrenzte Datenbefunde.

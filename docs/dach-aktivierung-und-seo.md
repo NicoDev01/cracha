@@ -94,3 +94,11 @@ Eine visuelle Browserprüfung und echte Anmeldung waren mangels verbundener Brow
 - [Google: Sitemaps erstellen](https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap): Sitemap und zutreffende Änderungsdaten.
 - [Cloudflare: Web Analytics einrichten](https://developers.cloudflare.com/web-analytics/get-started/): EU-Ausschluss betrifft die Einbindung des Messskripts.
 - [Supabase: Pausieren kostenloser Projekte](https://supabase.com/docs/guides/platform/free-project-pausing): Betriebsrisiko unabhängig von Marketingbewertung.
+
+## Ergebnis der Umsetzung und Veröffentlichung
+
+Code-Commit `4d4e2c7` wurde nach `origin/main` gepusht. Lokal: 122 Frontend-/API-Tests erfolgreich, Typprüfung erfolgreich, Cloudflare-Produktionsbuild erfolgreich. Die HTML-Prüfung bestätigt auf Startseite und Leitfaden Deutsch als Dokumentsprache, jeweils ein H1, korrekte Canonicals, Beschreibung und Open-Graph-Bild, funktionierende interne Anker sowie den Leitfaden in der Sitemap. Der gezielte Lint-Lauf aller geänderten Marketingdateien ist erfolgreich; die oben genannten vorhandenen Dashboard-Befunde bleiben bestehen.
+
+**Noch nicht veröffentlicht:** [Deploy 35457983521](https://github.com/NicoDev01/cracha/actions/runs/35457983521) wurde am npm-Sicherheitscheck gestoppt. Der Audit-Endpunkt antwortet lokal mit HTTP 503 und Wartungshinweis; auch die CI meldet einen Audit-Endpunktfehler. Frontend-, Crawler- und RAG-Veröffentlichung wurden übersprungen. Der zuletzt erfolgreiche Produktionsstand bleibt bestehen. Keine Sicherheitssperre wurde umgangen und keine neue Schwachstelle aus diesem Ausfall abgeleitet.
+
+Die [npm-Statusseite](https://status.npmjs.org/) nennt Wartung am 19.09.2026 von 17–19 Uhr UTC (19–21 Uhr Europe/Berlin). Das ist ein angekündigtes Zeitfenster, keine Garantie für die Wiederherstellung. Nach Wiederherstellung den fehlgeschlagenen Deploy erneut starten (Re-run failed jobs). Danach `/`, `/website-mit-ki-durchsuchen`, `/sitemap.xml` und den ausgelieferten Crawl-Standard prüfen; vorbereiteter lokaler Smoke-Check: `venv\Scripts\python.exe tmp/check-dach.py --live`. Die temporäre Prüfdatei ist nicht Bestandteil des Repositorys.
