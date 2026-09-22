@@ -10,13 +10,14 @@
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "cf:dev": "wrangler dev",
     "type-check": "tsc --noEmit",
+    "lint": "eslint src workers/rag-api/src",
     "test": "vitest run",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv --include-runtime false cloudflare-env.d.ts",
     "rag:typecheck": "npm --prefix workers/rag-api run typecheck",
     "rag:test": "npm --prefix workers/rag-api test",
     "rag:deploy": "npm --prefix workers/rag-api run deploy",
     "crawler:test": "python -m pytest services/crawler/tests",
-    "check": "npm run type-check && npm run test && npm run rag:typecheck && npm run rag:test",
+    "check": "npm run lint && npm run type-check && npm run test && npm run rag:typecheck && npm run rag:test",
     "evals:test": "python -m pytest evals -q"
   },
   "dependencies": {
@@ -99,7 +100,7 @@
     "tw-animate-css": "^1.3.6",
     "typescript": "^5",
     "url-loader": "^4.1.1",
-    "vitest": "^3.2.7",
+    "vitest": "^4.1.11",
     "wrangler": "4.131.0"
   },
   "overrides": {

@@ -133,3 +133,6 @@ workers/rag-api/wrangler.dev.jsonc
 
 # Claude Code: local machine settings, not shared
 .claude/settings.local.json
+
+# Supabase CLI local state
+supabase/.temp/

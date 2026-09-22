@@ -16,8 +16,62 @@ jobs:
   verify:
     uses: ./.github/workflows/ci.yml
 
-  rag-worker:
+  preflight:
     needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx tsx scripts/preflight-release.ts
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          MODAL_CRAWLER_URL: ${{ secrets.MODAL_CRAWLER_URL }}
+          CONFIRM_AUTH_HOOK_BEFORE_USER_CREATED: ${{ secrets.CONFIRM_AUTH_HOOK_BEFORE_USER_CREATED }}
+
+  build-frontend:
+    needs: preflight
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:cf
+        env:
+          NEXT_PUBLIC_BUILD_SHA: ${{ github.sha }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: open-next-build
+          path: .open-next
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+
+  verify-build:
+    needs: build-frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: open-next-build
+          path: .open-next
+      - name: Verify build artifact contents
+        run: |
+          test -f .open-next/worker.js || { echo "Missing .open-next/worker.js"; exit 1; }
+          test -d .open-next/assets || { echo "Missing .open-next/assets"; exit 1; }
+          test -s .open-next/worker.js || { echo ".open-next/worker.js is empty"; exit 1; }
+
+  rag-worker:
+    needs: verify-build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -54,7 +108,7 @@ jobs:
           MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
 
   frontend:
-    needs: crawler
+    needs: [crawler, verify-build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -63,10 +117,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run build:cf
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: open-next-build
+          path: .open-next
       - uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -75,12 +129,19 @@ jobs:
           secrets: |
             NEXT_PUBLIC_SUPABASE_URL
             NEXT_PUBLIC_SUPABASE_ANON_KEY
+            SUPABASE_SERVICE_ROLE_KEY
+            STRIPE_API_KEY
+            STRIPE_WEBHOOK_SECRET
             MODAL_CRAWLER_URL
             CRAWLER_API_SECRET
             RAG_QUERY_SECRET
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
           MODAL_CRAWLER_URL: ${{ secrets.MODAL_CRAWLER_URL }}
           CRAWLER_API_SECRET: ${{ secrets.CRAWLER_API_SECRET }}
           RAG_QUERY_SECRET: ${{ secrets.RAG_QUERY_SECRET }}
+      - run: node scripts/smoke-release.mjs https://cracha-app.com "${{ github.sha }}"
