@@ -1,229 +1,60 @@
 "use client";
-import React, { useState, useCallback } from "react";
+import React from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
+import { Ellipsis, Globe, LayoutDashboard, Library, MessagesSquare, type LucideIcon } from "lucide-react";
 import { useSidebar } from "../context/SidebarContext";
-import {
-  ChevronDownIcon,
-  GridIcon,
-  HorizontaLDots,
-  ChatIcon,
-  FolderIcon,
-  TableIcon,
-} from "../icons/index";
-
 
 type NavItem = {
   name: string;
-  icon: React.ReactNode;
-  path?: string;
-  subItems?: { name: string; path: string; pro?: boolean; new?: boolean }[];
+  icon: LucideIcon;
+  path: string;
 };
 
+// One lucide set for the whole shell: the old TailAdmin glyphs mixed filled and
+// outlined styles, and a folder or a table said nothing about crawling a
+// website or holding knowledge bases.
 const navItems: NavItem[] = [
-  {
-    icon: <GridIcon />,
-    name: "Übersicht & Guthaben",
-    path: "/dashboard",
-  },
-  {
-    icon: <ChatIcon />,
-    name: "Chat",
-    path: "/dashboard/chat",
-  },
-  {
-    icon: <FolderIcon />,
-    name: "Website einlesen",
-    path: "/dashboard/crawl",
-  },
-  {
-    icon: <TableIcon />,
-    name: "Wissensbasen",
-    path: "/dashboard/data",
-  },
+  { icon: LayoutDashboard, name: "Übersicht", path: "/dashboard" },
+  { icon: MessagesSquare, name: "Chat", path: "/dashboard/chat" },
+  { icon: Globe, name: "Website einlesen", path: "/dashboard/crawl" },
+  { icon: Library, name: "Wissensbasen", path: "/dashboard/data" },
 ];
-
-const othersItems: NavItem[] = [];
 
 const AppSidebar: React.FC = () => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
   const pathname = usePathname();
+  const showLabels = isExpanded || isHovered || isMobileOpen;
 
-  const renderMenuItems = (
-    navItems: NavItem[],
-    menuType: "main" | "others"
-  ) => (
+  const renderMenuItems = (items: NavItem[]) => (
     <ul className="flex flex-col gap-4">
-      {navItems.map((nav, index) => (
-        <li key={nav.name}>
-          {nav.subItems ? (
-            <button
-              onClick={() => handleSubmenuToggle(index, menuType)}
-              className={`menu-item group  ${openSubmenu?.type === menuType && openSubmenu?.index === index
-                ? "menu-item-active"
-                : "menu-item-inactive"
-                } cursor-pointer ${!isExpanded && !isHovered
-                  ? "lg:justify-center"
-                  : "lg:justify-start"
-                }`}
+      {items.map((nav) => {
+        const active = nav.path === pathname;
+        const Icon = nav.icon;
+        return (
+          <li key={nav.name}>
+            <Link
+              href={nav.path}
+              // Every dashboard route renders dynamically behind auth, and
+              // Next does not cache prefetches of dynamic routes. Prefetching
+              // them re-ran a full server render per link on every re-render,
+              // which is what exhausted the Worker CPU budget during a crawl.
+              prefetch={false}
+              aria-current={active ? "page" : undefined}
+              title={showLabels ? undefined : nav.name}
+              className={`menu-item group ${active ? "menu-item-active" : "menu-item-inactive"}`}
             >
-              <span
-                className={` ${openSubmenu?.type === menuType && openSubmenu?.index === index
-                  ? "menu-item-icon-active"
-                  : "menu-item-icon-inactive"
-                  }`}
-              >
-                {nav.icon}
+              <span className={active ? "menu-item-icon-active" : "menu-item-icon-inactive"}>
+                <Icon className="size-6" strokeWidth={1.75} aria-hidden="true" />
               </span>
-              {(isExpanded || isHovered || isMobileOpen) && (
-                <span className={`menu-item-text`}>{nav.name}</span>
-              )}
-              {(isExpanded || isHovered || isMobileOpen) && (
-                <ChevronDownIcon
-                  className={`ml-auto w-5 h-5 transition-transform duration-200  ${openSubmenu?.type === menuType &&
-                    openSubmenu?.index === index
-                    ? "rotate-180 text-brand-500"
-                    : ""
-                    }`}
-                />
-              )}
-            </button>
-          ) : (
-            nav.path && (
-              <Link
-                href={nav.path}
-                // Every dashboard route renders dynamically behind auth, and
-                // Next does not cache prefetches of dynamic routes. Prefetching
-                // them re-ran a full server render per link on every re-render,
-                // which is what exhausted the Worker CPU budget during a crawl.
-                prefetch={false}
-                className={`menu-item group ${isActive(nav.path) ? "menu-item-active" : "menu-item-inactive"
-                  }`}
-              >
-                <span
-                  className={`${isActive(nav.path)
-                    ? "menu-item-icon-active"
-                    : "menu-item-icon-inactive"
-                    }`}
-                >
-                  {nav.icon}
-                </span>
-                {(isExpanded || isHovered || isMobileOpen) && (
-                  <span className={`menu-item-text`}>{nav.name}</span>
-                )}
-              </Link>
-            )
-          )}
-          {nav.subItems && (isExpanded || isHovered || isMobileOpen) && (
-            <div
-              className={`grid transition-all duration-300 ease-in-out ${
-                openSubmenu?.type === menuType && openSubmenu?.index === index
-                  ? "grid-rows-[1fr]"
-                  : "grid-rows-[0fr]"
-              }`}
-            >
-              <div className="overflow-hidden">
-                <ul className="mt-2 space-y-1 ml-9">
-                  {nav.subItems.map((subItem) => (
-                    <li key={subItem.name}>
-                      <Link
-                        href={subItem.path}
-                        prefetch={false}
-                        className={`menu-dropdown-item ${
-                          isActive(subItem.path)
-                            ? "menu-dropdown-item-active"
-                            : "menu-dropdown-item-inactive"
-                        }`}
-                      >
-                        {subItem.name}
-                        <span className="flex items-center gap-1 ml-auto">
-                          {subItem.new && (
-                            <span
-                              className={`ml-auto ${isActive(subItem.path)
-                                ? "menu-dropdown-badge-active"
-                                : "menu-dropdown-badge-inactive"
-                                } menu-dropdown-badge `}
-                            >
-                              new
-                            </span>
-                          )}
-                          {subItem.pro && (
-                            <span
-                              className={`ml-auto ${isActive(subItem.path)
-                                ? "menu-dropdown-badge-active"
-                                : "menu-dropdown-badge-inactive"
-                                } menu-dropdown-badge `}
-                            >
-                              pro
-                            </span>
-                          )}
-                        </span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          )}
-        </li>
-      ))}
+              {showLabels && <span className="menu-item-text">{nav.name}</span>}
+            </Link>
+          </li>
+        );
+      })}
     </ul>
   );
-
-  const [openSubmenu, setOpenSubmenu] = useState<{
-    type: "main" | "others";
-    index: number;
-  } | null>(() => {
-    let matched: { type: "main" | "others"; index: number } | null = null;
-    ["main", "others"].forEach((menuType) => {
-      const items = menuType === "main" ? navItems : othersItems;
-      items.forEach((nav, index) => {
-        if (nav.subItems) {
-          nav.subItems.forEach((subItem) => {
-            if (subItem.path === pathname) {
-              matched = { type: menuType as "main" | "others", index };
-            }
-          });
-        }
-      });
-    });
-    return matched;
-  });
-
-  const [prevPathname, setPrevPathname] = useState(pathname);
-  if (pathname !== prevPathname) {
-    setPrevPathname(pathname);
-    let matched: { type: "main" | "others"; index: number } | null = null;
-    ["main", "others"].forEach((menuType) => {
-      const items = menuType === "main" ? navItems : othersItems;
-      items.forEach((nav, index) => {
-        if (nav.subItems) {
-          nav.subItems.forEach((subItem) => {
-            if (subItem.path === pathname) {
-              matched = { type: menuType as "main" | "others", index };
-            }
-          });
-        }
-      });
-    });
-    setOpenSubmenu(matched);
-  }
-
-  const isActive = useCallback((path: string) => path === pathname, [pathname]);
-
-  const handleSubmenuToggle = (index: number, menuType: "main" | "others") => {
-    setOpenSubmenu((prevOpenSubmenu) => {
-      if (
-        prevOpenSubmenu &&
-        prevOpenSubmenu.type === menuType &&
-        prevOpenSubmenu.index === index
-      ) {
-        return null;
-      }
-      return { type: menuType, index };
-    });
-  };
 
   return (
     <aside
@@ -281,13 +112,9 @@ const AppSidebar: React.FC = () => {
                   : "justify-start"
                   }`}
               >
-                {isExpanded || isHovered || isMobileOpen ? (
-                  "Navigation"
-                ) : (
-                  <HorizontaLDots />
-                )}
+                {showLabels ? "Navigation" : <Ellipsis className="size-6" aria-hidden="true" />}
               </h2>
-              {renderMenuItems(navItems, "main")}
+              {renderMenuItems(navItems)}
             </div>
           </div>
         </nav>
