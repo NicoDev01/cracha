@@ -32,6 +32,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           MODAL_CRAWLER_URL: ${{ secrets.MODAL_CRAWLER_URL }}
           CONFIRM_AUTH_HOOK_BEFORE_USER_CREATED: ${{ secrets.CONFIRM_AUTH_HOOK_BEFORE_USER_CREATED }}
+          PREFLIGHT_SKIP_CRAWLER: 'true'
 
   build-frontend:
     needs: preflight
@@ -106,6 +107,19 @@ jobs:
         env:
           MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
           MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+      # The frontend needs the crawler's billing protocol and settlement callback.
+      - name: Verify crawler health and billing protocol
+        run: |
+          for attempt in 1 2 3 4 5 6; do
+            body=$(curl -fsS -m 30 "${MODAL_CRAWLER_URL%/}/health" || true)
+            if echo "$body" | python -c "import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get('billing_protocol')==1 and d.get('settlement_configured') is True else 1)" 2>/dev/null; then
+              echo "Crawler healthy: $body"; exit 0
+            fi
+            echo "Attempt $attempt: $body"; sleep 10
+          done
+          echo "Crawler lacks billing_protocol 1 or CRAWLER_SETTLEMENT_URL in the Modal secret"; exit 1
+        env:
+          MODAL_CRAWLER_URL: ${{ secrets.MODAL_CRAWLER_URL }}
 
   frontend:
     needs: [crawler, verify-build]

@@ -241,8 +241,17 @@ export async function verifyPreflight(
   }
 
   // 4. Crawler-Service & Settlement-Protokoll prüfen
+  // The deploy workflow runs this check after the crawler deploy instead,
+  // because the new billing protocol only exists once that deploy is done.
   const crawlerUrl = env.MODAL_CRAWLER_URL?.trim()
-  if (!crawlerUrl) {
+  if (env.PREFLIGHT_SKIP_CRAWLER === 'true') {
+    results.push({
+      name: 'Crawler: Health & Billing Protocol',
+      passed: true,
+      message: 'Übersprungen; wird nach dem Crawler-Deploy geprüft.',
+      critical: false,
+    })
+  } else if (!crawlerUrl) {
     results.push({
       name: 'Crawler: Health & Billing Protocol',
       passed: false,
