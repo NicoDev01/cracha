@@ -25,6 +25,13 @@ Stand: 23.09.2026. Bezug: `docs/review-audit-runde5-2026-09-21.md`.
 - Die Release-Reihenfolge in `docs/deployment.md` ist präzisiert: Hook vor dem Preflight, DO-Migration nur über das reguläre Worker-Deployment.
 - npm-Audit-Gate: `scripts/npm-audit.sh` wiederholt den Aufruf nur, wenn der Audit-Endpunkt selbst ausfällt, etwa bei npm-Wartung mit HTTP 503. Gefundene Schwachstellen brechen sofort ab. Bleibt der Endpunkt nicht erreichbar, schlägt der Schritt fehl (fail closed). Der letzte Deploy war nur an der npm-Wartung gescheitert; `npm audit` meldet lokal für Root und `workers/rag-api` 0 Schwachstellen.
 
+## Nachträglich im ersten CI-Lauf gefunden
+
+- `npm ci` in CI (Node 22, npm 10) lehnte die mit npm 11 erzeugte `package-lock.json` ab, weil verschachtelte esbuild-Einträge von vitest fehlten. Die Lockfiles sind jetzt mit npm 10 erzeugt; npm 10 und npm 11 installieren beide.
+- Die RAG-Typprüfung fand in CI `@types/node` nicht, das lokal nur aus dem Root-Verzeichnis kam. `@types/node`, `esbuild` und `miniflare` sind jetzt Dev-Abhängigkeiten von `workers/rag-api`. Nachweis: sauberes `npm ci`, Typprüfung und Tests in einer isolierten Kopie.
+- `type-check` führt vorher `next typegen` aus. Sonst fehlt in einem frischen Checkout `next-env.d.ts`, und die Bildimporte schlagen fehl.
+- Die DO-Migration verwendet jetzt `new_sqlite_classes` statt `new_classes`. Laut Cloudflare-Changelog vom 09.07.2026 schlagen neue KV-gestützte DO-Namespaces fehl, wenn das Konto noch keinen besitzt; im Free-Plan gab es sie nie. Die Klasse nutzt nur die KV-API des Storage, die SQLite-gestützt gleich funktioniert. Die Migration war noch nie ausgerollt.
+
 ## Neue Tests
 
 - `workers/rag-api/test/two-instance.test.ts`, Block „review round 5 regressions“:

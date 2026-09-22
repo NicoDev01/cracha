@@ -27,7 +27,7 @@
   "migrations": [
     {
       "tag": "v1-knowledge-base-coordinator",
-      "new_classes": ["KnowledgeBaseCoordinator"]
+      "new_sqlite_classes": ["KnowledgeBaseCoordinator"]
     }
   ],
   "observability": {

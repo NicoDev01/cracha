@@ -22,7 +22,7 @@ function workerd(script: string, persistence?: string): Miniflare {
     modules: true,
     compatibilityDate: '2026-08-04',
     script,
-    durableObjects: { COORDINATOR: 'KnowledgeBaseCoordinator' },
+    durableObjects: { COORDINATOR: { className: 'KnowledgeBaseCoordinator', useSQLite: true } },
     kvNamespaces: ['DATABASE_REGISTRY'],
     bindings: { INGEST_SECRET: 'test-ingest', QUERY_SECRET: 'test-query' },
     ...(persistence ? { resourcePersistencePath: persistence } : {}),
