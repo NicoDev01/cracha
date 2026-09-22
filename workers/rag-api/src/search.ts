@@ -196,6 +196,7 @@ export async function uploadPages(
   instance: Pick<AiSearchInstance, 'items'>,
   pages: IngestPage[],
   knownItems?: unknown,
+  beforeUploadCheck?: () => Promise<void>,
 ): Promise<{ keys: string[]; known_items: Record<string, IndexedItem> }> {
   // Skipping is an optimisation, never a precondition: if the listing fails,
   // every page is uploaded exactly as before. A crawl's later batches carry
@@ -210,10 +211,12 @@ export async function uploadPages(
       return new Map<string, IndexedItem>()
     })
   }
-  const keys = await Promise.all(
+  if (beforeUploadCheck) await beforeUploadCheck()
+  const results = await Promise.allSettled(
     pages.map(async (page) => {
       const key = await itemKeyFor(page.url)
       if (!needsUpload(page, existing.get(key))) return key
+      if (beforeUploadCheck) await beforeUploadCheck()
       const content = `# ${page.title}\n\nQuelle: ${page.url}\n\n${page.markdown.trim()}`
       // Queue the item instead of holding a Worker request open while the
       // managed embedding/indexing pipeline runs (often longer than 30 s).
@@ -227,9 +230,14 @@ export async function uploadPages(
           ...(page.published_at ? { published_at: page.published_at } : {}),
         },
       })
+      if (beforeUploadCheck) await beforeUploadCheck()
       return key
     }),
   )
+  if (beforeUploadCheck) await beforeUploadCheck()
+  const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')
+  if (rejected) throw rejected.reason
+  const keys = results.map(result => (result as PromiseFulfilledResult<string>).value)
   // The map stays the scan-time snapshot: a crawl never sends the same URL in
   // two batches, so nothing here can go stale within one job.
   return { keys, known_items: knownItemsPayload(existing) }
@@ -241,6 +249,7 @@ const DELETE_WINDOW = 6
 export async function deleteStaleItems(
   instance: { items: Pick<AiSearchInstance['items'], 'list' | 'delete'> },
   activeKeys: Set<string>,
+  beforeDeleteCheck?: () => Promise<void>,
 ): Promise<number> {
   const pageSize = 50
   let page = 1
@@ -256,15 +265,25 @@ export async function deleteStaleItems(
     page += 1
   }
 
+  if (beforeDeleteCheck) await beforeDeleteCheck()
+
   // Deletions are independent, so they overlap; one at a time made a large
   // re-crawl pay a round trip per removed page. The window is small on
   // purpose -- a Worker holds six connections open, and firing hundreds of
   // deletes at once trades one slow endpoint for a rate-limited one.
   for (let start = 0; start < staleIds.length; start += DELETE_WINDOW) {
-    await Promise.all(
-      staleIds.slice(start, start + DELETE_WINDOW).map((id) => instance.items.delete(id)),
+    if (beforeDeleteCheck) await beforeDeleteCheck()
+    const results = await Promise.allSettled(
+      staleIds.slice(start, start + DELETE_WINDOW).map(async (id) => {
+        if (beforeDeleteCheck) await beforeDeleteCheck()
+        await instance.items.delete(id)
+        if (beforeDeleteCheck) await beforeDeleteCheck()
+      }),
     )
+    const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')
+    if (rejected) throw rejected.reason
   }
+  if (beforeDeleteCheck) await beforeDeleteCheck()
   return staleIds.length
 }
 

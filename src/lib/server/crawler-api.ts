@@ -1,8 +1,10 @@
 import 'server-only'
+import { z } from 'zod'
 
 import { getWorkerEnv } from './cloudflare'
 import {
   affordablePages,
+  bindCrawlHold,
   CreditError,
   crawlCost,
   getCreditState,
@@ -75,6 +77,7 @@ export async function analyzeSite(url: string): Promise<SiteAnalysis> {
 
   const response = await fetch(`${env.MODAL_CRAWLER_URL.replace(/\/$/, '')}/analyze`, {
     method: 'POST',
+    signal: AbortSignal.timeout(130_000),
     headers: {
       Authorization: `Bearer ${env.CRAWLER_API_SECRET}`,
       'Content-Type': 'application/json',
@@ -106,6 +109,12 @@ export async function enqueueCrawl(input: CrawlInput, userId: string) {
   if (input.database_id && !rebuilding) {
     throw new Error('Wissensbasis nicht gefunden oder Zugriff verweigert.')
   }
+  if (rebuilding?.status === 'deleting') {
+    throw new Error('Wissensbasis wird derzeit gelöscht.')
+  }
+  if (rebuilding?.status === 'crawling') {
+    throw new Error('Wissensbasis wird bereits indexiert.')
+  }
 
   // Every crawl is priced here rather than in the two routes that lead to it,
   // so a route added later cannot forget to ask. It happens before anything is
@@ -120,24 +129,18 @@ export async function enqueueCrawl(input: CrawlInput, userId: string) {
   const budget = affordablePages(state.balance)
   if (budget <= 0) throw new CreditError('credits', state, crawlCost(1))
 
-  let database: DatabaseRecord
-  if (rebuilding) {
-    database = rebuilding
-  } else {
-    const name = input.database_name?.trim()
-    if (!name) throw new Error('Ein Name für die Wissensbasis ist erforderlich.')
-    database = await createDatabase(userId, name.slice(0, 160), sourceUrl.toString())
-  }
-
   const env = getWorkerEnv()
-  if (!env.MODAL_CRAWLER_URL || !env.CRAWLER_API_SECRET) {
-    throw new Error('Crawler-Service ist nicht konfiguriert.')
-  }
+  if (!env.MODAL_CRAWLER_URL || !env.CRAWLER_API_SECRET) throw new Error('Crawler-Service ist nicht konfiguriert.')
+  const healthResponse = await fetch(`${env.MODAL_CRAWLER_URL.replace(/\/$/, '')}/health`, { signal: AbortSignal.timeout(5000) })
+  const health = await healthResponse.json() as { billing_protocol?: number; settlement_configured?: boolean }
+  if (!healthResponse.ok || health?.billing_protocol !== 1 || health?.settlement_configured !== true) throw new Error('Der Crawler ist noch nicht für die Guthabenabrechnung eingerichtet. Bitte kontaktiere den Support.')
+  const name = input.database_name?.trim()
+  if (!rebuilding && !name) throw new Error('Ein Name für die Wissensbasis ist erforderlich.')
 
   // Asking for more pages than the balance covers is capped rather than
   // refused. Someone with 30 credits who requests 100 pages gets the 30 they
   // can pay for; refusing the whole crawl would leave them to guess the number.
-  const requested = resolveCrawlSettings(input, database.crawl_settings)
+  const requested = resolveCrawlSettings(input, rebuilding?.crawl_settings)
   const settings = { ...requested, limit: Math.min(requested.limit, budget) }
 
   // The ceiling is held now and settled against the real page count when the
@@ -152,64 +155,53 @@ export async function enqueueCrawl(input: CrawlInput, userId: string) {
     throw new CreditError('credits', state, crawlCost(settings.limit))
   }
 
-  await saveDatabase({
-    ...database,
-    name: input.database_name || database.name,
-    source_url: sourceUrl.toString(),
-    url: sourceUrl.toString(),
-    status: 'crawling',
-    updated_at: new Date().toISOString(),
-    last_error: undefined,
-    crawl_settings: settings,
-  })
-
-  const response = await fetch(`${env.MODAL_CRAWLER_URL.replace(/\/$/, '')}/crawl`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${env.CRAWLER_API_SECRET}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      url: sourceUrl.toString(),
-      tenant_id: database.id,
-      user_id: userId,
-      ...settings,
-    }),
-  })
-
-  const result = (await response.json().catch(() => ({}))) as {
-    success?: boolean
-    job_id?: string
-    status?: string
-    detail?: string
-  }
-  if (!response.ok || !result.success || !result.job_id) {
-    // Nothing was fetched, so nothing is charged. Without this the credits stay
-    // held until the 24-hour reaper releases them, and the account looks poorer
-    // than it is for a day because a service was briefly down.
-    await releaseCrawlCredits(holdReference)
+  let database: DatabaseRecord
+  try {
+    database = rebuilding ?? await createDatabase(userId, name!.slice(0, 160), sourceUrl.toString())
+    await bindCrawlHold(holdReference, database.id)
     await saveDatabase({
       ...database,
-      status: 'failed',
+      name: input.database_name || database.name,
+      source_url: sourceUrl.toString(),
+      url: sourceUrl.toString(),
+      status: 'crawling',
+      current_job_id: holdReference,
       updated_at: new Date().toISOString(),
-      last_error: 'Crawler-Auftrag konnte nicht gestartet werden.',
+      last_error: undefined,
+      crawl_settings: settings,
     })
-    throw new Error(result.detail ?? `Crawler-Service antwortete mit ${response.status}.`)
+  } catch (error) {
+    await releaseCrawlCredits(holdReference)
+    throw error
   }
 
-  await env.DATABASE_REGISTRY.put(
-    `crawl_job:${result.job_id}`,
+  // Register the deterministic ID before dispatch so a lost reply remains observable.
+  await env.DATABASE_REGISTRY.put(`crawl_job:${holdReference}`,
     JSON.stringify({ user_id: userId, database_id: database.id, hold_reference: holdReference }),
-    { expirationTtl: 86_400 },
-  )
-  // The caller no longer knows the id it is crawling into, so it is returned —
-  // and so is the page limit actually granted, which the interface needs to say
-  // when it came out lower than what was asked for.
+    { expirationTtl: 604_800 })
+  let result: { success?: boolean; job_id?: string; status?: string; detail?: string } = {}
+  let rejected: string | undefined
+  try {
+    const response = await fetch(`${env.MODAL_CRAWLER_URL.replace(/\/$/, '')}/crawl`, {
+      method: 'POST', signal: AbortSignal.timeout(20_000),
+      headers: { Authorization: `Bearer ${env.CRAWLER_API_SECRET}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: sourceUrl.toString(), tenant_id: database.id, user_id: userId, hold_reference: holdReference, ...settings }),
+    })
+    result = z.object({ success: z.boolean().optional(), job_id: z.string().optional(), status: z.string().optional(), detail: z.string().optional() }).parse(await response.json())
+    // 5xx or a broken body might follow a successful dispatch. Keep that hold.
+    if (response.status >= 400 && response.status < 500) rejected = result.detail ?? 'Crawler hat den Auftrag abgelehnt.'
+    if (result.job_id && result.job_id !== holdReference) throw new Error('Crawler version mismatch')
+  } catch {
+    console.warn(JSON.stringify({ event: 'crawl_dispatch_uncertain', reference: holdReference }))
+  }
+  if (rejected) {
+    await saveDatabase({ ...database, status: 'failed', current_job_id: undefined, updated_at: new Date().toISOString(), last_error: rejected }, { expectedJobId: holdReference })
+    await releaseCrawlCredits(holdReference)
+    throw new Error(rejected)
+  }
   return {
-    ...result,
-    database_id: database.id,
-    page_limit: settings.limit,
-    requested_page_limit: requested.limit,
-    credits_held: crawlCost(settings.limit),
+    success: true, job_id: holdReference, status: result.status ?? 'queued',
+    database_id: database.id, page_limit: settings.limit,
+    requested_page_limit: requested.limit, credits_held: crawlCost(settings.limit),
   }
 }

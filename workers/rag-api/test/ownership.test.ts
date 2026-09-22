@@ -1,3 +1,4 @@
+import { createTestCoordinatorNamespace } from './coordinator-fixture'
 import { describe, expect, it } from 'vitest'
 
 import { databaseForUser, ownerKey, removeOwnership } from '../src/database'
@@ -25,7 +26,7 @@ function record(id: string, userId: string): DatabaseRecord {
 
 function memoryEnv(): Env & { store: Map<string, string> } {
   const store = new Map<string, string>()
-  return {
+  const env = {
     store,
     AI_SEARCH: {} as Env['AI_SEARCH'],
     INGEST_SECRET: 'i',
@@ -46,6 +47,8 @@ function memoryEnv(): Env & { store: Map<string, string> } {
       },
     } as unknown as KVNamespace,
   }
+  createTestCoordinatorNamespace(env)
+  return env
 }
 
 async function statusOf(promise: Promise<unknown>): Promise<number> {

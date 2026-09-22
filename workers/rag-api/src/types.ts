@@ -3,6 +3,7 @@ export interface Env {
   DATABASE_REGISTRY: KVNamespace
   INGEST_SECRET: string
   QUERY_SECRET: string
+  COORDINATOR?: DurableObjectNamespace
 }
 
 export interface DatabaseRecord {
@@ -23,9 +24,10 @@ export interface DatabaseRecord {
    */
   pages_charged?: number
   chunks_count: number
-  status: 'pending' | 'crawling' | 'active' | 'failed'
+  status: 'pending' | 'crawling' | 'active' | 'failed' | 'deleting'
   ai_search_instance_id?: string
   last_error?: string
+  current_job_id?: string
 }
 
 export interface IngestPage {

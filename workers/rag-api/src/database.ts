@@ -1,5 +1,6 @@
 import { HttpError } from './http'
 import type { DatabaseRecord, Env } from './types'
+import { forwardOperation } from './coordinator'
 
 /** Mirrors the frontend registry: one key per membership, no shared array. */
 export function ownerKey(userId: string, databaseId: string): string {
@@ -11,26 +12,11 @@ export async function databaseForUser(
   databaseId: string,
   userId: string,
 ): Promise<DatabaseRecord> {
-  const database = await env.DATABASE_REGISTRY.get<DatabaseRecord>(databaseId, 'json')
-  if (!database) throw new HttpError(404, 'Wissensbasis nicht gefunden.')
-  if (!database.user_id) {
-    // Written before ownership lived on the record. Proven from this user's own
-    // membership key, or from the array it is being migrated out of.
-    const owned = await env.DATABASE_REGISTRY.get(ownerKey(userId, databaseId))
-    if (owned === null) {
-      const index = await env.DATABASE_REGISTRY.get<{ databases?: string[] }>(`user_index:${userId}`, 'json')
-      if (!(index?.databases ?? []).includes(databaseId)) {
-        throw new HttpError(403, 'Kein Zugriff auf diese Wissensbasis.')
-      }
-    }
-    database.user_id = userId
-    await Promise.all([
-      saveDatabase(env, database),
-      env.DATABASE_REGISTRY.put(ownerKey(userId, databaseId), '1'),
-    ])
-  }
-  if (database.user_id !== userId) throw new HttpError(403, 'Kein Zugriff auf diese Wissensbasis.')
-  return database
+  const response = await forwardOperation(env, databaseId, new Request(`https://coordinator/coordinator/${encodeURIComponent(databaseId)}/owned`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.QUERY_SECRET}` }, body: JSON.stringify({ user_id: userId }),
+  }))
+  if (!response.ok) throw new HttpError(response.status, 'Wissensbasis nicht verfügbar.')
+  return ((await response.json()) as { database: DatabaseRecord }).database
 }
 
 export async function databaseForIngest(
@@ -41,8 +27,11 @@ export async function databaseForIngest(
   return databaseForUser(env, databaseId, userId)
 }
 
-export async function saveDatabase(env: Env, database: DatabaseRecord): Promise<void> {
-  await env.DATABASE_REGISTRY.put(database.id, JSON.stringify(database))
+export async function saveDatabase(env: Env, database: DatabaseRecord, options?: { expectedJobId?: string; expectedGeneration?: number }): Promise<void> {
+  const response = await forwardOperation(env, database.id, new Request(`https://coordinator/coordinator/${encodeURIComponent(database.id)}/save`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.QUERY_SECRET}` }, body: JSON.stringify({ database, options }),
+  }))
+  if (!response.ok) throw new HttpError(response.status, 'Speichern fehlgeschlagen.')
 }
 
 /**
@@ -57,7 +46,7 @@ export async function removeOwnership(
 ): Promise<void> {
   const legacyKey = `user_index:${userId}`
   const index = await env.DATABASE_REGISTRY.get<{ databases?: string[] }>(legacyKey, 'json')
-  await Promise.all([
+  const results = await Promise.allSettled([
     env.DATABASE_REGISTRY.delete(ownerKey(userId, databaseId)),
     index
       ? env.DATABASE_REGISTRY.put(
@@ -66,4 +55,6 @@ export async function removeOwnership(
       )
       : Promise.resolve(),
   ])
+  const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')
+  if (rejected) throw rejected.reason
 }

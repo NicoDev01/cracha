@@ -2,35 +2,79 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Two knowledge bases per page, so the cursor loop is exercised by any user
 // with three of them rather than by a thousand.
-const { store, PAGE_SIZE } = vi.hoisted(() => ({ store: new Map<string, string>(), PAGE_SIZE: 2 }))
+const { store, mockCredits, mockKv, ragFault } = vi.hoisted(() => {
+  const store = new Map<string, string>()
+  const PAGE_SIZE = 2
+  const mockKv = {
+    get: vi.fn(async (key: string, type?: string) => {
+      const raw = store.get(key)
+      if (raw === undefined) return null
+      return type === 'json' ? JSON.parse(raw) : raw
+    }),
+    put: vi.fn(async (key: string, value: string) => {
+      store.set(key, value)
+    }),
+    delete: vi.fn(async (key: string) => {
+      store.delete(key)
+    }),
+    list: vi.fn(async ({ prefix, cursor }: { prefix: string; cursor?: string }) => {
+      const matching = [...store.keys()].filter((key) => key.startsWith(prefix)).sort()
+      const start = cursor ? Number(cursor) : 0
+      const page = matching.slice(start, start + PAGE_SIZE)
+      const next = start + PAGE_SIZE
+      const complete = next >= matching.length
+      return {
+        keys: page.map((name) => ({ name })),
+        list_complete: complete,
+        cursor: complete ? undefined : String(next),
+      }
+    }),
+  }
+  return {
+    store,
+    /** HTTP status the coordinator answers with instead of processing, when set. */
+    ragFault: { status: 0 },
+    PAGE_SIZE,
+    mockCredits: {
+      allocateSlot: vi.fn(),
+      deallocateSlot: vi.fn(),
+      getState: vi.fn(),
+    },
+    mockKv,
+  }
+})
+
+vi.mock('./credits', () => ({
+  allocateDatabaseSlot: mockCredits.allocateSlot,
+  deallocateDatabaseSlot: mockCredits.deallocateSlot,
+  getCreditState: mockCredits.getState,
+  CreditError: class extends Error {
+    reason: string
+    state: unknown
+    constructor(reason: string, state: unknown) {
+      super(`Credit limit: ${reason}`)
+      this.reason = reason
+      this.state = state
+    }
+  },
+}))
 
 vi.mock('./cloudflare', () => ({
   getWorkerEnv: () => ({
-    DATABASE_REGISTRY: {
-      get: async (key: string, type?: string) => {
-        const raw = store.get(key)
-        if (raw === undefined) return null
-        return type === 'json' ? JSON.parse(raw) : raw
-      },
-      put: async (key: string, value: string) => {
-        store.set(key, value)
-      },
-      delete: async (key: string) => {
-        store.delete(key)
-      },
-      list: async ({ prefix, cursor }: { prefix: string; cursor?: string }) => {
-        const matching = [...store.keys()].filter((key) => key.startsWith(prefix)).sort()
-        const start = cursor ? Number(cursor) : 0
-        const page = matching.slice(start, start + PAGE_SIZE)
-        const next = start + PAGE_SIZE
-        const complete = next >= matching.length
-        return {
-          keys: page.map((name) => ({ name })),
-          list_complete: complete,
-          cursor: complete ? undefined : String(next),
-        }
-      },
-    },
+    DATABASE_REGISTRY: mockKv,
+    RAG_QUERY_SECRET: 'test',
+    RAG_API: { fetch: async (url: string, init: RequestInit) => {
+      if (ragFault.status) return new Response('storage failure', { status: ragFault.status })
+      if (init.method === 'DELETE') {
+        await mockKv.delete(decodeURIComponent(new URL(url).pathname.split('/').pop()!))
+        return Response.json({ success: true })
+      }
+      const { database } = JSON.parse(String(init.body))
+      const old = await mockKv.get(database.id, 'json')
+      if (old?.status === 'deleting' && database.status !== 'deleting') throw new Error('wird derzeit gelöscht und kann nicht aktualisiert werden')
+      await mockKv.put(database.id, JSON.stringify(database))
+      return Response.json({ success: true })
+    } },
   }),
 }))
 
@@ -41,6 +85,7 @@ const {
   listOwnedDatabaseIds,
   ownerKey,
   releaseDatabase,
+  saveDatabase,
 } = await import('./database-registry')
 
 const ANNA = 'anna-0000-1111'
@@ -73,6 +118,22 @@ function legacyRecord(id: string) {
 
 beforeEach(() => {
   store.clear()
+  ragFault.status = 0
+  vi.resetAllMocks()
+  mockCredits.allocateSlot.mockResolvedValue({ allowed: true, currentCount: 1 })
+  mockCredits.deallocateSlot.mockResolvedValue(undefined)
+  mockCredits.getState.mockResolvedValue({ balance: 100, reserved: 0, databases: 1, maxDatabases: 25, costs: { page: 1, chatMessage: 5 } })
+  mockKv.get.mockImplementation(async (key: string, type?: string) => {
+    const raw = store.get(key)
+    if (raw === undefined) return null
+    return type === 'json' ? JSON.parse(raw) : raw
+  })
+  mockKv.put.mockImplementation(async (key: string, val: string) => {
+    store.set(key, val)
+  })
+  mockKv.delete.mockImplementation(async (key: string) => {
+    store.delete(key)
+  })
 })
 
 describe('who may read a knowledge base', () => {
@@ -186,5 +247,210 @@ describe('who assigns the id', () => {
     const created = await createDatabase(ANNA, 'Docs', 'https://example.com/docs')
     expect((await getOwnedDatabase(created.id, ANNA))?.user_id).toBe(ANNA)
     expect(await listOwnedDatabaseIds(ANNA)).toEqual([created.id])
+  })
+
+  it('passes existing KV database IDs to allocateDatabaseSlot for atomic sync', async () => {
+    await claimDatabase(record('kb-exist-1', ANNA))
+    await claimDatabase(record('kb-exist-2', ANNA))
+    await createDatabase(ANNA, 'New DB', 'https://example.com/new')
+
+    expect(mockCredits.allocateSlot).toHaveBeenCalledWith(
+      ANNA,
+      expect.stringMatching(/^new-db-/),
+      undefined,
+      expect.arrayContaining(['kb-exist-1', 'kb-exist-2']),
+    )
+  })
+
+  it('rolls back and deallocates slot when claimDatabase fails and KV cleanup succeeds', async () => {
+    let putCalls = 0
+    mockKv.put.mockImplementation(async (key: string, val: string) => {
+      putCalls++
+      if (putCalls === 2) {
+        throw new Error('KV put failed')
+      }
+      store.set(key, val)
+    })
+
+    await expect(createDatabase(ANNA, 'Failing DB', 'https://example.com')).rejects.toThrow('KV put failed')
+    expect(mockCredits.deallocateSlot).toHaveBeenCalledWith(ANNA, expect.any(String))
+  })
+
+  it('retains slot reservation when partial KV write cleanup cannot verify keys are gone', async () => {
+    let putCalls = 0
+    mockKv.put.mockImplementation(async (key: string, val: string) => {
+      putCalls++
+      if (putCalls === 2) {
+        throw new Error('KV put failed')
+      }
+      store.set(key, val)
+    })
+    mockKv.delete.mockImplementation(async () => {
+      throw new Error('KV delete failed during cleanup')
+    })
+
+    await expect(createDatabase(ANNA, 'Failing DB 2', 'https://example.com')).rejects.toThrow('KV put failed')
+    expect(mockCredits.deallocateSlot).not.toHaveBeenCalled()
+  })
+
+  it('waits for delayed record put to settle before compensation and deallocates only after cleanup', async () => {
+    let resolveBarrier!: () => void
+    const barrier = new Promise<void>((resolve) => {
+      resolveBarrier = resolve
+    })
+
+    let recordPutStarted = false
+    let recordPutFinished = false
+
+    mockKv.put.mockImplementation(async (key: string, val: string) => {
+      if (!key.startsWith('owner:')) {
+        recordPutStarted = true
+        await barrier
+        recordPutFinished = true
+        store.set(key, val)
+        return
+      }
+      throw new Error('Owner put immediate failure')
+    })
+
+    const createPromise = createDatabase(ANNA, 'Delayed Put DB', 'https://example.com')
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
+    expect(recordPutStarted).toBe(true)
+    expect(recordPutFinished).toBe(false)
+    expect(mockCredits.deallocateSlot).not.toHaveBeenCalled()
+
+    resolveBarrier()
+
+    await expect(createPromise).rejects.toThrow('Owner put immediate failure')
+    expect(recordPutFinished).toBe(true)
+    expect(mockCredits.deallocateSlot).toHaveBeenCalledWith(ANNA, expect.any(String))
+    expect(store.size).toBe(0)
+  })
+
+  it('waits for delayed owner put to settle before compensation (reverse order)', async () => {
+    let resolveBarrier!: () => void
+    const barrier = new Promise<void>((resolve) => {
+      resolveBarrier = resolve
+    })
+
+    let ownerPutStarted = false
+    let ownerPutFinished = false
+
+    mockKv.put.mockImplementation(async (key: string, val: string) => {
+      if (key.startsWith('owner:')) {
+        ownerPutStarted = true
+        await barrier
+        ownerPutFinished = true
+        store.set(key, val)
+        return
+      }
+      throw new Error('Record put immediate failure')
+    })
+
+    const createPromise = createDatabase(ANNA, 'Delayed Owner Put DB', 'https://example.com')
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
+    expect(ownerPutStarted).toBe(true)
+    expect(ownerPutFinished).toBe(false)
+    expect(mockCredits.deallocateSlot).not.toHaveBeenCalled()
+
+    resolveBarrier()
+
+    await expect(createPromise).rejects.toThrow('Record put immediate failure')
+    expect(ownerPutFinished).toBe(true)
+    expect(mockCredits.deallocateSlot).toHaveBeenCalledWith(ANNA, expect.any(String))
+    expect(store.size).toBe(0)
+  })
+
+  it('retains slot reservation when cleanup fails after delayed write', async () => {
+    let resolveBarrier!: () => void
+    const barrier = new Promise<void>((resolve) => {
+      resolveBarrier = resolve
+    })
+
+    mockKv.put.mockImplementation(async (key: string, val: string) => {
+      if (!key.startsWith('owner:')) {
+        await barrier
+        store.set(key, val)
+        return
+      }
+      throw new Error('Owner put failed')
+    })
+    mockKv.delete.mockImplementation(async () => {
+      throw new Error('Cleanup delete failed')
+    })
+
+    const createPromise = createDatabase(ANNA, 'Failing Cleanup DB', 'https://example.com')
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    resolveBarrier()
+
+    await expect(createPromise).rejects.toThrow('Owner put failed')
+    expect(mockCredits.deallocateSlot).not.toHaveBeenCalled()
+  })
+
+  describe('saveDatabase deletion & existence protection', () => {
+    it('saves successfully when database exists and is not deleting', async () => {
+      store.set('db-valid', JSON.stringify(record('db-valid', ANNA)))
+      await expect(
+        saveDatabase({
+          ...record('db-valid', ANNA),
+          name: 'Updated Name',
+        }),
+      ).resolves.toBeUndefined()
+      const stored = JSON.parse(store.get('db-valid')!)
+      expect(stored.name).toBe('Updated Name')
+    })
+
+    it('allows saving newly created database when status is crawling', async () => {
+      await expect(
+        saveDatabase({
+          ...record('db-new', ANNA),
+          status: 'crawling',
+        }),
+      ).resolves.toBeUndefined()
+      expect(store.has('db-new')).toBe(true)
+    })
+
+    it('rejects saving when existing database has status deleting and new status is not deleting', async () => {
+      store.set('db-del', JSON.stringify({ ...record('db-del', ANNA), status: 'deleting' }))
+      await expect(
+        saveDatabase({
+          ...record('db-del', ANNA),
+          status: 'active',
+        }),
+      ).rejects.toThrow('wird derzeit gelöscht und kann nicht aktualisiert werden')
+    })
+
+    it('allows setting status to deleting on an existing database', async () => {
+      store.set('db-del-allowed', JSON.stringify(record('db-del-allowed', ANNA)))
+      await expect(
+        saveDatabase({
+          ...record('db-del-allowed', ANNA),
+          status: 'deleting',
+        }),
+      ).resolves.toBeUndefined()
+      const stored = JSON.parse(store.get('db-del-allowed')!)
+      expect(stored.status).toBe('deleting')
+    })
+
+
+    it('rejects when the coordinator answers with an error status instead of reporting success', async () => {
+      for (const status of [500, 503, 409]) {
+        ragFault.status = status
+        await expect(saveDatabase(record('db-fault', ANNA))).rejects.toThrow(`Koordination fehlgeschlagen (${status})`)
+      }
+      expect(store.has('db-fault')).toBe(false)
+    })
+
+    it('propagates kv.get errors and aborts without writing to KV', async () => {
+      mockKv.get.mockRejectedValueOnce(new Error('KV connection broken'))
+      await expect(
+        saveDatabase({
+          ...record('db-broken', ANNA),
+          status: 'active',
+        }),
+      ).rejects.toThrow('KV connection broken')
+    })
   })
 })

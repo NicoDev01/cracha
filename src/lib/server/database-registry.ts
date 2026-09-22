@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { getWorkerEnv } from './cloudflare'
+import { allocateDatabaseSlot, deallocateDatabaseSlot, CreditError, getCreditState } from './credits'
 
 export type CrawlType = 'single' | 'recursive' | 'sitemap'
 
@@ -43,10 +44,19 @@ export interface DatabaseRecord {
    * before quotas existed, where pages_count is the best available stand-in.
    */
   pages_charged?: number
-  status: 'pending' | 'crawling' | 'active' | 'failed'
+  status: 'pending' | 'crawling' | 'active' | 'failed' | 'deleting'
   ai_search_instance_id?: string
   last_error?: string
   crawl_settings?: CrawlSettings
+  current_job_id?: string
+}
+
+export function ownerKey(userId: string, databaseId: string): string {
+  return `owner:${userId}:${databaseId}`
+}
+
+function legacyIndexKey(userId: string): string {
+  return `user_index:${userId}`
 }
 
 function patternList(value: unknown): string[] {
@@ -81,31 +91,19 @@ export function databaseRegistry(): KVNamespace {
  * moment — a second tab, a double click — left only one behind in the list.
  * Independent keys have nothing to overwrite, and a prefix scan reads them back.
  */
-export function ownerKey(userId: string, databaseId: string): string {
-  return `owner:${userId}:${databaseId}`
-}
-
-function legacyIndexKey(userId: string): string {
-  return `user_index:${userId}`
-}
-
-/**
- * Existing accounts still have their list in the old array. It is migrated the
- * first time it is read: the membership keys are written, then the array goes.
- * Doing it twice writes the same keys, so a concurrent read cannot break it.
- */
 export async function listOwnedDatabaseIds(userId: string): Promise<string[]> {
   const kv = databaseRegistry()
-  const prefix = ownerKey(userId, '')
   const ids = new Set<string>()
-
+  const prefix = `owner:${userId}:`
   let cursor: string | undefined
+
   do {
-    // A user with more knowledge bases than one page holds would otherwise see
-    // the list silently cut off, which is the bug this replaces.
     const page = await kv.list({ prefix, cursor })
-    for (const key of page.keys) ids.add(key.name.slice(prefix.length))
-    cursor = page.list_complete ? undefined : page.cursor
+    for (const key of page.keys) {
+      const id = key.name.slice(prefix.length)
+      if (id) ids.add(id)
+    }
+    cursor = page.list_complete ? undefined : (page as { cursor?: string }).cursor
   } while (cursor)
 
   const legacy = await kv.get<{ databases?: string[] }>(legacyIndexKey(userId), 'json')
@@ -121,15 +119,27 @@ export async function listOwnedDatabaseIds(userId: string): Promise<string[]> {
 
 /** The record and the membership are written as two independent keys. */
 export async function claimDatabase(database: DatabaseRecord): Promise<void> {
-  await Promise.all([
+  const kv = databaseRegistry()
+  const results = await Promise.allSettled([
     saveDatabase(database),
-    databaseRegistry().put(ownerKey(database.user_id, database.id), '1'),
+    kv.put(ownerKey(database.user_id, database.id), '1'),
   ])
+  const rejected = results.find((r): r is PromiseRejectedResult => r.status === 'rejected')
+  if (rejected) {
+    throw rejected.reason
+  }
 }
 
 export async function releaseDatabase(userId: string, databaseId: string): Promise<void> {
   const kv = databaseRegistry()
-  await Promise.all([kv.delete(databaseId), kv.delete(ownerKey(userId, databaseId))])
+  const results = await Promise.allSettled([
+    kv.delete(databaseId),
+    kv.delete(ownerKey(userId, databaseId)),
+  ])
+  const rejected = results.find((r): r is PromiseRejectedResult => r.status === 'rejected')
+  if (rejected) {
+    throw rejected.reason
+  }
 }
 
 export async function getOwnedDatabase(id: string, userId: string): Promise<DatabaseRecord | null> {
@@ -169,12 +179,13 @@ export async function getOwnedDatabase(id: string, userId: string): Promise<Data
     chunks_count: raw.chunks_count ?? 0,
     pages_count: raw.pages_count ?? raw.document_count ?? 0,
     pages_charged: raw.pages_charged ?? raw.pages_count ?? raw.document_count ?? 0,
-    status: raw.status === 'active' || raw.status === 'crawling' || raw.status === 'failed'
+    status: raw.status === 'active' || raw.status === 'crawling' || raw.status === 'failed' || raw.status === 'deleting'
       ? raw.status
       : 'pending',
     ai_search_instance_id: raw.ai_search_instance_id,
     last_error: raw.last_error,
     crawl_settings: normalizeCrawlSettings(raw.crawl_settings),
+    current_job_id: raw.current_job_id,
   }
 
   // Stamping the owner onto the record also writes the membership key, so the
@@ -183,8 +194,18 @@ export async function getOwnedDatabase(id: string, userId: string): Promise<Data
   return database
 }
 
-export async function saveDatabase(database: DatabaseRecord): Promise<void> {
-  await databaseRegistry().put(database.id, JSON.stringify(database))
+export async function coordinatorCommand<T>(databaseId: string, action: string, body: unknown): Promise<T> {
+  const env = getWorkerEnv()
+  if (!env.RAG_API) throw new Error('RAG_API-Binding fehlt.')
+  const response = await env.RAG_API.fetch(`https://cracha-rag.internal/coordinator/${encodeURIComponent(databaseId)}/${action}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.RAG_QUERY_SECRET}` }, body: JSON.stringify(body),
+  })
+  if (!response.ok) throw new Error(`Koordination fehlgeschlagen (${response.status}).`)
+  return response.json() as Promise<T>
+}
+
+export async function saveDatabase(database: DatabaseRecord, options?: { expectedJobId?: string; expectedGeneration?: number }): Promise<void> {
+  await coordinatorCommand(database.id, 'save', { database, options })
 }
 
 /**
@@ -202,8 +223,17 @@ export async function createDatabase(
 ): Promise<DatabaseRecord> {
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50) || 'kb'
   const now = new Date().toISOString()
+  const databaseId = `${slug}-${crypto.randomUUID().slice(0, 8)}`
+
+  const existingIds = await listOwnedDatabaseIds(userId)
+  const allocation = await allocateDatabaseSlot(userId, databaseId, undefined, existingIds)
+  if (!allocation.allowed) {
+    const state = await getCreditState(userId)
+    throw new CreditError('databases', state)
+  }
+
   const database: DatabaseRecord = {
-    id: `${slug}-${crypto.randomUUID().slice(0, 8)}`,
+    id: databaseId,
     name,
     description,
     user_id: userId,
@@ -218,6 +248,35 @@ export async function createDatabase(
     pages_charged: 0,
     status: 'pending',
   }
-  await claimDatabase(database)
+
+  try {
+    await claimDatabase(database)
+  } catch (err) {
+    try {
+      // A failed projection may already have committed inside the DO. Roll back
+      // through that same authority before freeing its SQL reservation.
+      const env = getWorkerEnv()
+      const cleanup = await env.RAG_API.fetch(`https://cracha-rag.internal/databases/${encodeURIComponent(databaseId)}?user_id=${encodeURIComponent(userId)}`, {
+        method: 'DELETE', headers: { Authorization: `Bearer ${env.RAG_QUERY_SECRET}` },
+      })
+      if (!cleanup.ok) throw new Error('Koordinierte Bereinigung unvollständig.')
+      await releaseDatabase(userId, databaseId)
+      const kv = databaseRegistry()
+      const [record, owner] = await Promise.all([
+        kv.get(databaseId),
+        kv.get(ownerKey(userId, databaseId)),
+      ])
+      if (record === null && owner === null) {
+        await deallocateDatabaseSlot(userId, databaseId)
+      } else {
+        console.error(JSON.stringify({ event: 'partial_kv_write_cleanup_ambiguous', userId, databaseId }))
+      }
+    } catch (cleanupErr) {
+      console.error(JSON.stringify({ event: 'partial_kv_write_cleanup_failed', userId, databaseId, error: String(cleanupErr) }))
+      // retain slot reservation on cleanup failure so quota is never bypassed
+    }
+    throw err
+  }
+
   return database
 }

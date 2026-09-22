@@ -16,8 +16,20 @@
       "id": "417ae907fb8547758b969c5eeaa635dd"
     }
   ],
-  // The legacy TenantManager has already been removed. This Worker exports no
-  // Durable Object classes; replaying its old deletion blocks current Wrangler.
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "COORDINATOR",
+        "class_name": "KnowledgeBaseCoordinator"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1-knowledge-base-coordinator",
+      "new_classes": ["KnowledgeBaseCoordinator"]
+    }
+  ],
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1

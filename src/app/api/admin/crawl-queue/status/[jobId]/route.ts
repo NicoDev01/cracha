@@ -50,24 +50,16 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ success: false, status: 'failed', error: result.error ?? 'Statusabfrage fehlgeschlagen.' }, { status: 502 })
   }
 
-  // The crawl is over, so the hold becomes a charge for the pages that were
-  // actually fetched and the rest goes back. This runs on the polling route
-  // because it is the only place that learns the final count while holding a
-  // Supabase connection — the RAG worker, which sees it first, has no service
-  // key and should not be given one for this.
-  //
-  // Settling is idempotent: the hold is gone after the first call, so the
-  // polls that follow move nothing. A crawl whose tab was closed before the
-  // last poll is caught by the 24-hour reaper in credit_state instead.
+  // Polling is only a fallback; the crawler settles independently via callback.
   const status = result.status ?? 'running'
   let settledCredits: number | undefined
   if (job.hold_reference && TERMINAL.has(status)) {
     try {
-      const settlement = await settleCrawlCredits(job.hold_reference, status === 'cancelled' ? 0 : (result.result?.indexed_pages ?? result.result?.pages_count ?? 0))
+      const settlement = await settleCrawlCredits(job.hold_reference, status !== 'completed' ? 0 : (result.result?.indexed_pages ?? result.result?.pages_count ?? 0))
       if (settlement.settled) settledCredits = settlement.spent
     } catch (error) {
       // A failed settlement must not hide the crawl result from the user. The
-      // reaper releases the hold either way.
+      // durable crawler callback will retry the settlement.
       console.error(JSON.stringify({
         event: 'crawl_settlement_failed',
         job_id: jobId,

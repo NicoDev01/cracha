@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { getWorkerEnv } from '@/lib/server/cloudflare'
 import { releaseCrawlCredits } from '@/lib/server/credits'
-import { getOwnedDatabase, saveDatabase } from '@/lib/server/database-registry'
+import { coordinatorCommand } from '@/lib/server/database-registry'
 import { getAuthenticatedUser } from '@/lib/supabase/server'
 
 export async function POST(_request: NextRequest, { params }: { params: Promise<{ jobId: string }> }) {
@@ -21,29 +21,22 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
     headers: { Authorization: `Bearer ${env.CRAWLER_API_SECRET}` },
   })
   const result = await response.json().catch(() => null) as { status?: unknown } | null
-  if (!response.ok || result?.status !== 'cancelled') {
+  const isCancelled = (response.ok && result?.status === 'cancelled') || response.status === 404
+  if (!isCancelled) {
     return NextResponse.json({ success: false, error: 'Crawl konnte nicht abgebrochen werden.' }, { status: 502 })
   }
 
-  // Keep the job record until the idempotent release succeeds, so retrying a
-  // failed refund can still locate the hold. Never release on a failed cancel.
-  if (job.hold_reference) {
-    try {
-      await releaseCrawlCredits(job.hold_reference)
-    } catch {
-      return NextResponse.json({ success: false, error: 'Crawl gestoppt. Guthabenfreigabe fehlgeschlagen; bitte erneut abbrechen.' }, { status: 503 })
-    }
+  // The DO must finish every admitted index write before the hold can be released.
+  // Keep the job record on either failure so the same cancellation is retryable.
+  try {
+    await coordinatorCommand(job.database_id, 'cancel-job', {
+      jobId, reason: response.status === 404 ? 'Crawl-Auftrag wurde im Crawler nicht gefunden und storniert.' : 'Vom Benutzer abgebrochen.',
+    })
+    if (job.hold_reference) await releaseCrawlCredits(job.hold_reference)
+  } catch {
+    return NextResponse.json({ success: false, error: 'Abbruch oder Guthabenfreigabe unvollständig; bitte erneut abbrechen.' }, { status: 503 })
   }
 
-  const database = await getOwnedDatabase(job.database_id, user.id)
-  if (database) {
-    await saveDatabase({
-      ...database,
-      status: 'failed',
-      updated_at: new Date().toISOString(),
-      last_error: 'Vom Benutzer abgebrochen.',
-    })
-  }
   await env.DATABASE_REGISTRY.delete(`crawl_job:${jobId}`)
   return NextResponse.json({ success: true, status: 'cancelled' })
 }
