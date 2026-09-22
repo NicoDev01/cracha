@@ -7,7 +7,7 @@ import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
 import { Icons } from "@/components/shared/icons";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
     Sheet,
     SheetContent,
@@ -75,18 +75,19 @@ export function NavMobile() {
                         </Button>
                     </SheetTrigger>
 
-                    {/* Right side: Theme toggle + Login */}
-                    <div className="flex items-center gap-2">
+                    {/* Right side: Theme toggle, Login, primary CTA */}
+                    <div className="flex items-center gap-1.5">
                         <ThemeToggleButton className="h-10 w-10" />
-                        <AppEntryLink>
-                            <Button
-                                className="h-10 gap-2 px-4"
-                                variant="default"
-                                size="sm"
-                                rounded="full"
-                            >
-                                <span>Login</span>
-                            </Button>
+                        <AppEntryLink
+                            className={buttonVariants({ variant: "ghost", size: "sm", rounded: "full", className: "h-10 px-3" })}
+                        >
+                            Login
+                        </AppEntryLink>
+                        <AppEntryLink
+                            signedOutHref="/register"
+                            className={buttonVariants({ variant: "default", size: "sm", rounded: "full", className: "h-10 px-4" })}
+                        >
+                            Kostenlos starten
                         </AppEntryLink>
                     </div>
                 </div>

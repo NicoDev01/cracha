@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import MaxWidthWrapper from "@/components/shared/max-width-wrapper";
 import { ThemeToggleButton } from "@/components/dashboard/common/ThemeToggleButton";
 import { AppEntryLink } from "@/components/landing/app-entry-link";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 
 interface NavBarProps {
   scroll?: boolean;
@@ -130,22 +130,23 @@ export function NavBar({ scroll = false }: NavBarProps) {
           <div className="hidden items-center gap-2 lg:flex">
             {/* Dark/Light Toggle */}
             <ThemeToggleButton />
-            {/* Login CTA */}
+            <AppEntryLink
+              className={buttonVariants({ variant: "ghost", size: "sm", rounded: "full", className: "px-4" })}
+            >
+              Login
+            </AppEntryLink>
+            {/* Primary CTA: new visitors register, signed-in visitors go to the dashboard */}
             <div
             id="gooey-btn"
             className="relative flex items-center group gooey-filter"
           >
-            <AppEntryLink className="hidden lg:block">
-              <Button
-                className="gap-2 px-5 z-20 relative"
-                  variant="default"
-                  size="sm"
-                  rounded="full"
-                >
-                  <span>Login</span>
-              </Button>
+            <AppEntryLink
+              signedOutHref="/register"
+              className={buttonVariants({ variant: "default", size: "sm", rounded: "full", className: "relative z-20 px-5" })}
+            >
+              Kostenlos starten
             </AppEntryLink>
-              {/* Decorative arrow bubble appears to the RIGHT, behind the Login button */}
+              {/* Decorative arrow bubble appears to the RIGHT, behind the primary button */}
               <span
                 aria-hidden="true"
                 role="img"
