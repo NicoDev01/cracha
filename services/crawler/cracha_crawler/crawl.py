@@ -20,7 +20,14 @@ from .normalize import (
     render_markdown_table,
     truncate_utf8,
 )
-from .security import assert_public_url
+from .security import (
+    SafeEgressProxy,
+    SafeRobotsParser,
+    UnsafeUrlError,
+    assert_public_url,
+    create_safe_client,
+    filter_ssrf_route,
+)
 
 MAX_SITEMAP_BYTES = 2_000_000
 MAX_REDIRECTS = 5
@@ -116,7 +123,7 @@ async def _safe_download(client: httpx.AsyncClient, url: str) -> tuple[bytes, st
 
 async def _dynamic_page_urls(start_url: str, source_host: str | None) -> list[str]:
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with create_safe_client(timeout=15) as client:
             content, final_url = await _safe_download(client, start_url)
     except (httpx.HTTPError, ValueError, OSError) as error:
         print(f"[CRAWL] dynamic discovery unavailable: {type(error).__name__}: {error}")
@@ -275,7 +282,7 @@ async def sitemap_page_urls(url: str, limit: int) -> tuple[list[str], str | None
     parsed = urlsplit(url)
     origin = urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
 
-    async with httpx.AsyncClient(timeout=30) as client:
+    async with create_safe_client(timeout=30) as client:
         urls, used = await _walk_sitemaps(client, [url], source_host, limit, strict=False)
         if urls:
             return urls, used
@@ -463,7 +470,7 @@ async def _http_fallback_pages(
     # below it can fail for ordinary reasons; that one failing is the whole job.
     blocked_start: str | None = None
     robots_cache: dict[str, robotparser.RobotFileParser | None] = {}
-    async with httpx.AsyncClient(timeout=45) as client:
+    async with create_safe_client(timeout=45) as client:
         while pending and len(pages) < request.limit:
             url, depth = pending.popleft()
             url = canonical_url(url)
@@ -550,7 +557,7 @@ async def _http_direct_pages(
     semaphore = asyncio.Semaphore(10)
     robots_cache: dict[str, robotparser.RobotFileParser | None] = {}
 
-    async with httpx.AsyncClient(timeout=30) as client:
+    async with create_safe_client(timeout=30) as client:
         if request.respect_robots_txt:
             await _robots_allowed(client, urls[0], robots_cache)
 
@@ -604,20 +611,33 @@ async def _crawl4ai_pages(
     from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 
     start_url = str(request.url)
+    proxy = SafeEgressProxy()
+    try:
+        await proxy.start()
+    except Exception as exc:
+        raise CrawlBlockedError(f"Secure egress proxy failed to start: {exc}") from exc
+
     browser_config = BrowserConfig(
-        browser_type="chromium",
-        headless=True,
-        text_mode=True,
-        light_mode=True,
-        verbose=False,
-        # The browser sends this, not the run config. Without it Chromium used
-        # its own headless default and a site that screens user agents refused
-        # every page — the run config's user_agent never reached the wire, so
-        # the browser pass returned nothing and the failure looked like empty
-        # content rather than a rejected request.
-        user_agent=USER_AGENT,
-        extra_args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
-    )
+            browser_type="chromium",
+            headless=True,
+            text_mode=True,
+            light_mode=True,
+            verbose=False,
+            # The browser sends this, not the run config. Without it Chromium used
+            # its own headless default and a site that screens user agents refused
+            # every page — the run config's user_agent never reached the wire, so
+            # the browser pass returned nothing and the failure looked like empty
+            # content rather than a rejected request.
+            user_agent=USER_AGENT,
+            proxy_config=f"http://127.0.0.1:{proxy.port}",
+            extra_args=[
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                f"--proxy-server=http://127.0.0.1:{proxy.port}",
+                "--proxy-bypass-list=<-loopback>",
+            ],
+        )
     run_options = {
         "cache_mode": CacheMode.BYPASS,
         "verbose": False,
@@ -779,70 +799,80 @@ async def _crawl4ai_pages(
             embedded_links.extend(embedded)
         return discovered_links, embedded_links
 
-    async with AsyncWebCrawler(config=browser_config) as crawler:
-        if request.type is CrawlType.RECURSIVE:
-            # Process one breadth-first depth at a time. Pages within a depth
-            # render concurrently, while links come from the rendered DOM so
-            # JavaScript documentation sites expose their real content URLs.
-            current_urls = [start_url]
-            visited: set[str] = set()
-            expected_total = request.limit
-            for depth in range(request.max_depth + 1):
-                batch: list[str] = []
-                for url in current_urls:
-                    normalized = canonical_url(url)
-                    if normalized in visited:
-                        continue
-                    visited.add(normalized)
-                    batch.append(normalized)
-                    if len(pages_by_url) + len(batch) >= request.limit:
-                        break
-                if not batch:
-                    break
-                results = await crawler.arun_many(urls=batch, config=config)
-                discovered_links, embedded_links = await consume(results, depth)
-                if depth == 0 and dynamic_page_urls:
-                    discovered_links = dynamic_page_urls + discovered_links
-                while embedded_links and len(pages_by_url) < request.limit:
-                    embedded_batch: list[str] = []
-                    for url in dict.fromkeys(embedded_links):
+    async def _on_page_context_created(page, context=None, **kwargs):
+        if page:
+            await page.route("**/*", filter_ssrf_route)
+        return page
+
+    try:
+        async with AsyncWebCrawler(config=browser_config) as crawler:
+            crawler.robots_parser = SafeRobotsParser()
+            crawler.crawler_strategy.set_hook("on_page_context_created", _on_page_context_created)
+            if request.type is CrawlType.RECURSIVE:
+                # Process one breadth-first depth at a time. Pages within a depth
+                # render concurrently, while links come from the rendered DOM so
+                # JavaScript documentation sites expose their real content URLs.
+                current_urls = [start_url]
+                visited: set[str] = set()
+                expected_total = request.limit
+                for depth in range(request.max_depth + 1):
+                    batch: list[str] = []
+                    for url in current_urls:
                         normalized = canonical_url(url)
                         if normalized in visited:
                             continue
                         visited.add(normalized)
-                        embedded_batch.append(normalized)
-                        if len(pages_by_url) + len(embedded_batch) >= request.limit:
+                        batch.append(normalized)
+                        if len(pages_by_url) + len(batch) >= request.limit:
                             break
-                    if not embedded_batch:
+                    if not batch:
                         break
-                    embedded_results = await crawler.arun_many(
-                        urls=embedded_batch, config=config
-                    )
-                    nested_links, embedded_links = await consume(embedded_results, depth)
-                    discovered_links.extend(nested_links)
-                current_urls = list(dict.fromkeys(discovered_links))
-                if len(pages_by_url) >= request.limit:
-                    break
-        elif request.type is CrawlType.SITEMAP:
-            urls, _ = await sitemap_page_urls(start_url, request.limit)
-            if not urls:
-                raise ValueError("No sitemap was found for this site.")
-            expected_total = max(1, len(urls))
-            results = await crawler.arun_many(urls=urls, config=config)
-            await consume(results)
-        else:
-            results = await crawler.arun(url=start_url, config=config)
-            await consume(results)
-        if pages_by_url and len(pages_by_url) < expected_total:
-            await _report_progress(
-                on_progress,
-                stage="crawling",
-                current=len(pages_by_url),
-                total=len(pages_by_url),
-                pages_count=len(pages_by_url),
-                skipped_count=skipped,
-            )
-    return list(pages_by_url.values()), skipped
+                    results = await crawler.arun_many(urls=batch, config=config)
+                    discovered_links, embedded_links = await consume(results, depth)
+                    if depth == 0 and dynamic_page_urls:
+                        discovered_links = dynamic_page_urls + discovered_links
+                    while embedded_links and len(pages_by_url) < request.limit:
+                        embedded_batch: list[str] = []
+                        for url in dict.fromkeys(embedded_links):
+                            normalized = canonical_url(url)
+                            if normalized in visited:
+                                continue
+                            visited.add(normalized)
+                            embedded_batch.append(normalized)
+                            if len(pages_by_url) + len(embedded_batch) >= request.limit:
+                                break
+                        if not embedded_batch:
+                            break
+                        embedded_results = await crawler.arun_many(
+                            urls=embedded_batch, config=config
+                        )
+                        nested_links, embedded_links = await consume(embedded_results, depth)
+                        discovered_links.extend(nested_links)
+                    current_urls = list(dict.fromkeys(discovered_links))
+                    if len(pages_by_url) >= request.limit:
+                        break
+            elif request.type is CrawlType.SITEMAP:
+                urls, _ = await sitemap_page_urls(start_url, request.limit)
+                if not urls:
+                    raise ValueError("No sitemap was found for this site.")
+                expected_total = max(1, len(urls))
+                results = await crawler.arun_many(urls=urls, config=config)
+                await consume(results)
+            else:
+                results = await crawler.arun(url=start_url, config=config)
+                await consume(results)
+            if pages_by_url and len(pages_by_url) < expected_total:
+                await _report_progress(
+                    on_progress,
+                    stage="crawling",
+                    current=len(pages_by_url),
+                    total=len(pages_by_url),
+                    pages_count=len(pages_by_url),
+                    skipped_count=skipped,
+                )
+            return list(pages_by_url.values()), skipped
+    finally:
+        await proxy.close()
 
 
 async def crawl_pages(
@@ -880,6 +910,8 @@ async def crawl_pages(
         if pages:
             return pages, skipped
         print("[WARN] Crawl4AI returned no indexable pages; using the HTTP fallback.")
+    except (UnsafeUrlError, CrawlBlockedError):
+        raise
     except Exception as error:
         print(
             f"[WARN] Crawl4AI unavailable ({type(error).__name__}: {error}); "

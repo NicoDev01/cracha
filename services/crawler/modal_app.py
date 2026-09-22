@@ -11,6 +11,7 @@ import modal
 from cracha_crawler.crawl import CrawlBlockedError, analyze_site, crawl_pages
 from cracha_crawler.ingest import INDEX_STATUS_ATTEMPTS, PageBuffer, RagIngestClient
 from cracha_crawler.models import AnalyzeRequest, CrawlRequest, Page, SiteAnalysis
+from cracha_crawler.settlement import settle_status
 from cracha_crawler.status import stale_job_ids
 
 APP_NAME = "cracha-crawler"
@@ -50,6 +51,15 @@ async def update_status(job_id: str, **changes) -> dict:
         changes["result"] = {**(current.get("result") or {}), **changes["result"]}
     updated = {**current, **changes, "updated_at": datetime.now(UTC).isoformat()}
     await crawl_statuses.put.aio(job_id, updated)
+    if updated.get("status") in {"completed", "failed", "cancelled"} and not updated.get(
+        "credits_settled"
+    ):
+        try:
+            if await settle_status(updated):
+                updated["credits_settled"] = True
+                await crawl_statuses.put.aio(job_id, updated)
+        except Exception:
+            print(f"[SETTLEMENT] pending job {job_id}")
     return updated
 
 
@@ -61,7 +71,13 @@ async def prune_crawl_statuses() -> int:
     """
     try:
         items = [entry async for entry in crawl_statuses.items.aio()]
-        stale = stale_job_ids(items)
+        stale = stale_job_ids(
+            [
+                (key, value)
+                for key, value in items
+                if not value.get("hold_reference") or value.get("credits_settled")
+            ]
+        )
         for job_id in stale:
             await crawl_statuses.pop.aio(job_id, None)
     except Exception as error:
@@ -116,6 +132,7 @@ async def finalize_index(
             active_keys,
             attempts=250,
             on_progress=report_progress,
+            job_id=job_id,
         )
         # Only an empty index is a failure. AI Search leaving a handful of items
         # in "running" is not: their chunks are searchable, and declaring the
@@ -151,7 +168,7 @@ async def finalize_index(
         return result
     except Exception as error:
         try:
-            await ingest_client.mark_failed(database_id, user_id, str(error))
+            await ingest_client.mark_failed(database_id, user_id, str(error), job_id=job_id)
         finally:
             await update_status(
                 job_id,
@@ -227,7 +244,7 @@ async def process_crawl(payload: dict, job_id: str) -> dict:
             await scanned.wait()
         async with upload_slots:
             uploaded = await ingest_client.upload(
-                request.tenant_id, request.user_id, batch, known_items
+                request.tenant_id, request.user_id, batch, known_items, job_id=job_id
             )
         if uploaded.known_items is not None:
             known_items = uploaded.known_items
@@ -306,6 +323,7 @@ async def process_crawl(payload: dict, job_id: str) -> dict:
             active_keys,
             attempts=INDEX_STATUS_ATTEMPTS,
             on_progress=report_progress,
+            job_id=job_id,
         )
         result = {
             "success": True,
@@ -336,9 +354,7 @@ async def process_crawl(payload: dict, job_id: str) -> dict:
                     "stage": "indexing",
                     "current": index_status.indexed_count,
                     "total": len(active_keys),
-                    "percent": round(
-                        index_status.indexed_count / max(1, len(active_keys)) * 100
-                    ),
+                    "percent": round(index_status.indexed_count / max(1, len(active_keys)) * 100),
                     "chunks_count": index_status.chunks_count,
                 },
             )
@@ -370,7 +386,9 @@ async def process_crawl(payload: dict, job_id: str) -> dict:
             else "Der Aufbau der Wissensbasis ist fehlgeschlagen. Bitte versuche es erneut."
         )
         try:
-            await ingest_client.mark_failed(request.tenant_id, request.user_id, str(error))
+            await ingest_client.mark_failed(
+                request.tenant_id, request.user_id, str(error), job_id=job_id
+            )
         finally:
             await update_status(job_id, status="failed", phase="failed", error=message)
             raise
@@ -401,7 +419,10 @@ def api():
 
     @web.get("/health")
     async def health() -> dict:
-        return {"status": "healthy", "service": APP_NAME}
+        return {
+            "status": "healthy", "service": APP_NAME, "billing_protocol": 1,
+            "settlement_configured": bool(os.environ.get("CRAWLER_SETTLEMENT_URL")),
+        }
 
     @web.post("/analyze", dependencies=[Depends(authorize)])
     async def analyze(request: AnalyzeRequest) -> SiteAnalysis:
@@ -417,10 +438,23 @@ def api():
 
     @web.post("/crawl", dependencies=[Depends(authorize)])
     async def start_crawl(request: CrawlRequest) -> dict:
-        job_id = uuid.uuid4().hex
+        if request.hold_reference and not os.environ.get("CRAWLER_SETTLEMENT_URL"):
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "Crawl-Abrechnung ist auf dem Crawler nicht konfiguriert "
+                    "(CRAWLER_SETTLEMENT_URL fehlt)."
+                ),
+            )
+        job_id = str(request.hold_reference) if request.hold_reference else uuid.uuid4().hex
+        existing = await crawl_statuses.get.aio(job_id)
+        if existing:
+            return {"success": True, "job_id": job_id, "status": existing.get("status", "queued")}
+
         await update_status(
             job_id,
             status="queued",
+            hold_reference=str(request.hold_reference) if request.hold_reference else None,
             phase="queued",
             result={"pages_count": 0, "chunks_count": 0, "skipped_count": 0},
             progress={"stage": "queued", "current": 0, "total": 0, "percent": 0},
@@ -505,3 +539,31 @@ def api():
         return {"success": True, "job_id": job_id, "status": "cancelled", "phase": "cancelled"}
 
     return web
+
+
+@app.function(image=image, secrets=[runtime_secret], schedule=modal.Period(minutes=5), timeout=240)
+async def reconcile_settlements() -> None:
+    # Failed delivery never becomes a free crawl. Keep terminal rows until ack.
+    async for job_id, status in crawl_statuses.items.aio():
+        if not status.get("hold_reference") or status.get("credits_settled"):
+            continue
+        if status.get("status") in {"queued", "running"}:
+            updated = datetime.fromisoformat(status["updated_at"])
+            if (datetime.now(UTC) - updated).total_seconds() < 7200:
+                continue
+            cancellation_failed = False
+            for call_id in {status.get("call_id"), status.get("finalizer_call_id")} - {None}:
+                try:
+                    await modal.FunctionCall.from_id(call_id).cancel.aio()
+                except Exception:
+                    cancellation_failed = True
+            if cancellation_failed:
+                continue
+            await update_status(
+                job_id,
+                status="failed",
+                phase="failed",
+                error="Der Crawl hat das Zeitlimit überschritten. Bitte starte ihn erneut.",
+            )
+        else:
+            await update_status(job_id)

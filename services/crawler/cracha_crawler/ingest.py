@@ -141,6 +141,7 @@ class RagIngestClient:
         user_id: str,
         pages: list[Page],
         known_items: dict[str, dict] | None = None,
+        job_id: str | None = None,
     ) -> UploadResult:
         """Queue pages for indexing and return immediately.
 
@@ -157,6 +158,8 @@ class RagIngestClient:
                     "user_id": user_id,
                     "pages": [page.model_dump() for page in batch],
                 }
+                if job_id is not None:
+                    payload["job_id"] = job_id
                 # The first batch of a job pays for the one scan; every later
                 # batch reuses what came back, including the empty listing a
                 # first crawl produces.
@@ -177,6 +180,7 @@ class RagIngestClient:
         active_keys: list[str],
         attempts: int,
         on_progress: ProgressCallback | None = None,
+        job_id: str | None = None,
     ) -> IndexStatus:
         async with httpx.AsyncClient(timeout=180) as client:
             status = await self._wait_for_index(
@@ -187,6 +191,7 @@ class RagIngestClient:
                 on_progress,
                 attempts=attempts,
                 stall_seconds=INDEX_STALL_SECONDS,
+                job_id=job_id,
             )
             # A knowledge base whose pages answer questions is finished, even if
             # AI Search never flips the last few items to "completed". Leaving it
@@ -194,7 +199,12 @@ class RagIngestClient:
             # discarded a working index.
             if status.complete or status.searchable_count > 0:
                 await self._complete(
-                    client, database_id, user_id, active_keys, status.chunks_count
+                    client,
+                    database_id,
+                    user_id,
+                    active_keys,
+                    status.chunks_count,
+                    job_id=job_id,
                 )
             return status
 
@@ -205,18 +215,18 @@ class RagIngestClient:
         user_id: str,
         active_keys: list[str],
         chunks_count: int,
+        job_id: str | None = None,
     ) -> None:
-        await self._post(
-            client,
-            "/ingest/complete",
-            {
-                "database_id": database_id,
-                "user_id": user_id,
-                "active_keys": active_keys,
-                "pages_count": len(active_keys),
-                "chunks_count": chunks_count,
-            },
-        )
+        payload: dict[str, object] = {
+            "database_id": database_id,
+            "user_id": user_id,
+            "active_keys": active_keys,
+            "pages_count": len(active_keys),
+            "chunks_count": chunks_count,
+        }
+        if job_id is not None:
+            payload["job_id"] = job_id
+        await self._post(client, "/ingest/complete", payload)
 
     async def _wait_for_index(
         self,
@@ -228,12 +238,15 @@ class RagIngestClient:
         attempts: int = INDEX_STATUS_ATTEMPTS,
         stall_seconds: float | None = None,
         _monotonic: Callable[[], float] = time.monotonic,
+        job_id: str | None = None,
     ) -> IndexStatus:
-        payload = {
+        payload: dict[str, object] = {
             "database_id": database_id,
             "user_id": user_id,
             "active_keys": active_keys,
         }
+        if job_id is not None:
+            payload["job_id"] = job_id
         previous_progress: tuple[int, int] | None = None
         latest = IndexStatus(
             chunks_count=0,
@@ -321,10 +334,19 @@ class RagIngestClient:
         # not an ingestion failure and remains searchable as soon as Cloudflare finishes.
         return latest
 
-    async def mark_failed(self, database_id: str, user_id: str, error: str) -> None:
+    async def mark_failed(
+        self,
+        database_id: str,
+        user_id: str,
+        error: str,
+        job_id: str | None = None,
+    ) -> None:
         async with httpx.AsyncClient(timeout=30) as client:
-            await self._post(
-                client,
-                "/ingest/failed",
-                {"database_id": database_id, "user_id": user_id, "error": error[:500]},
-            )
+            payload: dict[str, object] = {
+                "database_id": database_id,
+                "user_id": user_id,
+                "error": error[:500],
+            }
+            if job_id is not None:
+                payload["job_id"] = job_id
+            await self._post(client, "/ingest/failed", payload)

@@ -1,4 +1,5 @@
 from enum import StrEnum
+from uuid import UUID
 
 from pydantic import BaseModel, Field, HttpUrl, field_validator
 
@@ -10,6 +11,7 @@ class CrawlType(StrEnum):
 
 
 class CrawlRequest(BaseModel):
+    hold_reference: UUID | None = None
     url: HttpUrl
     tenant_id: str = Field(min_length=1, max_length=160)
     user_id: str = Field(min_length=1, max_length=160)

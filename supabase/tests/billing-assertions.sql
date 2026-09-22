@@ -1,0 +1,47 @@
+insert into auth.users values ('00000000-0000-4000-8000-000000000001');
+do $$
+declare u uuid := '00000000-0000-4000-8000-000000000001'; r json; b integer;
+begin
+  r := public.credit_hold(u,20,'crawl-a');
+  assert (r->>'allowed')::boolean, 'first crawl refused';
+  perform public.bind_crawl_hold('crawl-a','kb');
+  assert not (select ready from public.crawl_access where database_id='kb'), 'unsettled crawl usable';
+  r := public.credit_hold(u,20,'crawl-b');
+  assert not (r->>'allowed')::boolean, 'concurrent crawl allowed';
+  update public.credit_holds set created_at=now()-interval '3 days';
+  perform public.credit_state(u);
+  assert exists(select 1 from public.credit_holds where reference='crawl-a'), 'time alone released a hold';
+  r := public.credit_settle('crawl-a',7);
+  assert (r->>'spent')::integer=7 and (r->>'refunded')::integer=13, 'incorrect settlement';
+  assert (select ready from public.crawl_access where database_id='kb'), 'settled crawl not usable';
+  perform public.credit_hold(u,10,'cancelled-crawl');
+  perform public.bind_crawl_hold('cancelled-crawl','kb');
+  perform public.credit_release('cancelled-crawl');
+  assert not (select ready from public.crawl_access where database_id='kb'), 'cancelled crawl usable';
+  perform public.credit_settle('crawl-a',20);
+  r := public.credit_spend(u,5,'chat','request-a',null);
+  assert (r->>'allowed')::boolean, 'first chat refused';
+  r := public.credit_spend(u,5,'chat','request-a',null);
+  assert (r->>'duplicate')::boolean and not (r->>'allowed')::boolean, 'duplicate chat allowed';
+  perform public.reconcile_payment('session',u,'intent',1250,1000,0,null,now(),'{}');
+  perform public.reconcile_payment('session',u,'intent',1250,1000,200,null,now(),'{}');
+  -- A delayed no-refund snapshot must never restore refunded credits.
+  perform public.reconcile_payment('session',u,'intent',1250,1000,0,null,now()+interval '1 minute','{}');
+  assert (select reversed from public.billing_payments where session_id='session')=250, 'refund reversed by stale snapshot';
+  perform public.reconcile_payment('session',u,'intent',1250,1000,200,'needs_response',now(),'{}');
+  assert (select reversed from public.billing_payments where session_id='session')=1250, 'dispute not held';
+  r := public.credit_spend(u,1,'chat','blocked-request',null);
+  assert not (r->>'allowed')::boolean, 'disputed account admitted';
+  perform public.reconcile_payment('session',u,'intent',1250,1000,200,'won',now(),'{}');
+  perform public.reconcile_payment('session',u,'intent',1250,1000,0,'needs_response',now(),'{}');
+  assert (select reversed from public.billing_payments where session_id='session')=250, 'won dispute regressed';
+  assert not (select disputed from public.billing_payments where session_id='session'), 'won dispute still blocked';
+  select balance+reserved into b from public.credit_accounts where user_id=u;
+  assert b=(select sum(amount) from public.credit_entries where user_id=u), 'ledger invariant broken';
+  assert public.admit_request(u,'test',1,60), 'first rate admission failed';
+  assert not public.admit_request(u,'test',1,60), 'rate limit bypassed';
+  assert not has_function_privilege('authenticated','public.credit_spend(uuid,integer,text,text,text)','execute'), 'public billing mutation';
+  assert not has_function_privilege('anon','public.reconcile_payment(text,uuid,text,integer,integer,integer,text,timestamptz,jsonb)','execute'), 'public payment mutation';
+end;
+$$;
+select 'BILLING ASSERTIONS PASSED' as result;

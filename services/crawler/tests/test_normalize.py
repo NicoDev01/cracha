@@ -368,7 +368,7 @@ def test_link_stripping_handles_a_link_that_never_closes() -> None:
     # GitHub's file listing emits `[message](url "title` and the line stops.
     # A regex that insists on the closing bracket leaves the syntax in place,
     # which is the link density AI Search discards documents over.
-    broken = '|  | [test: add suite \(291 tests\)](https://github.com/o/r/commit/abc "test: add'
+    broken = r'|  | [test: add suite \(291 tests\)](https://github.com/o/r/commit/abc "test: add'
     stripped = strip_markdown_links(broken)
     assert "](" not in stripped
     assert "test: add suite" in stripped
@@ -376,3 +376,52 @@ def test_link_stripping_handles_a_link_that_never_closes() -> None:
     # An unrelated bracket at the end of a line is not a link.
     prose = "Ein Array data[0] (siehe oben)"
     assert strip_markdown_links(prose) == prose
+
+
+def test_indented_fenced_code_blocks_are_preserved() -> None:
+    # 4+ spaces indentation on fences (e.g. nested in lists or developer docs)
+    markdown = (
+        "Here is an indented code block:\n\n"
+        "    ```python\n"
+        "    def hello():\n"
+        "        return 'world'\n"
+        "    ```\n\n"
+        "End of block."
+    )
+    normalized = normalize_markdown(markdown)
+    assert "```python" in normalized
+    assert "def hello():" in normalized
+    assert "return 'world'" in normalized
+
+
+def test_fenced_code_blocks_protected_from_toc_and_heading_extraction() -> None:
+    # Code blocks with comments matching headings or list syntax must not be dropped
+    code = (
+        "    ```python\n"
+        "    # Introduction\n"
+        "    # Creating Jobs\n"
+        "    # Job Middleware\n"
+        "    # Dispatching\n"
+        "    # Testing\n"
+        "    - not_a_toc_item = 1\n"
+        "    - not_a_toc_item = 2\n"
+        "    ```\n"
+    )
+    sections = ["Introduction", "Creating Jobs", "Job Middleware", "Dispatching", "Testing"]
+    markdown = (
+        "# Queues\n"
+        + "".join(f"  * {name}\n" for name in sections)
+        + "\n"
+        + code
+        + "\n"
+        + "".join(f"## {name}\n\nEin Absatz zu {name}.\n\n" for name in sections)
+    )
+    cleaned = drop_duplicate_table_of_contents(markdown)
+
+    # TOC list in prose is dropped
+    for name in sections:
+        assert f"  * {name}" not in cleaned
+        assert f"## {name}" in cleaned
+    # But code block content is completely preserved
+    assert "# Introduction" in cleaned
+    assert "- not_a_toc_item = 1" in cleaned

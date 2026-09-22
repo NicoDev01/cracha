@@ -3,88 +3,11 @@ import 'server-only'
 import { createClient as createSupabaseClient, type SupabaseClient } from '@supabase/supabase-js'
 
 import { getWorkerEnv } from './cloudflare'
-import { listOwnedDatabaseIds } from './database-registry'
+import { listOwnedDatabaseIds, coordinatorCommand } from './database-registry'
 
-/**
- * The tariff, in one place.
- *
- * The exchange rate is not a guess. It comes from what the two chargeable
- * actions actually cost us:
- *
- *   A crawled page — a Modal container at 2 CPU and 4 GB
- *   (services/crawler/modal_app.py:158) for one to two seconds, plus indexing,
- *   which Cloudflare AI Search includes at no charge during the open beta.
- *   Around $0.0002.
- *
- *   A chat answer — 10 000 to 20 000 input tokens through the generation model,
- *   because the retrieval budget is 24 000 characters and 64 000 for an
- *   enumerating question (workers/rag-api/src/search.ts:642), plus up to 4 000
- *   output tokens. At Gemini 3.5 Flash Lite rates, around $0.005.
- *
- * So an answer costs us roughly twenty-five times a page. That is the opposite
- * of what it looks like from the outside: crawling is network and a little CPU,
- * both nearly free, while every question pushes the whole context through a
- * language model, and model time is the most expensive thing we buy.
- *
- * The charged ratio is 5, not 25, on purpose. Metering the core interaction at
- * its true relative cost would make people ration the one thing the product is
- * for. The margin holds anyway, because the mixture pays for itself: at 0.8
- * cents a credit, a page earns 98 percent and an answer 88 percent.
- */
-export const CREDITS = {
-  /** One page fetched and indexed. The unit the whole scale is built on. */
-  perPage: 1,
-  /** One answered question, regardless of how long the answer turns out. */
-  perChatMessage: 5,
-  /**
-   * Handed to a new account. Enough to crawl a small site and ask a handful of
-   * questions — a trial, not a free tier. Repeated here for display only: the
-   * number that is actually granted lives in the migration that owns the
-   * signup trigger, because what a new account is worth must not be something
-   * a caller can name.
-   */
-  welcome: 100,
-  /**
-   * Knowledge bases per account. Not a money limit: every knowledge base holds
-   * an AI Search instance, and the account-wide ceiling for those is 5 000.
-   */
-  maxDatabases: 25,
-} as const
-
-export interface CreditPackage {
-  id: string
-  credits: number
-  /** Gross, in euro cents. Matches the Stripe price it names. */
-  priceCents: number
-  /** The Worker var holding the Stripe price id for this package. */
-  priceEnvKey: 'STRIPE_PRICE_CREDITS_S' | 'STRIPE_PRICE_CREDITS_M' | 'STRIPE_PRICE_CREDITS_L'
-  label: string
-}
-
-/**
- * Three sizes, with the discount growing on the larger ones. The smallest is
- * the anchor: ten euros buys 1 250 credits, so a credit is 0.8 cents and the
- * headline is legible — 1 250 pages, or 250 questions, or any mix of the two.
- */
-export const CREDIT_PACKAGES: readonly CreditPackage[] = [
-  { id: 'S', credits: 1_250, priceCents: 1_000, priceEnvKey: 'STRIPE_PRICE_CREDITS_S', label: 'Start' },
-  { id: 'M', credits: 3_500, priceCents: 2_500, priceEnvKey: 'STRIPE_PRICE_CREDITS_M', label: 'Plus' },
-  { id: 'L', credits: 7_500, priceCents: 5_000, priceEnvKey: 'STRIPE_PRICE_CREDITS_L', label: 'Pro' },
-] as const
-
-export function findPackage(id: unknown): CreditPackage | null {
-  return CREDIT_PACKAGES.find((entry) => entry.id === id) ?? null
-}
-
-/** What a crawl of this many pages costs before it starts. */
-export function crawlCost(pages: number): number {
-  return Math.max(0, Math.ceil(pages)) * CREDITS.perPage
-}
-
-/** How many pages a balance still pays for. */
-export function affordablePages(available: number): number {
-  return Math.max(0, Math.floor(available / CREDITS.perPage))
-}
+import { CREDITS, crawlCost } from '../credit-tariff'
+export { CREDITS, CREDIT_PACKAGES, findPackage, crawlCost, affordablePages } from '../credit-tariff'
+export type { CreditPackage } from '../credit-tariff'
 
 /**
  * Every credit movement runs as the service role.
@@ -111,6 +34,7 @@ async function rpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
 }
 
 export interface CreditState {
+  blocked?: boolean
   /** Spendable now. */
   balance: number
   /** Held for crawls that are still running. */
@@ -121,15 +45,18 @@ export interface CreditState {
 }
 
 export async function getCreditState(userId: string): Promise<CreditState> {
-  const [state, ids] = await Promise.all([
-    rpc<{ balance?: number; reserved?: number }>('credit_state', { p_user: userId }),
-    listOwnedDatabaseIds(userId),
+  await reconcileStaleCrawlHolds(userId)
+  const ids = await listOwnedDatabaseIds(userId)
+  const [state, dbCount] = await Promise.all([
+    rpc<{ balance?: number; reserved?: number; blocked?: boolean }>('credit_state', { p_user: userId }),
+    syncDatabaseSlots(userId, ids).catch(() => ids.length),
   ])
 
   return {
     balance: state?.balance ?? 0,
+    blocked: state?.blocked === true,
     reserved: state?.reserved ?? 0,
-    databases: ids.length,
+    databases: Math.max(dbCount, ids.length),
     maxDatabases: CREDITS.maxDatabases,
     costs: { page: CREDITS.perPage, chatMessage: CREDITS.perChatMessage },
   }
@@ -143,13 +70,14 @@ export async function getCreditState(userId: string): Promise<CreditState> {
  * reference; end-to-end request idempotency is a separate outstanding change.
  */
 export async function spendChatCredits(userId: string, reference: string): Promise<boolean> {
-  const result = await rpc<{ allowed?: boolean }>('credit_spend', {
+  const result = await rpc<{ allowed?: boolean; duplicate?: boolean }>('credit_spend', {
     p_user: userId,
     p_amount: CREDITS.perChatMessage,
     p_kind: 'chat',
     p_reference: reference,
     p_detail: null,
   })
+  if (result?.duplicate) throw new DuplicateRequestError()
   return result?.allowed === true
 }
 
@@ -175,11 +103,13 @@ export async function refundChatCredits(userId: string, reference: string): Prom
 
 /** Holds the ceiling a crawl is allowed to reach. Settled when it finishes. */
 export async function holdCrawlCredits(userId: string, pages: number, jobReference: string): Promise<boolean> {
-  const result = await rpc<{ allowed?: boolean }>('credit_hold', {
+  const result = await rpc<{ allowed?: boolean; reason?: string }>('credit_hold', {
     p_user: userId,
     p_amount: crawlCost(pages),
     p_reference: jobReference,
   })
+  if (result?.reason === 'concurrent') throw new Error('Ein Crawl läuft noch oder wartet auf seine Abrechnung. Bitte versuche es später erneut.')
+  if (result?.reason === 'blocked') throw new Error('Bitte kläre die offene Zahlung mit dem Support, bevor du einen neuen Crawl startest.')
   return result?.allowed === true
 }
 
@@ -280,9 +210,166 @@ export class CreditError extends Error {
 }
 
 export function shortfallMessage(reason: ShortfallReason, state: CreditState, required?: number): string {
+  if (state.blocked) return 'Dein Guthaben ist wegen einer offenen Zahlungsprüfung gesperrt. Bitte kontaktiere den Support.'
   if (reason === 'databases') {
     return `Dein Konto darf ${state.maxDatabases} Wissensbasen halten, und die sind angelegt. Lösche eine, um Platz zu schaffen.`
   }
   const need = required ? ` Benötigt werden ${required.toLocaleString('de-DE')}.` : ''
   return `Dein Guthaben reicht nicht: ${state.balance.toLocaleString('de-DE')} Credits verfügbar.${need} Lade Guthaben auf, um weiterzumachen.`
+}
+
+/** Recover uncertain delivery; age alone must never make delivered work free. */
+async function reconcileStaleCrawlHolds(userId: string): Promise<void> {
+  const env = getWorkerEnv()
+  if (!env.MODAL_CRAWLER_URL || !env.CRAWLER_API_SECRET) return
+  const { data, error } = await creditsAdmin().from('credit_holds').select('reference,database_id')
+    .eq('user_id', userId).not('database_id', 'is', null)
+    .lt('created_at', new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()).limit(1)
+  if (error || !data?.length) return
+  const hold = data[0]
+  try {
+    const response = await fetch(`${env.MODAL_CRAWLER_URL.replace(/\/$/, '')}/status/${encodeURIComponent(hold.reference)}`, {
+      headers: { Authorization: `Bearer ${env.CRAWLER_API_SECRET}` }, signal: AbortSignal.timeout(5000),
+    })
+    const status = await response.json() as { status?: string; result?: { indexed_pages?: number; pages_count?: number } }
+    if (response.status !== 404 && (!response.ok || !['completed', 'failed', 'cancelled'].includes(status.status ?? ''))) return
+    if (status.status !== 'completed') {
+      await coordinatorCommand(hold.database_id, 'cancel-job', {
+        jobId: hold.reference, reason: 'Crawl wurde nicht abgeschlossen. Die Reservierung wird freigegeben.',
+      })
+    }
+    await settleCrawlCredits(hold.reference, status.status === 'completed' ? (status.result?.indexed_pages ?? status.result?.pages_count ?? 0) : 0)
+  } catch {
+    console.warn(JSON.stringify({ event: 'crawl_reconciliation_pending', reference: hold.reference }))
+  }
+}
+
+export class DuplicateRequestError extends Error {
+  constructor() { super('Diese Anfrage wurde bereits verarbeitet.'); this.name = 'DuplicateRequestError' }
+}
+
+export async function admitRequest(userId: string, action: string, limit: number, seconds: number): Promise<boolean> {
+  return rpc<boolean>('admit_request', { p_user: userId, p_action: action, p_limit: limit, p_seconds: seconds })
+}
+
+export async function bindCrawlHold(reference: string, databaseId: string): Promise<void> {
+  await rpc('bind_crawl_hold', { p_reference: reference, p_database: databaseId })
+}
+
+export async function hasUnsettledCrawl(userId: string, databaseId: string): Promise<boolean> {
+  const [accessRes, holdsRes] = await Promise.all([
+    creditsAdmin().from('crawl_access').select('ready,reference').eq('user_id', userId).eq('database_id', databaseId).maybeSingle(),
+    creditsAdmin().from('credit_holds').select('reference').eq('user_id', userId).eq('database_id', databaseId).limit(1),
+  ])
+  if (accessRes.error || holdsRes.error) throw new Error('Crawl-Abrechnung konnte nicht geprüft werden.')
+  if (holdsRes.data && holdsRes.data.length > 0) return true
+  if (accessRes.data && accessRes.data.ready === false) {
+    if (!accessRes.data.reference) return false
+    const { data: hold } = await creditsAdmin().from('credit_holds').select('reference').eq('reference', accessRes.data.reference).maybeSingle()
+    return Boolean(hold)
+  }
+  return false
+}
+
+export async function deleteCrawlAccess(databaseId: string, userId: string): Promise<void> {
+  const { data: holds, error: holdsError } = await creditsAdmin()
+    .from('credit_holds')
+    .select('reference')
+    .eq('user_id', userId)
+    .eq('database_id', databaseId)
+  if (holdsError) {
+    throw new Error(`Ausstehende Holds konnten nicht geprüft werden: ${holdsError.message}`)
+  }
+  if (holds && holds.length > 0) {
+    for (const hold of holds) {
+      await releaseCrawlCredits(hold.reference)
+    }
+  }
+  const { error: deleteError } = await creditsAdmin()
+    .from('crawl_access')
+    .delete()
+    .eq('database_id', databaseId)
+    .eq('user_id', userId)
+  if (deleteError) {
+    throw new Error(`Crawl-Zugriff konnte nicht gelöscht werden: ${deleteError.message}`)
+  }
+}
+
+export async function allocateDatabaseSlot(
+  userId: string,
+  databaseId: string,
+  max = CREDITS.maxDatabases,
+  existingIds?: string[],
+): Promise<{ allowed: boolean; currentCount: number }> {
+  try {
+    const result = await rpc<Array<{ allowed?: boolean; current_count?: number }>>('database_allocate', {
+      p_user: userId,
+      p_database: databaseId,
+      p_max: max,
+      p_existing_ids: existingIds && existingIds.length > 0 ? existingIds : null,
+    })
+    const row = Array.isArray(result) ? result[0] : (result as { allowed?: boolean; current_count?: number } | null)
+    if (row && typeof row.allowed === 'boolean') {
+      return { allowed: row.allowed, currentCount: row.current_count ?? 0 }
+    }
+  } catch (err) {
+    console.error('database_allocate failed', err)
+  }
+  throw new Error('Datenbankkontingent konnte nicht geprüft werden.')
+}
+
+export async function claimDatabaseDeletion(
+  userId: string,
+  databaseId: string,
+): Promise<{ allowed: boolean; reason: string }> {
+  try {
+    const result = await rpc<Array<{ allowed?: boolean; reason?: string }>>('database_claim_delete', {
+      p_user: userId,
+      p_database: databaseId,
+    })
+    const row = Array.isArray(result) ? result[0] : (result as { allowed?: boolean; reason?: string } | null)
+    if (row && typeof row.allowed === 'boolean') {
+      return { allowed: row.allowed, reason: row.reason ?? '' }
+    }
+  } catch (err) {
+    console.error('database_claim_delete failed', err)
+  }
+  throw new Error('Datenbank-Löschung konnte nicht koordiniert werden.')
+}
+
+export async function getActiveDeletionClaim(
+  userId: string,
+  databaseId: string,
+): Promise<{ database_id: string; user_id: string; claimed_at: string } | null> {
+  const { data, error } = await creditsAdmin()
+    .from('user_database_deletions')
+    .select('database_id, user_id, claimed_at, completed_at')
+    .eq('database_id', databaseId)
+    .eq('user_id', userId)
+    .is('completed_at', null)
+    .maybeSingle()
+  if (error) {
+    console.error('getActiveDeletionClaim failed', error)
+    throw new Error('Aktiver Lösch-Claim konnte nicht geprüft werden.')
+  }
+  return data ?? null
+}
+
+export async function deallocateDatabaseSlot(userId: string, databaseId: string): Promise<void> {
+  try {
+    await rpc('database_deallocate', { p_user: userId, p_database: databaseId })
+  } catch (err) {
+    console.warn('database_deallocate RPC failed', err)
+    throw new Error('Datenbank-Freigabe konnte nicht durchgeführt werden.')
+  }
+}
+
+export async function syncDatabaseSlots(userId: string, databaseIds: string[]): Promise<number> {
+  try {
+    const count = await rpc<number>('database_sync_batch', { p_user: userId, p_database_ids: databaseIds })
+    if (typeof count === 'number') return count
+  } catch {
+    // Fall back to local list count
+  }
+  return databaseIds.length
 }

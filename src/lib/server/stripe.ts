@@ -41,17 +41,26 @@ export function stripeForm(params: Record<string, unknown>): string {
 }
 
 export async function stripePost<T>(path: string, params: Record<string, unknown>): Promise<T> {
+  return stripeRequest<T>(path, params)
+}
+
+export async function stripeGet<T>(path: string): Promise<T> {
+  return stripeRequest<T>(path)
+}
+
+async function stripeRequest<T>(path: string, params?: Record<string, unknown>): Promise<T> {
   const key = getWorkerEnv().STRIPE_API_KEY
   if (!key) throw new Error('Stripe ist nicht konfiguriert.')
 
   const response = await fetch(`${API}${path}`, {
-    method: 'POST',
+    method: params ? 'POST' : 'GET',
+    signal: AbortSignal.timeout(15_000),
     headers: {
       Authorization: `Bearer ${key}`,
       'Content-Type': 'application/x-www-form-urlencoded',
       'Stripe-Version': API_VERSION,
     },
-    body: stripeForm(params),
+    body: params ? stripeForm(params) : undefined,
   })
   const result = (await response.json().catch(() => ({}))) as { error?: { message?: string } }
   if (!response.ok) {

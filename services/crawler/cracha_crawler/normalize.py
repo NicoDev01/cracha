@@ -30,7 +30,7 @@ EMPTY_LIST_ITEM_RE = re.compile(r"(?m)^[ \t]{0,3}(?:[-*+]|\d+[.)])[ \t]*$\n?")
 EMPTY_HEADING_RE = re.compile(r"(?m)^[ \t]{0,3}#{1,6}[ \t]*$\n?")
 # A fence runs to its closing marker or, if the page truncated mid-block, to the
 # end of the document.
-FENCED_CODE_RE = re.compile(r"(?ms)^[ \t]{0,3}(`{3,}|~{3,}).*?(?:^[ \t]{0,3}\1[ \t]*$|\Z)")
+FENCED_CODE_RE = re.compile(r"(?ms)^[ \t]*(`{3,}|~{3,}).*?(?:^[ \t]*\1[ \t]*$|\Z)")
 
 
 def _strip_links_in_prose(markdown: str) -> str:
@@ -258,23 +258,8 @@ def _comparable(value: str) -> str:
     return re.sub(r"[^0-9a-z]+", " ", value.casefold()).strip()
 
 
-def drop_duplicate_table_of_contents(markdown: str) -> str:
-    """Remove an in-page table of contents whose entries are headings below it.
-
-    Documentation pages carry one on every page: laravel.com/docs repeats 63
-    section names as a list before the first paragraph. A chunk made of nothing
-    but section names matches many questions and answers none of them.
-
-    Only a run whose entries are headings of the same document is dropped, so
-    the text is still there — as the headings it was copying.
-    """
-    headings = {
-        _comparable(match.group(2)) for match in HEADING_RE.finditer(markdown)
-    }
-    if not headings:
-        return markdown
-
-    lines = markdown.splitlines(keepends=True)
+def _drop_duplicate_toc_in_prose(prose: str, headings: set[str]) -> str:
+    lines = prose.splitlines(keepends=True)
     kept: list[str] = []
     run: list[tuple[str, str]] = []
 
@@ -305,6 +290,46 @@ def drop_duplicate_table_of_contents(markdown: str) -> str:
         kept.append(line)
     flush()
     return "".join(kept)
+
+
+def drop_duplicate_table_of_contents(markdown: str) -> str:
+    """Remove an in-page table of contents whose entries are headings below it.
+
+    Documentation pages carry one on every page: laravel.com/docs repeats 63
+    section names as a list before the first paragraph. A chunk made of nothing
+    but section names matches many questions and answers none of them.
+
+    Only a run whose entries are headings of the same document is dropped, so
+    the text is still there — as the headings it was copying. Fenced code
+    blocks are protected so code comments and list syntax inside them are
+    never misidentified as headings or TOC entries.
+    """
+    segments: list[tuple[bool, str]] = []
+    position = 0
+    for fence in FENCED_CODE_RE.finditer(markdown):
+        if fence.start() > position:
+            segments.append((False, markdown[position : fence.start()]))
+        segments.append((True, fence.group(0)))
+        position = fence.end()
+    if position < len(markdown):
+        segments.append((False, markdown[position:]))
+
+    headings: set[str] = set()
+    for is_fence, text in segments:
+        if not is_fence:
+            for match in HEADING_RE.finditer(text):
+                headings.add(_comparable(match.group(2)))
+
+    if not headings:
+        return markdown
+
+    result: list[str] = []
+    for is_fence, text in segments:
+        if is_fence:
+            result.append(text)
+        else:
+            result.append(_drop_duplicate_toc_in_prose(text, headings))
+    return "".join(result)
 
 
 MARKDOWN_TABLE_BLOCK_RE = re.compile(r"(?m)^(?:[ \t]{0,3}\|.*\|[ \t]*\n?){2,}")
