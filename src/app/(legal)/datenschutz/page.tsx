@@ -13,7 +13,7 @@ export default function DatenschutzPage() {
   return (
     <LegalPage
       title="Datenschutzerklärung"
-      updated="20. September 2026"
+      updated="23. September 2026"
       intro={
         <>
           CraCha ist ein Werkzeug, mit dem du öffentlich zugängliche Websites in
@@ -52,6 +52,43 @@ export default function DatenschutzPage() {
           Adresse, übertragene Datenmenge und Browserkennung. Diese Daten sind
           erforderlich, damit die Seite ausgeliefert werden kann, und dienen der
           Abwehr von Angriffen.
+        </p>
+        <p>
+          <strong className="text-foreground">
+            Reichweiten- und Leistungsmessung.
+          </strong>{" "}
+          Wir nutzen Cloudflare Web Analytics, um zu sehen, welche Seiten
+          aufgerufen werden und wie schnell sie laden. Dazu lädt dein Browser ein
+          Skript von <code className="rounded bg-foreground/10 px-1 py-0.5 text-sm">static.cloudflareinsights.com</code>,
+          das beim Laden und beim Verlassen einer Seite Messwerte an Cloudflare
+          sendet: die aufgerufene Seite, die verweisende Seite (Referrer) sowie
+          Lade- und Leistungswerte wie Ladezeiten. URL-Parameter werden nach
+          Angaben von Cloudflare nicht protokolliert. Wie bei jeder Anfrage
+          übermittelt dein Browser dabei technisch auch deine IP-Adresse und
+          seine Browserkennung.
+        </p>
+        <p>
+          Nach Angaben von Cloudflare setzt das Skript keine Cookies und liest
+          oder schreibt keinen Speicher in deinem Browser (weder localStorage
+          noch sessionStorage oder IndexedDB). Die IP-Adresse wird im
+          nächstgelegenen Cloudflare-Rechenzentrum verworfen und nicht in
+          Datenbanken oder Protokollen gespeichert. Cloudflare erkennt Besucher
+          nach eigenen Angaben nicht über IP-Adresse, Browserkennung oder andere
+          Merkmale wieder („Fingerprinting“) und verfolgt einzelne Personen
+          nicht über verschiedene Websites hinweg. Wir sehen ausschließlich
+          zusammengefasste Statistiken und können daraus keine einzelnen
+          Besucher erkennen. Details beschreibt Cloudflare in der{" "}
+          <a
+            href="https://developers.cloudflare.com/speed/observatory/rum-beacon/"
+            className="text-foreground underline underline-offset-4"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Dokumentation zum Web-Analytics-Beacon
+          </a>
+          . Du kannst die Messung verhindern, indem du Skripte dieser Adresse
+          in deinem Browser blockierst, etwa mit einem Inhaltsblocker; die
+          Website funktioniert dann unverändert.
         </p>
         <p>
           <strong className="text-foreground">Bei der Registrierung.</strong> Wir
@@ -107,6 +144,15 @@ export default function DatenschutzPage() {
               — Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an einem
               funktionsfähigen und angriffssicheren Angebot).
             </>,
+            <>
+              <strong className="text-foreground">
+                Reichweiten- und Leistungsmessung mit Cloudflare Web Analytics
+              </strong>{" "}
+              — Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse daran, zu
+              erkennen, welche Seiten genutzt werden und wo Ladezeiten das
+              Angebot verschlechtern). Du kannst dieser Verarbeitung nach Art. 21
+              DSGVO widersprechen.
+            </>,
           ]}
         />
       </Section>
@@ -115,8 +161,10 @@ export default function DatenschutzPage() {
         <p>
           Wir setzen <strong className="text-foreground">keine</strong> Cookies
           zu Analyse-, Werbe- oder Trackingzwecken ein. Es sind keine
-          Analysedienste, keine Werbenetzwerke und keine Social-Media-Plugins
-          eingebunden. Deshalb gibt es auch kein Einwilligungsbanner.
+          Werbenetzwerke und keine Social-Media-Plugins eingebunden. Die in
+          Abschnitt 2 beschriebene Reichweitenmessung mit Cloudflare Web
+          Analytics kommt nach Angaben von Cloudflare ohne Cookies und ohne
+          Speicherung in deinem Browser aus.
         </p>
         <p>Verwendet werden ausschließlich:</p>
         <List
@@ -144,9 +192,9 @@ export default function DatenschutzPage() {
           items={[
             <>
               <strong className="text-foreground">Cloudflare</strong> — Auslieferung
-              der Website, Speicherung der Wissensbasen und der abgerufenen
-              Inhalte sowie Betrieb der Sprachmodelle, die deine Fragen
-              beantworten.
+              der Website, Reichweiten- und Leistungsmessung (Web Analytics),
+              Speicherung der Wissensbasen und der abgerufenen Inhalte sowie
+              Betrieb der Sprachmodelle, die deine Fragen beantworten.
             </>,
             <>
               <strong className="text-foreground">Supabase</strong> — Verwaltung
