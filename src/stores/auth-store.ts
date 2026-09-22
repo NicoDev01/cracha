@@ -292,10 +292,6 @@ export const useAuthStore = create<AuthState>()(
             provider: 'google',
             options: {
               redirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
-              queryParams: {
-                access_type: 'offline',
-                prompt: 'consent'
-              }
             }
           })
 
