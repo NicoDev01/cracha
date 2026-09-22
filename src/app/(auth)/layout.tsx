@@ -49,7 +49,7 @@ export default function AuthLayout({
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">CraCha</h1>
-                <p className="text-sm text-gray-600">RAG-as-a-Service</p>
+                <p className="text-sm text-gray-600">Deine Fragen. Deine Website-Quellen.</p>
               </div>
             </div>
           </div>
@@ -98,7 +98,7 @@ export default function AuthLayout({
             </div>
             <div>
               <h1 className="text-2xl font-bold text-gray-900">CraCha</h1>
-              <p className="text-sm text-gray-600">RAG-as-a-Service</p>
+              <p className="text-sm text-gray-600">Deine Fragen. Deine Website-Quellen.</p>
             </div>
           </div>
         </div>

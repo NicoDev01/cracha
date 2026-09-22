@@ -8,6 +8,7 @@ type GatewayAIStreamRun = (
 
 export interface StreamingGenerationResult {
   model: string
+  usedModel: string
   /** The primary model failed and the standby answered instead. */
   fallback: boolean
   text: AsyncGenerator<string>
@@ -69,7 +70,7 @@ SETS AND ENUMERATIONS
 - A source marked "source_type: collection_page_complete" defines the scope of that set on its own. Enumerate every item it lists, keep the original spelling, and add NO items from other sources even when they look topically related. Other sources may only add detail to items that source already names.
 - A source marked "source_type: collection_page_partial" contains only the beginning of a longer overview. Enumerate everything it does contain, then add one short sentence saying the source shows only part of the list.
 - The source_type markers are internal metadata. Never mention, quote or translate them; write normally, for example "The team consists of:".
-- Do not hedge about completeness otherwise. Never write "possibly incomplete", "the source does not claim to be exhaustive" or any equivalent. The mere absence of an explicit completeness claim is not a limitation. Report incompleteness only when a source is marked partial or its own wording says so, for example "a selection", "among others", "examples".
+- Scope completeness claims to the provided sources, never to the entire website or the real world. Say "The provided overview lists" rather than claiming the set is universally complete. If a source is partial or says "a selection", "among others" or "examples", explicitly state that limitation. Do not infer missing entries or promise that uncrawled pages contain none.
 - When the question asks how many there are as well as which ones, write the list FIRST and state the total AFTER it. Write that list as a NUMBERED list, never as bullet points, and let the last number you wrote be the total. Never state a total before the list, never take a number the sources state instead of counting, and never state a total that differs from the last number in your own list.
 - Before answering, silently verify that names, numbers and enumerations are complete, deduplicated and covered by the context.
 
@@ -88,53 +89,121 @@ OUTPUT
 - Start directly with the answer. Do not restate the question.
 - Never produce a section named Sources, Quellen or References, and never print a source list or URLs. Sources are displayed separately in the user interface.`
 
-function getStreamDelta(payload: unknown): string {
-  if (!payload || typeof payload !== 'object') return ''
-  const record = payload as {
-    response?: unknown
-    choices?: Array<{ delta?: { content?: unknown }; message?: { content?: unknown } }>
-    candidates?: Array<{ content?: { parts?: Array<{ text?: unknown }> } }>
-    error?: string | { message?: string }
-  }
-  if (record.error) {
-    throw new Error(typeof record.error === 'string' ? record.error : record.error.message ?? 'Das Antwortmodell meldete einen Fehler.')
-  }
-  if (typeof record.response === 'string') return record.response
+export const VERIFICATION_SYSTEM_PROMPT = `You are CraCha, a rigorous Content Verification and Contradiction Analysis assistant.
+Your task is to audit the provided text draft against the indexed knowledge base sources.
 
-  const choiceText = record.choices?.[0]?.delta?.content ?? record.choices?.[0]?.message?.content
-  if (typeof choiceText === 'string') return choiceText
+VERIFICATION GOALS:
+1. Identify factual contradictions: Compare claims, features, statements, or promises in the draft against the source context.
+2. Identify outdated pricing and numbers: Check prices, tariffs, discounts, limits, dates, and version numbers. Flag any discrepancy or outdated information.
+3. Identify ungrounded or misleading claims: Highlight assertions in the draft that cannot be verified from the sources.
+4. Confirm verified claims: Clearly acknowledge statements in the draft that are accurate and supported by the sources.
 
-  return record.candidates?.[0]?.content?.parts
-    ?.map((part) => typeof part.text === 'string' ? part.text : '')
-    .join('') ?? ''
+STRUCTURE OF YOUR REPORT:
+- ## Zusammenfassung (Executive Summary of findings: status, accuracy rating)
+- ## Widersprüche & Veraltete Angaben (Specific contradictions, wrong prices, outdated facts, citing sources [n])
+- ## Nicht belegte Aussagen (Claims in the draft not found in the sources)
+- ## Bestätigte Angaben (Accurate statements directly verified by sources [n])
+- ## Empfohlene Korrekturen (Concrete wording recommendations to resolve issues)
+
+RULES:
+- Ground every critique and confirmation in the provided source context with citations [n].
+- Never invent facts. If the sources do not mention a topic, state that it is unverified.
+- Answer in the language of the provided draft or question (default German).`
+
+
+export class GenerationError extends Error {
+  constructor(public readonly code: 'incomplete' | 'timeout' | 'invalid_stream' | 'ungrounded' | 'aborted') {
+    const messages = {
+      incomplete: 'Die Antwort wurde vom Modell nicht vollständig erzeugt. Bitte grenze die Frage ein und versuche es erneut.',
+      timeout: 'Die Antwort hat zu lange gedauert. Bitte versuche es erneut.',
+      invalid_stream: 'Das Antwortmodell hat keine gültige vollständige Antwort geliefert.',
+      ungrounded: 'Die erzeugte Liste ließ sich nicht mit den Quellen belegen. Bitte grenze die Frage ein.',
+      aborted: 'Die Antwort wurde abgebrochen.',
+    }
+    super(messages[code])
+    this.name = 'GenerationError'
+  }
 }
 
-async function* readTextDeltas(stream: ReadableStream<Uint8Array | string>): AsyncGenerator<string> {
+const STARTUP_TIMEOUT_MS = 30_000
+const IDLE_TIMEOUT_MS = 20_000
+const TOTAL_TIMEOUT_MS = 120_000
+const MAX_FRAME_CHARACTERS = 1_000_000
+
+// The binding has no portable abort option. Bound our wait and cancel a stream
+// arriving after timeout; once opened, reader cancellation stops consumption.
+async function bounded<T>(work: Promise<T>, milliseconds: number, signal?: AbortSignal): Promise<T> {
+  if (signal?.aborted) throw new GenerationError('aborted')
+  if (milliseconds <= 0) throw new GenerationError('timeout')
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let onAbort: (() => void) | undefined
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new GenerationError('timeout')), Math.max(0, milliseconds))
+        onAbort = () => reject(new GenerationError('aborted'))
+        signal?.addEventListener('abort', onAbort, { once: true })
+      }),
+    ])
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
+    if (onAbort) signal?.removeEventListener('abort', onAbort)
+  }
+}
+
+function getStreamDelta(payload: unknown): { text: string; complete: boolean } {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new GenerationError('invalid_stream')
+  const record = payload as {
+    response?: unknown
+    choices?: Array<{ finish_reason?: string | null; delta?: { content?: unknown }; message?: { content?: unknown } }>
+    candidates?: Array<{ finishReason?: string; content?: { parts?: Array<{ text?: unknown }> } }>
+    error?: unknown
+    promptFeedback?: { blockReason?: string }
+  }
+  if (record.error || record.promptFeedback?.blockReason) throw new GenerationError('invalid_stream')
+  const reason = record.choices?.[0]?.finish_reason ?? record.candidates?.[0]?.finishReason
+  if (reason === 'length' || reason === 'MAX_TOKENS') throw new GenerationError('incomplete')
+  if (reason && reason !== 'stop' && reason !== 'STOP') throw new GenerationError('invalid_stream')
+  const complete = reason === 'stop' || reason === 'STOP'
+  if (typeof record.response === 'string') return { text: record.response, complete }
+  const choiceText = record.choices?.[0]?.delta?.content ?? record.choices?.[0]?.message?.content
+  if (typeof choiceText === 'string') return { text: choiceText, complete }
+  return {
+    text: record.candidates?.[0]?.content?.parts
+      ?.map((part) => typeof part.text === 'string' ? part.text : '').join('') ?? '',
+    complete,
+  }
+}
+
+async function* readTextDeltas(
+  stream: ReadableStream<Uint8Array | string>,
+  deadline: number,
+  signal?: AbortSignal,
+): AsyncGenerator<string> {
   const reader = stream.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
-
+  let complete = false
+  let ended = false
   const parseFrame = (frame: string): string => {
-    const data = frame
-      .split(/\r?\n/)
-      .filter((line) => line.startsWith('data:'))
-      .map((line) => line.slice(5).trimStart())
-      .join('\n')
-    if (!data || data === '[DONE]') return ''
-    try {
-      return getStreamDelta(JSON.parse(data))
-    } catch (error) {
-      if (error instanceof SyntaxError) return data
-      throw error
-    }
+    const data = frame.split(/\r?\n/).filter((line) => line.startsWith('data:'))
+      .map((line) => line.slice(5).trimStart()).join('\n')
+    if (!data) return '' // SSE comments/keepalives are not answer text.
+    if (data === '[DONE]') { complete = true; return '' }
+    let payload: unknown
+    try { payload = JSON.parse(data) } catch { throw new GenerationError('invalid_stream') }
+    const result = getStreamDelta(payload)
+    if (complete && result.text) throw new GenerationError('invalid_stream')
+    complete ||= result.complete
+    return result.text
   }
-
   try {
     while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
+      const { done, value } = await bounded(reader.read(), Math.min(IDLE_TIMEOUT_MS, deadline - Date.now()), signal)
+      if (done) { ended = true; break }
       buffer += typeof value === 'string' ? value : decoder.decode(value, { stream: true })
-
+      if (buffer.length > MAX_FRAME_CHARACTERS) throw new GenerationError('invalid_stream')
       const frames = buffer.split(/\r?\n\r?\n/)
       buffer = frames.pop() ?? ''
       for (const frame of frames) {
@@ -142,11 +211,14 @@ async function* readTextDeltas(stream: ReadableStream<Uint8Array | string>): Asy
         if (delta) yield delta
       }
     }
-
     buffer += decoder.decode()
     const finalDelta = parseFrame(buffer)
     if (finalDelta) yield finalDelta
+    if (!complete) throw new GenerationError('incomplete')
+  } catch (error) {
+    throw error instanceof GenerationError ? error : new GenerationError('invalid_stream')
   } finally {
+    if (!ended) void reader.cancel().catch(() => undefined)
     reader.releaseLock()
   }
 }
@@ -239,24 +311,30 @@ export async function* groundListEntries(
     return
   }
   const allBlocks = blocks.map((block) => ({ n: block.n, paddedText: paddedBlockText(block.text) }))
-  // When retrieval identified a collection page, it defines the set. Entries
-  // found only on unrelated pages are not members of it — production listed
-  // people from a blog post and a product page as team members.
-  //
-  // Only a block retrieval marked authoritative may reject entries. A truncated
-  // overview genuinely lacks its later entries, and a collection page found by
-  // result evidence rather than by the wording of the question may not be the
-  // set the user meant. Deleting valid lines is worse than keeping a stray one.
-  const collection = blocks
-    .filter((block) => block.authoritative)
+  const collectionBlocks = blocks
+    .filter((block) => block.authoritative || block.collection)
     .map((block) => ({ n: block.n, paddedText: paddedBlockText(block.text) }))
-  const normalized = collection.length ? collection : allBlocks
 
-  // A run of list entries is held back until it ends, so the decision can be
-  // taken over the whole list rather than line by line. Production answered
-  // "zähle alle Mitarbeiter auf" with an intro and nothing else: retrieval had
-  // picked the wrong page as the set, and every entry was rejected one at a
-  // time with no way to notice. Prose still streams immediately.
+  const groundEntry = (line: string): string => {
+    // 1. Hierarchy: First match against collection blocks
+    if (collectionBlocks.length > 0) {
+      const groundedCollection = groundListEntry(line, collectionBlocks)
+      if (groundedCollection !== null) return groundedCollection
+    }
+    // 2. Hierarchy: If not supported by collection, check against allBlocks
+    const groundedAll = groundListEntry(line, allBlocks)
+    if (groundedAll !== null) return groundedAll
+
+    // 3. Fallback: unconfirmed entry remains without invented citation number
+    const match = LIST_ITEM.exec(line)
+    if (match) {
+      const [, bullet, body] = match
+      const plainBody = body.replace(CITATION_MARKERS, '').trim()
+      return `${bullet}${plainBody}`
+    }
+    return line
+  }
+
   let lineBuffer = ''
   interface PendingLine {
     line: string
@@ -266,17 +344,64 @@ export async function* groundListEntries(
   }
   let pending: PendingLine[] = []
 
+  interface ListLevel {
+    indent: number
+    type: 'ordered' | 'unordered'
+    index: number
+  }
+
   const flush = function* (): Generator<string> {
     if (!pending.length) return
-    const entries = pending.filter((item) => item.entry)
-    // Rejecting every single entry means the scope was wrong, not the answer.
-    const rejectedAll = entries.length > 0 && entries.every((item) => item.grounded === null)
-    if (rejectedAll) {
-      console.warn(JSON.stringify({ event: 'grounding_rejected_every_entry', entries: entries.length }))
+    const kept = pending.filter((item) => !item.entry || item.grounded !== null)
+    const levels: ListLevel[] = []
+    let blankLineCount = 0
+    const output: string[] = []
+
+    for (const item of kept) {
+      if (!item.entry) {
+        blankLineCount += 1
+        if (blankLineCount >= 2) {
+          levels.length = 0
+        }
+        output.push(`${item.line}${item.terminator}`)
+        continue
+      }
+      blankLineCount = 0
+
+      const line = item.grounded ?? item.line
+      const indentMatch = /^(\s*)/u.exec(line)
+      const indent = indentMatch ? indentMatch[1].replace(/\t/g, '    ').length : 0
+      const orderedMatch = /^(\s*)(\d+)([.)]\s+)(.*)$/u.exec(line)
+
+      while (levels.length > 0 && levels[levels.length - 1].indent > indent) {
+        levels.pop()
+      }
+
+      if (orderedMatch) {
+        if (levels.length > 0 && levels[levels.length - 1].indent === indent) {
+          const top = levels[levels.length - 1]
+          if (top.type === 'ordered') {
+            top.index += 1
+          } else {
+            top.type = 'ordered'
+            top.index = 1
+          }
+        } else {
+          levels.push({ indent, type: 'ordered', index: 1 })
+        }
+        const currentIndex = levels[levels.length - 1].index
+        const [, leadingSpaces, , punct, rest] = orderedMatch
+        output.push(`${leadingSpaces}${currentIndex}${punct}${rest}${item.terminator}`)
+      } else {
+        if (levels.length > 0 && levels[levels.length - 1].indent === indent) {
+          levels[levels.length - 1].type = 'unordered'
+          levels[levels.length - 1].index = 0
+        } else {
+          levels.push({ indent, type: 'unordered', index: 0 })
+        }
+        output.push(`${line}${item.terminator}`)
+      }
     }
-    const output = pending
-      .filter((item) => !item.entry || rejectedAll || item.grounded !== null)
-      .map((item) => `${!item.entry || rejectedAll ? item.line : item.grounded}${item.terminator}`)
     pending = []
     yield* output
   }
@@ -297,7 +422,7 @@ export async function* groundListEntries(
     pending.push({
       line,
       terminator,
-      grounded: isEntry ? groundListEntry(line, normalized) : line,
+      grounded: isEntry ? groundEntry(line) : line,
       entry: isEntry,
     })
   }
@@ -312,98 +437,205 @@ export async function* groundListEntries(
   yield* flush()
 }
 
-async function openModelStream(input: {
-  ai: CloudflareEnv['AI']
+
+export function formatGeminiContents(
+  history: Array<{ role: 'user' | 'assistant'; content: string }>,
+  question: string,
+  context: string,
+  mode: 'default' | 'verification' = 'default',
+): Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> {
+  const trimmed = trimHistory(history)
+  const turns: Array<{ role: 'user' | 'model'; text: string }> = []
+  for (const message of trimmed) {
+    const text = message.content.trim()
+    if (!text) continue
+    turns.push({
+      role: message.role === 'assistant' ? 'model' : 'user',
+      text,
+    })
+  }
+
+  // Gemini requires: first turn must be 'user'
+  while (turns.length > 0 && turns[0].role === 'model') {
+    turns.shift()
+  }
+
+  // Merge adjacent turns with identical roles
+  const merged: Array<{ role: 'user' | 'model'; text: string }> = []
+  for (const turn of turns) {
+    const prev = merged[merged.length - 1]
+    if (prev && prev.role === turn.role) {
+      prev.text += `\n\n${turn.text}`
+    } else {
+      merged.push({ ...turn })
+    }
+  }
+
+  const promptPrefix = mode === 'verification' ? 'Zu prüfender Textentwurf:' : 'Frage:'
+  const finalUserText = `${promptPrefix}\n${question}\n\nQuellenkontext:\n${context}`
+  const lastTurn = merged[merged.length - 1]
+  if (lastTurn && lastTurn.role === 'user') {
+    lastTurn.text += `\n\n${finalUserText}`
+  } else {
+    merged.push({ role: 'user', text: finalUserText })
+  }
+
+  return merged.map((t) => ({
+    role: t.role,
+    parts: [{ text: t.text }],
+  }))
+}
+
+export interface ModelStreamInput {
+  ai?: CloudflareEnv['AI']
   model: string
   question: string
   history: Array<{ role: 'user' | 'assistant'; content: string }>
   context: string
   blocks?: ContextBlock[]
-}): Promise<ReadableStream<Uint8Array | string>> {
+  signal?: AbortSignal
+  gatewayId?: string
+  apiKey?: string
+  mode?: 'default' | 'verification'
+}
+
+async function openModelStream(input: ModelStreamInput): Promise<ReadableStream<Uint8Array | string>> {
   // A complete enumeration of a collection page needs room; 2 000 tokens
   // truncated long lists before the model was finished.
   const maxTokens = 4_000
+  const systemPrompt = input.mode === 'verification' ? VERIFICATION_SYSTEM_PROMPT : SYSTEM_PROMPT
+  const promptPrefix = input.mode === 'verification' ? 'Zu prüfender Textentwurf:' : 'Frage:'
+
+  // 1. BYOK: Direct Google AI Studio / Gemini API if user supplied an apiKey
+  if (input.apiKey) {
+    const rawModel = input.model.replace(/^(google\/|@cf\/)/, '')
+    const cleaned = rawModel.trim().toLowerCase().replace(/\s+/g, '-')
+    const geminiModel = cleaned.startsWith('gemini-') ? cleaned : 'gemini-3.8-flash'
+    const contents = formatGeminiContents(input.history, input.question, input.context, input.mode)
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:streamGenerateContent?alt=sse`
+    const response = await fetch(url, {
+      method: 'POST',
+      signal: input.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': input.apiKey,
+      },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        contents,
+        generationConfig: { maxOutputTokens: maxTokens, temperature: 0.1 },
+      }),
+    })
+    if (!response.ok || !response.body) {
+      throw new Error(`Google AI Studio API-Fehler (${response.status})`)
+    }
+    return response.body as ReadableStream<Uint8Array>
+  }
+
+  if (!input.ai) {
+    throw new Error('Kein Workers-AI-Binding verfügbar.')
+  }
+
+  const gatewayId = input.gatewayId ?? (typeof process !== 'undefined' ? (process.env.CF_AI_GATEWAY_ID || process.env.AI_GATEWAY_ID) : undefined)
+  const gatewayOptions = gatewayId ? { gateway: { id: gatewayId, collectLog: false } } : undefined
   const runModel = input.ai.run.bind(input.ai) as GatewayAIStreamRun
+
   if (input.model.startsWith('google/gemini-')) {
-    const stream = await runModel(input.model, {
-      systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-      contents: [
-        ...trimHistory(input.history).map((message) => ({
-          role: message.role === 'assistant' ? 'model' as const : 'user' as const,
-          parts: [{ text: message.content }],
-        })),
-        {
-          role: 'user' as const,
-          parts: [{ text: `Frage:\n${input.question}\n\nQuellenkontext:\n${input.context}` }],
-        },
-      ],
+    const contents = formatGeminiContents(input.history, input.question, input.context, input.mode)
+    const body = {
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+      contents,
       generationConfig: { maxOutputTokens: maxTokens, temperature: 0.1 },
       stream: true,
-    }, {
-      gateway: { id: 'default', collectLog: true },
-    })
+    }
+    const stream = await (gatewayOptions ? runModel(input.model, body, gatewayOptions) : runModel(input.model, body))
     if (!stream || typeof stream.getReader !== 'function') {
       throw new Error('Das primäre Antwortmodell lieferte keinen Stream.')
     }
     return stream
   }
 
-  const stream = await runModel(input.model, {
+  const body = {
     messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: systemPrompt },
       ...trimHistory(input.history),
       {
         role: 'user',
-        content: `Frage:\n${input.question}\n\nQuellenkontext:\n${input.context}`,
+        content: `${promptPrefix}\n${input.question}\n\nQuellenkontext:\n${input.context}`,
       },
     ],
     max_tokens: maxTokens,
     temperature: 0.1,
     stream: true,
-  }, {
-    gateway: { id: 'default', collectLog: true },
-  })
+  }
+  const stream = await (gatewayOptions ? runModel(input.model, body, gatewayOptions) : runModel(input.model, body))
   if (!stream || typeof stream.getReader !== 'function') {
     throw new Error('Das Fallback-Modell lieferte keinen Stream.')
   }
   return stream
 }
 
-async function prepareTextStream(input: Parameters<typeof openModelStream>[0]): Promise<AsyncGenerator<string>> {
-  const rawText = readTextDeltas(await openModelStream(input))
-  const text = groundListEntries(rawText, input.blocks ?? [])
-  const first = await text.next()
-  if (first.done || !first.value) throw new Error('Das Antwortmodell lieferte keinen Text.')
-
-  return (async function* () {
-    yield first.value
-    yield* text
-  })()
+async function prepareTextStream(input: ModelStreamInput, deadline: number): Promise<AsyncGenerator<string>> {
+  if (input.signal?.aborted) throw new GenerationError('aborted')
+  let acceptingStream = true
+  const opening = openModelStream(input).then((stream) => {
+    if (!acceptingStream) void stream.cancel().catch(() => undefined)
+    return stream
+  })
+  let stream: ReadableStream<Uint8Array | string>
+  try {
+    stream = await bounded(opening, Math.min(STARTUP_TIMEOUT_MS, deadline - Date.now()), input.signal)
+  } catch (error) {
+    acceptingStream = false
+    throw error instanceof GenerationError ? error : new GenerationError('invalid_stream')
+  }
+  const text = groundListEntries(readTextDeltas(stream, deadline, input.signal), input.blocks ?? [])
+  try {
+    const first = await text.next()
+    if (first.done || !first.value) throw new GenerationError('invalid_stream')
+    // Forward return even before next(): an unstarted async-generator wrapper
+    // would never enter its finally block and would leave the model stream open.
+    let firstPending = true
+    const prepared: AsyncGenerator<string> = {
+      async [Symbol.asyncDispose]() { await text.return(undefined) },
+      [Symbol.asyncIterator]() { return prepared },
+      async next() {
+        if (firstPending) { firstPending = false; return first }
+        return text.next()
+      },
+      async return(value) { firstPending = false; return text.return(value) },
+      async throw(error) { firstPending = false; return text.throw(error) },
+    }
+    return prepared
+  } catch (error) {
+    await text.return(undefined)
+    throw error
+  }
 }
 
-export async function streamGroundedAnswer(input: Parameters<typeof openModelStream>[0]): Promise<StreamingGenerationResult> {
+export async function streamGroundedAnswer(input: ModelStreamInput): Promise<StreamingGenerationResult> {
   const primaryModel = input.model || DEFAULT_GENERATION_MODEL
+  const deadline = Date.now() + TOTAL_TIMEOUT_MS
   try {
     return {
       model: primaryModel,
+      usedModel: primaryModel,
       fallback: false,
-      text: await prepareTextStream({ ...input, model: primaryModel }),
+      text: await prepareTextStream({ ...input, model: primaryModel }, deadline),
     }
   } catch (error) {
-    if (primaryModel === FALLBACK_MODEL) throw error
+    if (primaryModel === FALLBACK_MODEL || input.signal?.aborted || Date.now() >= deadline) throw error
     console.warn(JSON.stringify({
       event: 'primary_streaming_model_failed',
       model: primaryModel,
       fallback_model: FALLBACK_MODEL,
-      error: error instanceof Error ? error.message : 'unknown',
+      code: error instanceof GenerationError ? error.code : 'provider_error',
     }))
-    // A flag, not a suffix on the model name. The suffix reached the reader as
-    // `(fallback: primary-model-error)` and forced the interface to parse a
-    // string to learn something the server already knew.
     return {
       model: FALLBACK_MODEL,
+      usedModel: FALLBACK_MODEL,
       fallback: true,
-      text: await prepareTextStream({ ...input, model: FALLBACK_MODEL }),
+      text: await prepareTextStream({ ...input, model: FALLBACK_MODEL, apiKey: undefined }, deadline),
     }
   }
 }

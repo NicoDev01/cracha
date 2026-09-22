@@ -168,6 +168,7 @@ export function DatabaseSelector() {
             <DropdownMenuItem
               key={database.id}
               onClick={() => selectDatabase(database.id)}
+              disabled={databaseStatus(database) !== 'active'}
               className="p-3 cursor-pointer hover:bg-blue-50/50 focus:bg-blue-50/50 dark:hover:bg-blue-900/20 dark:focus:bg-blue-900/20 transition-colors"
             >
               <div className="flex items-start justify-between w-full">
@@ -202,8 +203,23 @@ export function DatabaseSelector() {
                   </div>
                 </div>
 
-                <div className="flex flex-col items-end gap-1 ml-2">
+                <div className="flex flex-col items-end gap-1.5 ml-2">
                   <StatusBadge status={databaseStatus(database)} />
+                  {(database.source_url || database.url || database.urls?.[0]) && (
+                    <button
+                      type="button"
+                      title={`„${database.name}“ neu crawlen / aktualisieren`}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        const targetUrl = database.source_url || database.url || database.urls?.[0] || ''
+                        router.push(`/dashboard/crawl?url=${encodeURIComponent(targetUrl)}&name=${encodeURIComponent(database.name)}`)
+                      }}
+                      className="rounded p-1 text-gray-400 hover:bg-gray-200 hover:text-gray-700 dark:hover:bg-gray-700 dark:hover:text-gray-200 transition-colors"
+                      aria-label={`„${database.name}“ aktualisieren`}
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                    </button>
+                  )}
                 </div>
               </div>
             </DropdownMenuItem>
@@ -211,11 +227,25 @@ export function DatabaseSelector() {
         )}
 
         <DropdownMenuSeparator />
-        <div className="p-2">
+        <div className="p-2 space-y-1">
+          {selectedDb && (selectedDb.source_url || selectedDb.url || selectedDb.urls?.[0]) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full justify-start rounded-full text-brand-600 hover:text-brand-700 hover:bg-brand-50 dark:text-brand-400 dark:hover:bg-brand-950/40"
+              onClick={() => {
+                const targetUrl = selectedDb.source_url || selectedDb.url || selectedDb.urls?.[0] || ''
+                router.push(`/dashboard/crawl?url=${encodeURIComponent(targetUrl)}&name=${encodeURIComponent(selectedDb.name)}`)
+              }}
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Aktive Datenbank aktualisieren
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="sm"
-            className="w-full justify-start rounded-full text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+            className="w-full justify-start rounded-full text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40"
             onClick={() => router.push('/dashboard/crawl')}
           >
             <Database className="w-4 h-4 mr-2" />

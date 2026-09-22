@@ -14,7 +14,7 @@ import {
 } from '@/components/landing/ui/hover-card';
 import { cn } from '@/lib/utils';
 import { ArrowLeftIcon, ArrowRightIcon } from 'lucide-react';
-import { type ComponentProps, useCallback, useEffect, useState } from 'react';
+import { type ComponentProps, useCallback, useSyncExternalStore } from 'react';
 
 export type InlineCitationProps = ComponentProps<'span'>;
 
@@ -129,21 +129,31 @@ export const InlineCitationCarouselIndex = ({
   ...props
 }: InlineCitationCarouselIndexProps) => {
   const { api } = useCarousel();
-  const [current, setCurrent] = useState(0);
-  const [count, setCount] = useState(0);
 
-  useEffect(() => {
-    if (!api) {
-      return;
-    }
+  const subscribe = useCallback(
+    (onStoreChange: () => void) => {
+      if (!api) return () => {};
+      api.on('select', onStoreChange);
+      api.on('reInit', onStoreChange);
+      return () => {
+        api.off('select', onStoreChange);
+        api.off('reInit', onStoreChange);
+      };
+    },
+    [api]
+  );
 
-    setCount(api.scrollSnapList().length);
-    setCurrent(api.selectedScrollSnap() + 1);
+  const count = useSyncExternalStore(
+    subscribe,
+    () => (api ? api.scrollSnapList().length : 0),
+    () => 0
+  );
 
-    api.on('select', () => {
-      setCurrent(api.selectedScrollSnap() + 1);
-    });
-  }, [api]);
+  const current = useSyncExternalStore(
+    subscribe,
+    () => (api ? api.selectedScrollSnap() + 1 : 0),
+    () => 0
+  );
 
   return (
     <div

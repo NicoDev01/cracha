@@ -13,7 +13,7 @@ export default function DatenschutzPage() {
   return (
     <LegalPage
       title="Datenschutzerklärung"
-      updated="10. August 2026"
+      updated="20. September 2026"
       intro={
         <>
           CraCha ist ein Werkzeug, mit dem du öffentlich zugängliche Websites in
@@ -69,8 +69,7 @@ export default function DatenschutzPage() {
           Zählwerte zum Umfang sowie deine Nutzerkennung. Zusätzlich speichern
           wir die Inhalte, die beim Abruf der von dir angegebenen Website
           entstehen. Deine Fragen im Chat werden zur Beantwortung verarbeitet;
-          die Antworten selbst speichern wir nicht dauerhaft auf unseren
-          Systemen.
+          Fragen, Antworten, Quellenverweise und deine lokale Bewertung einer Antwort werden kontobezogen im lokalen Speicher deines Browsers gespeichert. Du kannst Verläufe im Chat löschen und exportieren. Eine Synchronisierung zwischen Geräten findet nicht statt. Für die Antworterzeugung werden die Frage, ein begrenzter Gesprächsverlauf und relevante Quelltexte an die eingesetzten KI-Dienste übermittelt. Die Protokollierung von Frage- und Antwortinhalten am KI-Gateway ist für diese Aufrufe deaktiviert.
         </p>
         <p>
           <strong className="text-foreground">
@@ -130,9 +129,7 @@ export default function DatenschutzPage() {
             </>,
             <>
               <strong className="text-foreground">Lokaler Speicher</strong> deines
-              Browsers für deine Theme-Auswahl (hell oder dunkel) und die Liste
-              deiner zuletzt gestarteten Abrufe. Diese Angaben verlassen deinen
-              Browser nicht und werden bei einem Nutzerwechsel verworfen.
+              Browsers für deine Theme-Auswahl, Chatverläufe mit Quellen und Bewertungen sowie zuletzt gestartete Abrufe. Kontobezogene Verläufe werden beim Nutzerwechsel zurückgesetzt. Fragen und notwendiger Gesprächskontext werden bei einer Anfrage an unsere Dienste übertragen.
             </>,
           ]}
         />
@@ -141,8 +138,7 @@ export default function DatenschutzPage() {
       <Section heading="5. Empfänger und Auftragsverarbeiter">
         <p>
           Wir betreiben CraCha nicht auf eigener Hardware, sondern auf Diensten
-          Dritter. Diese verarbeiten Daten weisungsgebunden für uns auf
-          Grundlage von Verträgen zur Auftragsverarbeitung nach Art. 28 DSGVO:
+          Dritter. Je nach Dienst verarbeiten diese Daten als Auftragsverarbeiter oder in eigener datenschutzrechtlicher Verantwortung:
         </p>
         <List
           items={[
@@ -162,11 +158,13 @@ export default function DatenschutzPage() {
               Abrufe der von dir angegebenen Websites.
             </>,
             <>
-              <strong className="text-foreground">Google</strong> — nur, wenn du
-              die Anmeldung über Google wählst.
+              <strong className="text-foreground">Google</strong> — für die Antworterzeugung mit Gemini über das Cloudflare AI Gateway sowie bei freiwilliger Anmeldung über Google. Zur Generierung erhält das Modell Fragen, begrenzten Gesprächsverlauf und relevante Quelltexte.
             </>,
           ]}
         />
+        <p>
+          Bei Zahlungen verarbeitet Stripe Zahlungs- und Rechnungsdaten. Wir speichern die Zuordnung zu deinem Konto, Zahlungsreferenzen, Credit-Buchungen und die dokumentierte Erklärung zum sofortigen Leistungsbeginn. Vollständige Kartendaten speichern wir nicht. Die Verarbeitung dient der Vertragsabwicklung (Art. 6 Abs. 1 lit. b DSGVO), gesetzlichen Aufbewahrungspflichten (lit. c) sowie der Verhinderung von Missbrauch (lit. f).
+        </p>
         <p>
           Eine Übermittlung deiner Daten zu Werbezwecken oder ein Verkauf an
           Dritte findet nicht statt.
@@ -198,10 +196,7 @@ export default function DatenschutzPage() {
               werden standardmäßig beachtet.
             </>,
             <>
-              Für die Auswahl der Website bist du verantwortlich. Enthält sie
-              personenbezogene Daten Dritter, bist du für diese Verarbeitung der
-              Verantwortliche im Sinne der DSGVO; wir handeln insoweit als
-              Auftragsverarbeiter für dich. Näheres regeln die{" "}
+              Wähle nur Inhalte, die du rechtmäßig abrufen und auswerten darfst. Die datenschutzrechtlichen Pflichten hängen vom Inhalt und deinem Nutzungszweck ab. Näheres regeln die{" "}
               <a href="/nutzungsbedingungen" className="text-foreground underline underline-offset-4">
                 Nutzungsbedingungen
               </a>
@@ -224,8 +219,7 @@ export default function DatenschutzPage() {
             </>,
             <>
               <strong className="text-foreground">Wissensbasen und Inhalte</strong>{" "}
-              werden gelöscht, sobald du die jeweilige Wissensbasis oder dein
-              Konto löschst.
+              werden bei Löschung der Wissensbasis bzw. nach Bearbeitung deiner Kontolöschungsanfrage entfernt. Zahlungs- und Vertragsnachweise bewahren wir auf, soweit gesetzlich erforderlich.
             </>,
             <>
               <strong className="text-foreground">Zwischengespeicherte Suchergebnisse</strong>{" "}
@@ -234,8 +228,7 @@ export default function DatenschutzPage() {
             </>,
             <>
               <strong className="text-foreground">Server-Protokolle</strong> werden
-              von unseren Dienstleistern nach deren Fristen gelöscht, in der
-              Regel innerhalb weniger Tage.
+              nach den für den jeweiligen Dienst eingerichteten Aufbewahrungsfristen gelöscht. Technische Betriebsdaten können Fehler, Zeitpunkte, Nutzer- bzw. Anfragekennungen und Verbrauchswerte enthalten.
             </>,
           ]}
         />

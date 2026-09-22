@@ -1,11 +1,15 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 import { ChevronDown, File, Globe2, ListTree, Loader2, Play, Search, Settings2 } from "lucide-react"
 import { toast } from "sonner"
+
+import Link from "next/link"
+import { CREDITS, affordablePages, crawlCost } from "@/lib/credit-tariff"
+import { useCredits } from "@/hooks/use-credits"
 
 import { apiFetch } from "@/lib/api/request"
 import { Button } from "@/components/ui/button"
@@ -55,11 +59,19 @@ function isCrawlableUrl(value: string) {
 
 const modes = [
   { value: "single" as const, label: "Einzelne Seite", icon: File },
-  { value: "recursive" as const, label: "Ganze Website", icon: Globe2 },
+  { value: "recursive" as const, label: "Verlinkte Seiten", icon: Globe2 },
   { value: "sitemap" as const, label: "Sitemap", icon: ListTree },
 ]
 
-export function CrawlConfigForm({ onStarted }: { onStarted?: () => void }) {
+export function CrawlConfigForm({
+  onStarted,
+  initialValues,
+}: {
+  onStarted?: () => void
+  initialValues?: Partial<CrawlFormValues>
+}) {
+  const { credits, error: creditError, refresh } = useCredits()
+  const analysisRequest = useRef(0)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [analysis, setAnalysis] = useState<AnalysisState>({ status: "idle" })
   const { startCrawl, isRunning } = useCrawlStore()
@@ -68,25 +80,39 @@ export function CrawlConfigForm({ onStarted }: { onStarted?: () => void }) {
   const form = useForm<CrawlFormValues>({
     resolver: zodResolver(crawlConfigSchema),
     defaultValues: {
-      url: "",
-      name: "",
-      type: "recursive",
-      max_depth: 2,
+      url: initialValues?.url ?? "",
+      name: initialValues?.name ?? "",
+      type: initialValues?.type ?? "recursive",
+      max_depth: initialValues?.max_depth ?? 2,
       // Leave the 100-credit trial enough room for questions after indexing.
-      limit: 20,
-      include_patterns: "",
-      exclude_domains: "",
-      respect_robots_txt: true,
-      crawl_all: false,
+      limit: initialValues?.limit ?? 20,
+      include_patterns: initialValues?.include_patterns ?? "",
+      exclude_domains: initialValues?.exclude_domains ?? "",
+      respect_robots_txt: initialValues?.respect_robots_txt ?? true,
+      crawl_all: initialValues?.crawl_all ?? false,
     },
   })
+
+  useEffect(() => {
+    if (initialValues) {
+      if (initialValues.url !== undefined && initialValues.url !== form.getValues("url")) form.setValue("url", initialValues.url)
+      if (initialValues.name !== undefined && initialValues.name !== form.getValues("name")) form.setValue("name", initialValues.name)
+      if (initialValues.type !== undefined && initialValues.type !== form.getValues("type")) form.setValue("type", initialValues.type)
+      if (initialValues.max_depth !== undefined && initialValues.max_depth !== form.getValues("max_depth")) form.setValue("max_depth", initialValues.max_depth)
+      if (initialValues.limit !== undefined && initialValues.limit !== form.getValues("limit")) form.setValue("limit", initialValues.limit)
+      if (initialValues.include_patterns !== undefined && initialValues.include_patterns !== form.getValues("include_patterns")) form.setValue("include_patterns", initialValues.include_patterns)
+      if (initialValues.exclude_domains !== undefined && initialValues.exclude_domains !== form.getValues("exclude_domains")) form.setValue("exclude_domains", initialValues.exclude_domains)
+    }
+  }, [initialValues, form])
 
   const crawlType = form.watch("type")
   const url = form.watch("url")
   const crawlAll = form.watch("crawl_all")
+  const requestedLimit = form.watch("limit")
 
   // A count belongs to the URL it was measured for; editing the URL invalidates it.
   useEffect(() => {
+    ++analysisRequest.current
     setAnalysis({ status: "idle" })
     form.setValue("crawl_all", false)
   }, [url, form])
@@ -94,17 +120,24 @@ export function CrawlConfigForm({ onStarted }: { onStarted?: () => void }) {
   const discovered = analysis.status === "done" ? analysis.total : null
   const cappedTotal = discovered === null ? 0 : Math.min(discovered, MAX_PAGES_PER_CRAWL)
 
+  const requestedPages = crawlType === "single" ? 1 : crawlAll && discovered !== null ? cappedTotal : requestedLimit
+  const allowedPages = credits ? Math.min(requestedPages, affordablePages(credits.balance)) : requestedPages
+  const maximumCost = crawlCost(allowedPages)
+  const remainingQuestions = credits ? Math.floor(Math.max(0, credits.balance - maximumCost) / CREDITS.perChatMessage) : null
+
   const handleAnalyze = async () => {
     if (!isCrawlableUrl(url)) {
       form.setError("url", { message: "Bitte gib zuerst eine gültige URL ein." })
       return
     }
+    const sequence = ++analysisRequest.current
     setAnalysis({ status: "loading" })
     try {
       const response = await apiFetch("/api/admin/crawl/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url }),
+        signal: AbortSignal.timeout(30_000),
       })
       const result = (await response.json().catch(() => ({}))) as {
         success?: boolean
@@ -114,6 +147,7 @@ export function CrawlConfigForm({ onStarted }: { onStarted?: () => void }) {
       if (!response.ok || !result.success || !result.analysis) {
         throw new Error(result.error ?? "Die Website konnte nicht analysiert werden.")
       }
+      if (analysisRequest.current !== sequence) return
       setAnalysis({
         status: "done",
         total: result.analysis.total_pages,
@@ -121,6 +155,7 @@ export function CrawlConfigForm({ onStarted }: { onStarted?: () => void }) {
         truncated: result.analysis.truncated,
       })
     } catch (error) {
+      if (analysisRequest.current !== sequence) return
       setAnalysis({
         status: "error",
         message: error instanceof Error ? error.message : "Die Website konnte nicht analysiert werden.",
@@ -152,6 +187,7 @@ export function CrawlConfigForm({ onStarted }: { onStarted?: () => void }) {
 
     try {
       await startCrawl(config)
+      window.dispatchEvent(new Event("cracha:credits-changed"))
       onStarted?.()
       toast.success("Crawl gestartet. Er läuft im Hintergrund weiter.")
     } catch (error) {
@@ -233,12 +269,12 @@ export function CrawlConfigForm({ onStarted }: { onStarted?: () => void }) {
                     <FormItem className="flex items-center justify-between gap-4 rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900">
                       <div className="min-w-0">
                         <FormLabel>
-                          {`Alle ${new Intl.NumberFormat("de-DE").format(cappedTotal)} Seiten der Sitemap crawlen`}
+                          {`Bis zu ${new Intl.NumberFormat("de-DE").format(cappedTotal)} Seiten der Sitemap einlesen`}
                         </FormLabel>
                         <FormDescription>
                           {discovered > MAX_PAGES_PER_CRAWL
                             ? `Pro Crawl sind derzeit ${MAX_PAGES_PER_CRAWL} Seiten möglich — ${new Intl.NumberFormat("de-DE").format(discovered - MAX_PAGES_PER_CRAWL)} bleiben außen vor.`
-                            : "Erfasst auch Seiten, auf die nichts verlinkt. Eine Sitemap darf unvollständig sein — führt die Website mehr Seiten, findet „Ganze Website“ über die Links mehr."}
+                            : "Erfasst auch Seiten, auf die nichts verlinkt. Eine Sitemap darf unvollständig sein — führt die Website mehr Seiten, findet „Verlinkte Seiten“ über die Links mehr."}
                         </FormDescription>
                       </div>
                       <FormControl>
@@ -268,7 +304,7 @@ export function CrawlConfigForm({ onStarted }: { onStarted?: () => void }) {
               <FormControl>
                 <Input {...field} placeholder="z. B. Produktdokumentation" autoComplete="off" disabled={isRunning} className="h-11 rounded-xl" />
               </FormControl>
-              <FormDescription>Dieser Name erscheint später im Chat und unter Datenbanken.</FormDescription>
+              <FormDescription>Dieser Name erscheint später im Chat und unter Wissensbasen.</FormDescription>
               <FormMessage />
             </FormItem>
           )}
@@ -327,9 +363,9 @@ export function CrawlConfigForm({ onStarted }: { onStarted?: () => void }) {
                   </div>
                   <FormControl>
                     <Slider
-                      min={10}
+                      min={1}
                       max={500}
-                      step={10}
+                      step={1}
                       value={[field.value]}
                       disabled={isRunning}
                       onValueChange={(value) => field.onChange(value[0])}
@@ -337,7 +373,7 @@ export function CrawlConfigForm({ onStarted }: { onStarted?: () => void }) {
                       className="py-2"
                     />
                   </FormControl>
-                  <FormDescription>Für den ersten Test empfehlen wir 20 Seiten. So bleibt von 100 Start-Credits Guthaben für bis zu 16 Fragen übrig (1 Credit pro Seite, 5 pro Frage).</FormDescription>
+                  <FormDescription>Für den ersten Test empfehlen wir 20 Seiten. Eine indexierte Seite kostet {CREDITS.perPage} Credit, eine Antwort {CREDITS.perChatMessage} Credits.</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -420,7 +456,16 @@ export function CrawlConfigForm({ onStarted }: { onStarted?: () => void }) {
           </CollapsibleContent>
         </Collapsible>
 
-        <Button type="submit" disabled={isRunning} className="h-11 w-full gap-2 rounded-xl bg-brand-500 !text-white hover:bg-brand-600 sm:w-auto sm:min-w-44">
+        <div role="status" className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm dark:border-gray-700 dark:bg-gray-800/40">
+          <p className="font-medium">Maximal {maximumCost} Credits für bis zu {allowedPages} Seiten</p>
+          <p className="mt-1 text-gray-500">Abgerechnet werden nur indexierte Seiten. Nicht benötigtes reserviertes Guthaben wird freigegeben. Auch ein erfolgreicher Crawl kann nur einen Teil der Website erfassen.</p>
+          {credits && <p className="mt-2">Verfügbar: {credits.balance} Credits. Danach bleiben mindestens {remainingQuestions} bezahlbare Fragen, sofern du zwischenzeitlich kein weiteres Guthaben verbrauchst.</p>}
+          {credits && allowedPages < requestedPages && <p className="mt-2 text-amber-700 dark:text-amber-400">Dein Guthaben begrenzt diesen Crawl auf {allowedPages} statt {requestedPages} Seiten. <Link className="underline" href="/dashboard#guthaben">Guthaben aufladen</Link></p>}
+          {remainingQuestions === 0 && allowedPages > 0 && <p className="mt-2 text-amber-700 dark:text-amber-400">Bei voller Ausschöpfung bleibt kein Guthaben für Fragen. Reduziere die Seitenzahl oder lade Guthaben auf.</p>}
+          {creditError && <p className="mt-2">{creditError} <button type="button" className="underline" onClick={() => void refresh()}>Erneut laden</button></p>}
+          {!credits && !creditError && <p className="mt-2">Dein verfügbares Guthaben wird geladen. Der Server prüft das endgültige Limit beim Start.</p>}
+        </div>
+        <Button type="submit" disabled={isRunning || (credits !== null && allowedPages === 0)} className="h-11 w-full gap-2 rounded-xl bg-brand-500 !text-white hover:bg-brand-600 sm:w-auto sm:min-w-44">
           {isRunning ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" />}
           {isRunning ? "Crawl läuft" : "Crawl starten"}
         </Button>

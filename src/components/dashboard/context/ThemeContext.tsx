@@ -2,6 +2,7 @@
 
 import type React from "react";
 import { createContext, useState, useContext, useEffect } from "react";
+import { useMounted } from "@/hooks/use-mounted";
 
 type Theme = "light" | "dark";
 
@@ -18,20 +19,15 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
   // Dark is what the site is designed for, so it is what a first-time visitor
   // gets. The inline script in the root layout has already put the class on
   // <html>; this only has to agree with it.
-  const [theme, setTheme] = useState<Theme>("dark");
-  const [isInitialized, setIsInitialized] = useState(false);
-
-  useEffect(() => {
-    // This code will only run on the client side
+  const isMounted = useMounted();
+  const [theme, setTheme] = useState<Theme>(() => {
+    if (typeof window === "undefined") return "dark";
     const savedTheme = localStorage.getItem("theme") as Theme | null;
-    const initialTheme = savedTheme === "light" ? "light" : "dark";
-
-    setTheme(initialTheme);
-    setIsInitialized(true);
-  }, []);
+    return savedTheme === "light" ? "light" : "dark";
+  });
 
   useEffect(() => {
-    if (isInitialized) {
+    if (isMounted) {
       localStorage.setItem("theme", theme);
       if (theme === "dark") {
         document.documentElement.classList.add("dark");
@@ -39,7 +35,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
         document.documentElement.classList.remove("dark");
       }
     }
-  }, [theme, isInitialized]);
+  }, [theme, isMounted]);
 
   const toggleTheme = () => {
     setTheme((prevTheme) => (prevTheme === "light" ? "dark" : "light"));

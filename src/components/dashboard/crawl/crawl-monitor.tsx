@@ -56,6 +56,10 @@ export function CrawlMonitor() {
     return () => window.clearInterval(timer)
   }, [currentJob, isRunning])
 
+  useEffect(() => {
+    if (currentJob && ["completed", "failed", "cancelled"].includes(currentJob.status)) window.dispatchEvent(new Event("cracha:credits-changed"))
+  }, [currentJob?.id, currentJob?.status])
+
   if (!currentJob) {
     return (
       <aside className="flex min-h-72 flex-col items-center justify-center rounded-2xl border border-dashed border-gray-200 bg-gray-50/60 p-7 text-center dark:border-gray-700 dark:bg-gray-800/30">
@@ -195,15 +199,16 @@ export function CrawlMonitor() {
           <div className="mt-5 grid grid-cols-2 gap-2">
             <div className="rounded-xl bg-gray-50 p-3 dark:bg-gray-800/60">
               <strong className="block text-lg text-gray-900 dark:text-white">{currentJob.pages_crawled}</strong>
-              <span className="text-[11px] text-gray-500">Seiten</span>
+              <span className="text-[11px] text-gray-500">Abgerufene Seiten</span>
             </div>
             <div className="rounded-xl bg-gray-50 p-3 dark:bg-gray-800/60">
-              <strong className="block text-lg text-gray-900 dark:text-white">{currentJob.chunks_created}</strong>
-              <span className="text-[11px] text-gray-500">Abschnitte</span>
+              <strong className="block text-lg text-gray-900 dark:text-white">{currentJob.indexed_pages ?? '–'}</strong>
+              <span className="text-[11px] text-gray-500">Indexierte Seiten</span>
             </div>
           </div>
         )}
 
+        {terminal && <p className="mt-3 text-xs leading-5 text-gray-500">{currentJob.pages_skipped} Seiten übersprungen. {currentJob.indexing_pending ? `${currentJob.indexing_pending} Seiten nicht fertig indexiert. ` : ''}Die Wissensbasis bildet nur die erfolgreich eingelesenen Inhalte ab, nicht garantiert die gesamte Website.</p>}
         {quotaNotice && (
           <p className="mt-4 rounded-xl border border-warning-200 bg-warning-50 px-3 py-2 text-xs leading-5 text-warning-700 dark:border-warning-500/30 dark:bg-warning-500/10 dark:text-warning-300">
             {quotaNotice}

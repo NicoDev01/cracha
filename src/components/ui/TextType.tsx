@@ -1,6 +1,6 @@
 "use client";
 
-import { ElementType, useEffect, useRef, useState, createElement } from "react";
+import { ElementType, useEffect, useRef, useState } from "react";
 import { gsap } from "gsap";
 
 interface TextTypeProps {
@@ -174,27 +174,27 @@ const TextType = ({
     hideCursorWhileTyping &&
     (currentCharIndex < textArray[currentTextIndex].length || isDeleting);
 
-  return createElement(
-    Component,
-    {
-      ref: containerRef,
-      className: `text-type ${className}`,
-      ...props,
-    },
-    <span
-      className="text-type__content"
-      style={{ color: getCurrentTextColor() }}
+  return (
+    <Component
+      ref={containerRef}
+      className={`text-type ${className}`}
+      {...props}
     >
-      {displayedText}
-    </span>,
-    showCursor && (
       <span
-        ref={cursorRef}
-        className={`text-type__cursor ${cursorClassName} ${shouldHideCursor ? "text-type__cursor--hidden" : ""}`}
+        className="text-type__content"
+        style={{ color: getCurrentTextColor() }}
       >
-        {cursorCharacter}
+        {displayedText}
       </span>
-    )
+      {showCursor && (
+        <span
+          ref={cursorRef}
+          className={`text-type__cursor ${cursorClassName} ${shouldHideCursor ? "text-type__cursor--hidden" : ""}`}
+        >
+          {cursorCharacter}
+        </span>
+      )}
+    </Component>
   );
 };
 

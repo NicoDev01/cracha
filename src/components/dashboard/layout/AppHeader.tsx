@@ -1,13 +1,14 @@
 "use client";
 import { ThemeToggleButton } from "@/components/dashboard/common/ThemeToggleButton";
-import NotificationDropdown from "@/components/dashboard/header/NotificationDropdown";
 import UserDropdown from "@/components/dashboard/header/UserDropdown";
 import { useSidebar } from "@/components/dashboard/context/SidebarContext";
 import Image from "next/image";
 import Link from "next/link";
 import React from "react";
+import { useCredits } from "@/hooks/use-credits";
 
 const AppHeader: React.FC = () => {
+  const { credits, error } = useCredits();
 
   const { isMobileOpen, toggleSidebar, toggleMobileSidebar } = useSidebar();
 
@@ -29,8 +30,8 @@ const AppHeader: React.FC = () => {
           <button
             className="hidden lg:flex items-center justify-center w-11 h-11 text-gray-500 rounded-lg border border-gray-200 dark:border-gray-800 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 mr-2"
             onClick={handleToggle}
-            aria-label="Toggle Sidebar"
-            title="Toggle Sidebar"
+            aria-label="Seitenleiste umschalten"
+            title="Seitenleiste umschalten"
           >
             {isMobileOpen ? (
               <svg
@@ -88,8 +89,8 @@ const AppHeader: React.FC = () => {
           <button
             className="flex items-center justify-center w-10 h-10 text-gray-500 rounded-lg z-99999 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800 lg:hidden"
             onClick={handleToggle}
-            aria-label="Toggle Sidebar"
-            title="Toggle Sidebar"
+            aria-label="Seitenleiste umschalten"
+            title="Seitenleiste umschalten"
           >
             {isMobileOpen ? (
               <svg
@@ -126,10 +127,11 @@ const AppHeader: React.FC = () => {
 
           {/* Rechts: Theme, User; Notification nur auf Desktop sichtbar */}
           <div className="flex items-center gap-2 2xsm:gap-3">
+            <Link href="/dashboard#guthaben" className="whitespace-nowrap rounded-full border border-gray-200 px-3 py-2 text-xs font-medium dark:border-gray-700" title="Guthaben ansehen und aufladen">
+              {credits ? `${credits.balance.toLocaleString('de-DE')} Credits` : error ? 'Guthaben prüfen' : 'Guthaben'}
+            </Link>
             <ThemeToggleButton className="h-10 w-10" />
-            <div className="hidden lg:block">
-              <NotificationDropdown />
-            </div>
+
             <UserDropdown />
           </div>
         </div>

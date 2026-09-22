@@ -1,12 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/stores/auth-store'
 import { useCrawlStore } from '@/stores/crawl-store'
+import { useMounted } from '@/hooks/use-mounted'
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [isClient, setIsClient] = useState(false)
+  const isClient = useMounted()
   const router = useRouter()
   const initialize = useAuthStore((state) => state.initialize)
   const logout = useAuthStore((state) => state.logout)
@@ -14,8 +15,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const claimCrawlHistory = useCrawlStore((state) => state.claimFor)
 
   useEffect(() => {
-    setIsClient(true)
-    
     // Initialize auth with error handling
     const initAuth = async () => {
       try {

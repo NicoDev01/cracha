@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useMemo, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { Activity, History, Plus, Radar } from "lucide-react"
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -8,6 +9,27 @@ import { useCrawlStore } from "@/stores/crawl-store"
 import { CrawlConfigForm } from "./crawl-config-form"
 import { CrawlJobsList } from "./crawl-jobs-list"
 import { CrawlMonitor } from "./crawl-monitor"
+
+function CrawlConfigWithParams({ onStarted }: { onStarted: () => void }) {
+  const searchParams = useSearchParams()
+  const initialUrl = searchParams.get("url") || ""
+  const initialName = searchParams.get("name") || ""
+  const rawType = searchParams.get("type")
+  const initialType: 'single' | 'recursive' | 'sitemap' | undefined = rawType === "single" || rawType === "recursive" || rawType === "sitemap" ? rawType : undefined
+
+  const initialValues = useMemo(() => ({
+    url: initialUrl,
+    name: initialName,
+    ...(initialType ? { type: initialType } : {}),
+  }), [initialUrl, initialName, initialType])
+
+  return (
+    <CrawlConfigForm
+      onStarted={onStarted}
+      initialValues={initialValues}
+    />
+  )
+}
 
 export function CrawlInterface() {
   const [activeTab, setActiveTab] = useState("new")
@@ -62,7 +84,9 @@ export function CrawlInterface() {
           <TabsContent value="new" className="m-0">
             <div className="mx-auto w-full max-w-3xl p-4 sm:p-6 lg:p-8">
               <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-theme-xs sm:p-7 dark:border-gray-700 dark:bg-gray-900">
-                <CrawlConfigForm onStarted={() => setActiveTab("status")} />
+                <Suspense fallback={<div className="h-64 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800" />}>
+                  <CrawlConfigWithParams onStarted={() => setActiveTab("status")} />
+                </Suspense>
               </div>
             </div>
           </TabsContent>

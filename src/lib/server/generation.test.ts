@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  GenerationError,
+  formatGeminiContents,
+  streamGroundedAnswer,
   groundListEntries,
   groundListEntry,
   paddedBlockText,
@@ -86,13 +89,13 @@ describe('collection page restriction', () => {
     return output
   }
 
-  it('drops entries that only appear outside the collection page', async () => {
-    // Production listed Lena Fellner and Sonja Ahrens as team members.
+  it('matches collection first, then falls back to allBlocks for entries outside collection', async () => {
+    // Match hierarchy: collection first, falls back to allBlocks so valid entries aren't dropped
     const answer = await ground(
       '- Stephan Müller [1]\n- Lena Fellner [2]\n- Fabian Holler [1]',
       [overview, blogPost],
     )
-    expect(answer).toBe('- Stephan Müller [1]\n- Fabian Holler [1]')
+    expect(answer).toBe('- Stephan Müller [1]\n- Lena Fellner [2]\n- Fabian Holler [1]')
   })
 
   it('keeps collection entries and points their citation at the overview', async () => {
@@ -104,10 +107,7 @@ describe('collection page restriction', () => {
     expect(await ground('- Lena Fellner [2]', [blogPost])).toBe('- Lena Fellner [2]')
   })
 
-  it('keeps the whole list when every entry would be rejected', async () => {
-    // Production answered "zähle alle Mitarbeiter auf" with an intro and no
-    // entries: retrieval had chosen an author archive as the set. An answer
-    // with a stray name is recoverable, an empty one is not.
+  it('does not reject an ungrounded list and keeps entries without invented citation markers (zero-abort)', async () => {
     const wrongScope: ContextBlock = {
       n: 1,
       title: 'webmen, Autor auf',
@@ -116,19 +116,43 @@ describe('collection page restriction', () => {
       collection: true,
       authoritative: true,
     }
-    const answer = await ground(
+    const result = await ground(
       'Die Mitarbeiter sind:\n- Stephan Müller [1]\n- Klaus Becker [1]',
       [wrongScope],
     )
-    expect(answer).toBe('Die Mitarbeiter sind:\n- Stephan Müller [1]\n- Klaus Becker [1]')
+    expect(result).toBe('Die Mitarbeiter sind:\n- Stephan Müller\n- Klaus Becker')
   })
 
-  it('keeps blank lines inside a loose list from splitting the decision', async () => {
+  it('preserves items across sources and keeps blank lines inside a loose list', async () => {
     const answer = await ground(
       '- Stephan Müller [1]\n\n- Lena Fellner [2]\n\n- Fabian Holler [1]',
       [overview, blogPost],
     )
-    expect(answer).toBe('- Stephan Müller [1]\n\n\n- Fabian Holler [1]')
+    expect(answer).toBe('- Stephan Müller [1]\n\n- Lena Fellner [2]\n\n- Fabian Holler [1]')
+  })
+
+  it('harmonizes and renumbers ordered list items without jumps', async () => {
+    const answer = await ground(
+      '1. Stephan Müller [1]\n2. Lena Fellner [2]\n4. Fabian Holler [1]',
+      [overview, blogPost],
+    )
+    expect(answer).toBe('1. Stephan Müller [1]\n2. Lena Fellner [2]\n3. Fabian Holler [1]')
+  })
+
+  it('preserves counter across bullet sub-items inside an ordered list', async () => {
+    const answer = await ground(
+      '1. Stephan Müller [1]\n   - Detail zum Entwickler\n2. Lena Fellner [2]',
+      [overview, blogPost],
+    )
+    expect(answer).toBe('1. Stephan Müller [1]\n   - Detail zum Entwickler\n2. Lena Fellner [2]')
+  })
+
+  it('correctly renumbers nested ordered lists independently', async () => {
+    const answer = await ground(
+      '1. Stephan Müller [1]\n   1. Detail A\n   4. Detail B\n2. Lena Fellner [2]',
+      [overview, blogPost],
+    )
+    expect(answer).toBe('1. Stephan Müller [1]\n   1. Detail A\n   2. Detail B\n2. Lena Fellner [2]')
   })
 
   it('keeps entries from other pages when the overview was cut short', async () => {
@@ -141,6 +165,13 @@ describe('collection page restriction', () => {
   it('keeps entries when the overview was only guessed from retrieval evidence', async () => {
     const guessed: ContextBlock = { ...overview, authoritative: false }
     expect(await ground('- Lena Fellner [2]', [guessed, blogPost])).toBe('- Lena Fellner [2]')
+  })
+})
+
+describe('verification mode formatting', () => {
+  it('formats prompt for verification mode with draft prefix', () => {
+    const formatted = formatGeminiContents([], 'Unser Produkt kostet 29 Euro.', 'Preis: 19 Euro.', 'verification')
+    expect(formatted[0].parts[0].text).toContain('Zu prüfender Textentwurf:\nUnser Produkt kostet 29 Euro.')
   })
 })
 
@@ -191,5 +222,293 @@ describe('list entry grounding', () => {
 
   it('handles numbered lists', () => {
     expect(groundListEntry('1. Dirk Borchers [7]', blocks)).toBe('1. Dirk Borchers [1]')
+  })
+})
+
+
+describe('generation stream integrity', () => {
+  afterEach(() => vi.useRealTimers())
+  const input = (run: ReturnType<typeof vi.fn>, signal?: AbortSignal) => ({
+    ai: { run } as unknown as CloudflareEnv['AI'],
+    model: '@cf/meta/llama-4-scout-17b-16e-instruct',
+    question: 'Was ist belegt?', history: [], context: 'Eine belegte Tatsache.', signal,
+  })
+  const stream = (...frames: unknown[]) => new ReadableStream<string>({
+    start(controller) {
+      for (const frame of frames) controller.enqueue(`data: ${typeof frame === 'string' ? frame : JSON.stringify(frame)}\n\n`)
+      controller.close()
+    },
+  })
+  const read = async (run: ReturnType<typeof vi.fn>, signal?: AbortSignal) => {
+    const result = await streamGroundedAnswer(input(run, signal))
+    let text = ''
+    for await (const delta of result.text) text += delta
+    return text
+  }
+
+  it('accepts normal Workers AI completion with gateway and disables content logging', async () => {
+    const run = vi.fn().mockResolvedValue(stream({ response: 'Belegt [1].' }, '[DONE]'))
+    const result = await streamGroundedAnswer({ ...input(run), gatewayId: 'default' })
+    let text = ''
+    for await (const delta of result.text) text += delta
+    expect(text).toBe('Belegt [1].')
+    expect(run.mock.calls[0][2]).toEqual({ gateway: { id: 'default', collectLog: false } })
+  })
+
+  it('omits gateway option when no gatewayId is configured', async () => {
+    const run = vi.fn().mockResolvedValue(stream({ response: 'Belegt [1].' }, '[DONE]'))
+    expect(await read(run)).toBe('Belegt [1].')
+    expect(run.mock.calls[0][2]).toBeUndefined()
+  })
+
+  it('reports usedModel and fallback accurately', async () => {
+    const run = vi.fn().mockResolvedValue(stream({ response: 'Belegt [1].' }, '[DONE]'))
+    const result = await streamGroundedAnswer(input(run))
+    expect(result.model).toBe('@cf/meta/llama-4-scout-17b-16e-instruct')
+    expect(result.usedModel).toBe('@cf/meta/llama-4-scout-17b-16e-instruct')
+    expect(result.fallback).toBe(false)
+  })
+
+  it('accepts Gemini STOP with text in the final frame', async () => {
+    const run = vi.fn().mockResolvedValue(stream({ candidates: [{ content: { parts: [{ text: 'Belegt [1].' }] }, finishReason: 'STOP' }] }))
+    expect(await read(run)).toBe('Belegt [1].')
+  })
+
+  it.each(['MAX_TOKENS', 'length'])('rejects truncated %s responses after partial text', async (reason) => {
+    const ending = reason === 'length' ? { choices: [{ finish_reason: reason }] } : { candidates: [{ finishReason: reason }] }
+    const run = vi.fn().mockResolvedValue(stream({ response: 'Ein Anfang.\n' }, ending, '[DONE]'))
+    await expect(read(run)).rejects.toMatchObject({ code: 'incomplete' })
+    expect(run).toHaveBeenCalledTimes(1)
+  })
+
+  it.each(['SAFETY', 'RECITATION', 'MALFORMED_FUNCTION_CALL'])('does not present a %s stop as success', async (finishReason) => {
+    const run = vi.fn().mockResolvedValue(stream({ candidates: [{ finishReason }] }))
+    await expect(read(run)).rejects.toBeInstanceOf(GenerationError)
+  })
+
+  it('rejects EOF without a completion marker', async () => {
+    const run = vi.fn().mockResolvedValue(stream({ response: 'Unfertig' }))
+    await expect(read(run)).rejects.toMatchObject({ code: 'incomplete' })
+  })
+
+  it('never exposes malformed provider JSON as answer text', async () => {
+    const run = vi.fn().mockResolvedValue(stream('{secret malformed'))
+    await expect(read(run)).rejects.toMatchObject({ code: 'invalid_stream' })
+  })
+
+  it('parses SSE frames split across byte chunks', async () => {
+    const encoded = new TextEncoder().encode('data: {"response":"Müller [1]."}\r\n\r\ndata: [DONE]\n\n')
+    const run = vi.fn().mockResolvedValue(new ReadableStream<Uint8Array>({ start(c) {
+      for (const byte of encoded) c.enqueue(new Uint8Array([byte]))
+      c.close()
+    } }))
+    expect(await read(run)).toBe('Müller [1].')
+  })
+
+  it('cancels an inactive stream on deadline', async () => {
+    vi.useFakeTimers()
+    const cancel = vi.fn()
+    const run = vi.fn().mockResolvedValue(new ReadableStream<string>({ cancel }))
+    const result = read(run)
+    const assertion = expect(result).rejects.toMatchObject({ code: 'timeout' })
+    await vi.advanceTimersByTimeAsync(20_001)
+    await assertion
+    expect(cancel).toHaveBeenCalled()
+  })
+
+  it('bounds startup and cancels a stream arriving too late', async () => {
+    vi.useFakeTimers()
+    let resolve!: (value: ReadableStream<string>) => void
+    const run = vi.fn().mockReturnValue(new Promise<ReadableStream<string>>((r) => { resolve = r }))
+    const result = read(run)
+    const assertion = expect(result).rejects.toMatchObject({ code: 'timeout' })
+    await vi.advanceTimersByTimeAsync(30_001)
+    await assertion
+    const cancel = vi.fn()
+    resolve(new ReadableStream<string>({ cancel }))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(cancel).toHaveBeenCalled()
+  })
+
+  it('aborts without starting a fallback', async () => {
+    const abort = new AbortController()
+    const cancel = vi.fn()
+    const run = vi.fn().mockResolvedValue(new ReadableStream<string>({ cancel }))
+    const result = read(run, abort.signal)
+    const assertion = expect(result).rejects.toMatchObject({ code: 'aborted' })
+    await Promise.resolve()
+    abort.abort()
+    await assertion
+    expect(run).toHaveBeenCalledTimes(1)
+  })
+
+  it('cancels a prepared stream even before the caller reads its first delta', async () => {
+    const cancel = vi.fn()
+    const run = vi.fn().mockResolvedValue(new ReadableStream<string>({
+      start(c) { c.enqueue('data: {"response":"Anfang"}\n\n') }, cancel,
+    }))
+    const result = await streamGroundedAnswer(input(run))
+    await result.text.return(undefined)
+    expect(cancel).toHaveBeenCalled()
+  })
+
+  it('never exposes a provider exception containing request text', async () => {
+    const run = vi.fn().mockRejectedValue(new Error('provider failed: private question'))
+    await expect(read(run)).rejects.toMatchObject({ code: 'invalid_stream' })
+  })
+
+  it('limits the total stream even if keepalives arrive', async () => {
+    vi.useFakeTimers()
+    let controller!: ReadableStreamDefaultController<string>
+    const run = vi.fn().mockResolvedValue(new ReadableStream<string>({ start(c) { controller = c } }))
+    const result = read(run)
+    const assertion = expect(result).rejects.toMatchObject({ code: 'timeout' })
+    for (let index = 0; index < 12; index++) {
+      controller.enqueue(': keepalive\n\n')
+      await vi.advanceTimersByTimeAsync(10_000)
+    }
+    await assertion
+  })
+})
+
+describe('formatGeminiContents', () => {
+  it('drops leading model turns so conversation starts with user', () => {
+    const history = [
+      { role: 'assistant' as const, content: 'Hallo!' },
+      { role: 'user' as const, content: 'Wer bist du?' },
+      { role: 'assistant' as const, content: 'Ich bin CraCha.' },
+    ]
+    const contents = formatGeminiContents(history, 'Was kannst du?', 'Kontext')
+    expect(contents[0].role).toBe('user')
+    expect(contents[0].parts[0].text).toBe('Wer bist du?')
+    expect(contents[1].role).toBe('model')
+    expect(contents[1].parts[0].text).toBe('Ich bin CraCha.')
+    expect(contents[2].role).toBe('user')
+    expect(contents[2].parts[0].text).toContain('Was kannst du?')
+  })
+
+  it('merges consecutive same-role turns into single alternating turns', () => {
+    const history = [
+      { role: 'user' as const, content: 'Teil 1' },
+      { role: 'user' as const, content: 'Teil 2' },
+      { role: 'assistant' as const, content: 'Antwort A' },
+      { role: 'assistant' as const, content: 'Antwort B' },
+    ]
+    const contents = formatGeminiContents(history, 'Neue Frage', 'Kontext')
+    expect(contents).toHaveLength(3)
+    expect(contents[0].role).toBe('user')
+    expect(contents[0].parts[0].text).toBe('Teil 1\n\nTeil 2')
+    expect(contents[1].role).toBe('model')
+    expect(contents[1].parts[0].text).toBe('Antwort A\n\nAntwort B')
+    expect(contents[2].role).toBe('user')
+    expect(contents[2].parts[0].text).toContain('Neue Frage')
+  })
+
+  it('merges a trailing user turn in history with the current question', () => {
+    const history = [
+      { role: 'user' as const, content: 'Frage 1' },
+      { role: 'assistant' as const, content: 'Antwort 1' },
+      { role: 'user' as const, content: 'Zusatz 1' },
+    ]
+    const contents = formatGeminiContents(history, 'Frage 2', 'Kontext')
+    expect(contents).toHaveLength(3)
+    expect(contents[0].role).toBe('user')
+    expect(contents[1].role).toBe('model')
+    expect(contents[2].role).toBe('user')
+    expect(contents[2].parts[0].text).toContain('Zusatz 1')
+    expect(contents[2].parts[0].text).toContain('Frage:\nFrage 2')
+  })
+})
+
+describe('BYOK custom API key', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('calls Google AI Studio directly when apiKey is provided', async () => {
+    const sseBody = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('data: {"candidates":[{"content":{"parts":[{"text":"BYOK Antwort [1]."}]},"finishReason":"STOP"}]}\n\n'))
+        controller.close()
+      },
+    })
+    const fetchMock = vi.fn().mockResolvedValue(new Response(sseBody, { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await streamGroundedAnswer({
+      ai: {} as unknown as CloudflareEnv['AI'],
+      model: 'gemini-2.5-flash',
+      question: 'Hallo?',
+      history: [],
+      context: 'Kontext',
+      apiKey: 'test-api-key',
+    })
+
+    expect(result.fallback).toBe(false)
+    let text = ''
+    for await (const delta of result.text) text += delta
+    expect(text).toBe('BYOK Antwort [1].')
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toContain('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse')
+    expect(init.headers['x-goog-api-key']).toBe('test-api-key')
+  })
+
+  it('falls back to standby model if BYOK call fails', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('Forbidden', { status: 403 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const fallbackStream = new ReadableStream<string>({
+      start(controller) {
+        controller.enqueue('data: {"response":"Fallback Antwort [1]."}\n\n')
+        controller.enqueue('data: [DONE]\n\n')
+        controller.close()
+      },
+    })
+    const run = vi.fn().mockResolvedValue(fallbackStream)
+
+    const result = await streamGroundedAnswer({
+      ai: { run } as unknown as CloudflareEnv['AI'],
+      model: 'gemini-2.5-flash',
+      question: 'Hallo?',
+      history: [],
+      context: 'Kontext',
+      apiKey: 'invalid-api-key',
+    })
+
+    expect(result.fallback).toBe(true)
+    let text = ''
+    for await (const delta of result.text) text += delta
+    expect(text).toBe('Fallback Antwort [1].')
+    expect(run).toHaveBeenCalledTimes(1)
+  })
+
+  it('normalizes model names and routes to gemini-3.8-flash', async () => {
+    const sseBody = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('data: {"candidates":[{"content":{"parts":[{"text":"Gemini 3.8 Antwort [1]."}]},"finishReason":"STOP"}]}\n\n'))
+        controller.close()
+      },
+    })
+    const fetchMock = vi.fn().mockResolvedValue(new Response(sseBody, { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await streamGroundedAnswer({
+      ai: {} as unknown as CloudflareEnv['AI'],
+      model: 'gemini 3.8 flash',
+      question: 'Neuestes Modell?',
+      history: [],
+      context: 'Kontext',
+      apiKey: 'test-key-38',
+    })
+
+    expect(result.fallback).toBe(false)
+    let text = ''
+    for await (const delta of result.text) text += delta
+    expect(text).toBe('Gemini 3.8 Antwort [1].')
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toContain('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:streamGenerateContent?alt=sse')
+    expect(init.headers['x-goog-api-key']).toBe('test-key-38')
   })
 })

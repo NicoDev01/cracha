@@ -85,6 +85,11 @@ export function SiteFooter({ className }: React.HTMLAttributes<HTMLElement>) {
                 Nutzungsbedingungen
               </Link>
             </li>
+            <li>
+              <Link href="/widerrufsbelehrung" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+                Widerrufsbelehrung
+              </Link>
+            </li>
           </ul>
         </div>
       </div>

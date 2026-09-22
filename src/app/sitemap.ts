@@ -5,7 +5,7 @@ import { siteConfig } from "@/config/site";
 export default function sitemap(): MetadataRoute.Sitemap {
   return [
     { url: siteConfig.url },
-    ...["website-mit-ki-durchsuchen", "impressum", "datenschutz", "nutzungsbedingungen"].map((path) => ({
+    ...["website-mit-ki-durchsuchen", "impressum", "datenschutz", "nutzungsbedingungen", "widerrufsbelehrung"].map((path) => ({
       url: `${siteConfig.url}/${path}`,
     })),
   ];

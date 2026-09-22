@@ -12,11 +12,11 @@ const site_url = process.env.NEXT_PUBLIC_APP_URL || "https://cracha-app.com";
 export const siteConfig: SiteConfig = {
   name: "CraCha",
   description:
-    "Websites mit KI durchsuchen: Stelle Fragen auf Deutsch zu eingelesenen Website-Inhalten und prüfe die verlinkten Quellen. Mit 100 Start-Credits ausprobieren.",
+    "Ganze Websites & Dokumentationen rekursiv erfassen und als dauerhafte Wissensbasis befragen: Präzise Antworten mit verlinkten Quellen zur Content-Verifikation, Marketing-Prüfung und für Entwickler. Mit 100 Start-Credits ausprobieren.",
   url: site_url,
   links: {
     twitter: "https://twitter.com/cracha_ai",
     github: "https://github.com/cracha/cracha-rag-agent",
   },
-  mailSupport: "support@cracha.ai",
+  mailSupport: "aimpact.agency@gmail.com",
 };

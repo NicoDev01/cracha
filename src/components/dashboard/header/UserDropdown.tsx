@@ -1,6 +1,6 @@
 "use client";
 import Image from "next/image";
-import Link from "next/link";
+import { siteConfig } from "@/config/site";
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Dropdown } from "../ui/dropdown/Dropdown";
@@ -24,25 +24,26 @@ function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
     <div className="relative">
       <button
         onClick={toggleDropdown}
-        aria-label="Open user menu"
-        title="Open user menu"
+        aria-label="Kontomenü öffnen"
+        title="Kontomenü öffnen"
+        aria-expanded={isOpen}
         className="flex items-center text-gray-700 dark:text-gray-400 dropdown-toggle"
       >
-        <span className="mr-3 overflow-hidden rounded-full h-11 w-11">
+        <span className="mr-1 sm:mr-3 overflow-hidden rounded-full h-10 w-10">
           <Image
             width={44}
             height={44}
             src="/images/user/user-placeholder.jpg"
-            alt="User"
+            alt=""
           />
         </span>
 
         {user?.name?.trim() ? (
-          <span className="block mr-1 font-medium text-theme-sm">
+          <span className="hidden sm:block max-w-32 truncate mr-1 font-medium text-theme-sm">
             {user?.name}
           </span>
         ) : (
-          <span className="block mr-1 font-medium text-theme-sm">
+          <span className="hidden sm:block max-w-32 truncate mr-1 font-medium text-theme-sm">
             {user?.email ?? ""}
           </span>
         )}
@@ -90,7 +91,7 @@ function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
             <DropdownItem
               onItemClick={closeDropdown}
               tag="a"
-              href="/profile"
+              href="/dashboard/account"
               className="flex items-center gap-3 px-3 py-2 font-medium text-gray-700 rounded-lg group text-theme-sm hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
             >
               <svg
@@ -108,14 +109,14 @@ function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
                   fill=""
                 />
               </svg>
-              Edit profile
+              Mein Konto
             </DropdownItem>
           </li>
           <li>
             <DropdownItem
               onItemClick={closeDropdown}
               tag="a"
-              href="/profile"
+              href="/dashboard"
               className="flex items-center gap-3 px-3 py-2 font-medium text-gray-700 rounded-lg group text-theme-sm hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
             >
               <svg
@@ -133,14 +134,14 @@ function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
                   fill=""
                 />
               </svg>
-              Account settings
+              Guthaben & Buchungen
             </DropdownItem>
           </li>
           <li>
             <DropdownItem
               onItemClick={closeDropdown}
               tag="a"
-              href="/profile"
+              href={`mailto:${siteConfig.mailSupport}`}
               className="flex items-center gap-3 px-3 py-2 font-medium text-gray-700 rounded-lg group text-theme-sm hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
             >
               <svg
@@ -189,7 +190,7 @@ function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
               fill=""
             />
           </svg>
-          Sign out
+          Abmelden
         </button>
       </Dropdown>
     </div>

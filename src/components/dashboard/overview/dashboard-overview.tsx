@@ -52,18 +52,16 @@ export function DashboardOverview() {
   const { user } = useAuthStore()
   const selectDatabase = useChatStore((state) => state.selectDatabase)
   const [databases, setDatabases] = useState<Database[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(() => Boolean(user))
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async (showLoading = true) => {
     if (!user) {
-      setDatabases([])
-      setIsLoading(false)
       return
     }
     try {
-      if (showLoading) setIsLoading(true)
-      setDatabases(await getDatabases())
+      const data = await getDatabases()
+      setDatabases(data)
       setError(null)
     } catch (loadError) {
       // A dropped background poll keeps the last known list on screen.
@@ -76,8 +74,30 @@ export function DashboardOverview() {
   }, [user])
 
   useEffect(() => {
-    void load()
-  }, [load])
+    let active = true
+    if (!user) return
+    getDatabases()
+      .then((data) => {
+        if (active) {
+          setDatabases(data)
+          setError(null)
+        }
+      })
+      .catch((loadError) => {
+        if (active) {
+          setError(loadError instanceof Error ? loadError.message : 'Wissensbasen konnten nicht geladen werden.')
+          setDatabases([])
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setIsLoading(false)
+        }
+      })
+    return () => {
+      active = false
+    }
+  }, [user])
 
   const isCrawling = databases.some((database) => databaseStatus(database) === 'crawling')
 

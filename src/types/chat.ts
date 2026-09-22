@@ -6,6 +6,7 @@ export interface Message {
   sources?: Source[]
   isStreaming?: boolean
   isError?: boolean
+  feedback?: 'helpful' | 'unhelpful'
   metadata?: ChatResponse['metadata']
 }
 
@@ -28,28 +29,56 @@ export interface ChatResponse {
     model_used: string
     /** The primary model failed and the standby answered instead. */
     fallback?: boolean
+    refunded?: boolean
+    reference?: string
   }
 }
 
 export interface QueryRequest {
+  request_id?: string
   tenant_id: string
   question: string
   top_k?: number
   messages?: Array<{ role: 'user' | 'assistant'; content: string }>
+  api_key?: string
+  model?: string
+  mode?: 'default' | 'verification'
 }
 
 export interface ChatState {
+  ownerId: string | null
+  conversations: Record<string, ChatConversation>
+  selectedConversation: string | null
   messages: Message[]
+  messagesByDb?: Record<string, Message[]>
   selectedDatabase: string | null
   isLoading: boolean
   isStreaming: boolean
   error: string | null
+  byokApiKey: string | null
+  byokModel: string | null
+  chatMode: 'default' | 'verification'
   
   // Actions
-  sendMessage: (question: string) => Promise<void>
+  sendMessage: (question: string) => Promise<boolean>
+  claimFor: (ownerId: string | null) => void
+  stop: () => void
+  newConversation: () => void
+  selectConversation: (id: string) => void
+  feedback: (id: string, value: 'helpful' | 'unhelpful') => void
   clearChat: () => void
   selectDatabase: (tenantId: string) => void
   setError: (error: string | null) => void
+  setByokApiKey: (key: string | null) => void
+  setByokModel: (model: string | null) => void
+  setChatMode: (mode: 'default' | 'verification') => void
+}
+
+export interface ChatConversation {
+  id: string
+  databaseId: string
+  title: string
+  messages: Message[]
 }
 
 export interface Database {
@@ -65,4 +94,5 @@ export interface Database {
   chunks_count?: number
   pages_count?: number
   url?: string
+  urls?: string[]
 }

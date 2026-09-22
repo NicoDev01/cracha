@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { LegalPage, List, Section } from "@/components/legal/legal-page";
 
@@ -6,14 +7,14 @@ export const metadata: Metadata = {
   alternates: { canonical: "/nutzungsbedingungen" },
   title: "Nutzungsbedingungen",
   description:
-    "Bedingungen für die Nutzung von CraCha während der Beta-Phase: Konto, erlaubte Nutzung, Verantwortung für abgerufene Websites, Haftung und Laufzeit.",
+    "Bedingungen für die Nutzung von CraCha: Konto, Credit-Modell, erlaubte Nutzung, Verantwortung für abgerufene Websites, Haftung und Laufzeit.",
 };
 
 export default function NutzungsbedingungenPage() {
   return (
     <LegalPage
       title="Nutzungsbedingungen"
-      updated="10. August 2026"
+      updated="20. September 2026"
       intro={
         <>
           Diese Bedingungen regeln die Nutzung von CraCha unter cracha-app.com.
@@ -46,24 +47,37 @@ export default function NutzungsbedingungenPage() {
         </p>
       </Section>
 
-      <Section heading="3. Beta-Phase">
+      <Section heading="3. Vergütung, Guthaben-Tokens (Credits) & Widerruf">
         <p>
-          CraCha befindet sich in einer offenen Testphase und wird unentgeltlich
-          bereitgestellt. In dieser Phase gilt:
+          Die Inanspruchnahme von CraCha erfolgt über ein token-basiertes Guthaben-Modell (Credits):
         </p>
         <List
           items={[
             <>
-              Es besteht kein Anspruch auf Verfügbarkeit, auf einen bestimmten
-              Funktionsumfang oder auf eine bestimmte Antwortqualität.
+              Neue Konten erhalten ein einmaliges Startguthaben zum unverbindlichen Testen.
             </>,
             <>
-              Funktionen können ohne Vorankündigung geändert, eingeschränkt oder
-              eingestellt werden.
+              Weiteres Guthaben kann in Form von Credit-Paketen über den Zahlungsdienstleister
+              Stripe entgeltlich erworben werden. Alle Preise verstehen sich inklusive der gesetzlichen Umsatzsteuer.
             </>,
             <>
-              Sichere dir wichtige Inhalte selbst. Wir übernehmen keine Gewähr
-              dafür, dass angelegte Wissensbasen dauerhaft erhalten bleiben.
+              Credits werden bei der Durchführung von Website-Crawls und bei Chat-Anfragen verbraucht.
+              Die jeweiligen Tarife und der aktuelle Kontostand werden transparent im Dashboard angezeigt.
+              Bei technischen Fehlern ohne vollständige Antwort werden Chat-Credits erstattet.
+              Stoppst du die Übertragung nach Beginn der Antwort, bleibt diese Anfrage berechnet.
+            </>,
+            <>
+              Credits sind an dein Konto gebunden und nicht auf andere Konten übertragbar.
+              Eine automatische zeitbasierte Löschung von Guthaben ist derzeit nicht vorgesehen.
+              Gesetzliche Ansprüche auf Erstattung, insbesondere bei Widerruf, bleiben unberührt.
+            </>,
+            <>
+              <strong>Widerrufsrecht:</strong> Verbrauchern steht beim Kauf von Credits grundsätzlich
+              ein gesetzliches Widerrufsrecht zu. Näheres regelt unsere{" "}
+              <Link href="/widerrufsbelehrung" className="text-blue-600 underline">
+                Widerrufsbelehrung
+              </Link>. Ein verlangter sofortiger Leistungsbeginn ist kein pauschaler Verzicht auf das Widerrufsrecht.
+              Für vor einem Widerruf erbrachte Dienstleistungen kann unter den gesetzlichen Voraussetzungen anteiliger Wertersatz anfallen.
             </>,
           ]}
         />
@@ -98,10 +112,7 @@ export default function NutzungsbedingungenPage() {
               verletzt,
             </>,
             <>
-              bei enthaltenen personenbezogenen Daten Dritter über eine
-              Rechtsgrundlage nach der DSGVO verfügst. Für diese Verarbeitung
-              bist du der Verantwortliche; wir verarbeiten die Inhalte
-              ausschließlich weisungsgebunden für dich.
+              bei personenbezogenen Daten Dritter die für deinen Nutzungszweck geltenden Datenschutzvorschriften beachtest.
             </>,
           ]}
         />
@@ -111,9 +122,7 @@ export default function NutzungsbedingungenPage() {
           hat, sowie Angebote, deren Inhalte offensichtlich rechtswidrig sind.
         </p>
         <p>
-          Du stellst uns von Ansprüchen Dritter frei, die auf einer Verletzung
-          dieser Zusicherungen beruhen, einschließlich angemessener Kosten der
-          Rechtsverteidigung.
+          Für schuldhafte Rechtsverletzungen gelten die gesetzlichen Haftungsregelungen.
         </p>
       </Section>
 
@@ -127,16 +136,15 @@ export default function NutzungsbedingungenPage() {
             </>,
             <>
               Handlungen, die die Verfügbarkeit des Dienstes beeinträchtigen,
-              etwa automatisierte Massenanfragen oder das Anlegen von Konten in
+              etwa automatisierte Massenanfragen, DoS-Angriffe oder das Anlegen von Schein-Konten in
               großer Zahl,
             </>,
             <>
-              das Umgehen technischer Beschränkungen sowie das Erzeugen
-              rechtswidriger Inhalte,
+              das Umgehen technischer Beschränkungen, Erstattungsmechanismen oder Sicherheitsgrenzen,
             </>,
             <>
               die Weiterveräußerung des Dienstes oder seiner Ergebnisse ohne
-              unsere Zustimmung.
+              unsere schriftliche Zustimmung.
             </>,
           ]}
         />
@@ -148,7 +156,7 @@ export default function NutzungsbedingungenPage() {
           Wissensbasen erwerben wir keine Rechte. Du räumst uns lediglich das
           einfache Recht ein, sie zu speichern und zu verarbeiten, soweit dies
           für die Erbringung des Dienstes erforderlich ist. Dieses Recht endet
-          mit der Löschung.
+          mit der Löschung der jeweiligen Wissensbasis.
         </p>
       </Section>
 
@@ -163,30 +171,24 @@ export default function NutzungsbedingungenPage() {
           Vertragsschluss vorhersehbaren, vertragstypischen Schaden.
         </p>
         <p>
-          Da der Dienst in der Beta-Phase unentgeltlich bereitgestellt wird,
-          haften wir im Übrigen nach den gesetzlichen Vorschriften für die
-          Schenkung und Leihe nur für Vorsatz und grobe Fahrlässigkeit. Die
-          Haftung nach dem Produkthaftungsgesetz bleibt unberührt.
+          Die Haftung nach dem Produkthaftungsgesetz sowie für ausdrücklich
+          übernommene Garantien bleibt unberührt.
         </p>
       </Section>
 
       <Section heading="9. Laufzeit und Beendigung">
         <p>
-          Du kannst dein Konto jederzeit löschen; damit endet der Vertrag. Wir
+          Du kannst die Beendigung und Löschung deines Kontos jederzeit über den Support anfragen. Wir
           können den Vertrag mit einer Frist von 14 Tagen kündigen. Bei einem
           schwerwiegenden Verstoß gegen diese Bedingungen — insbesondere gegen
           Abschnitt 5 oder 6 — können wir den Zugang ohne Vorankündigung sperren
-          und das Konto löschen.
+          und das Konto schließen.
         </p>
       </Section>
 
       <Section heading="10. Änderungen">
         <p>
-          Wir können diese Bedingungen ändern und informieren dich mindestens 14
-          Tage vor Wirksamwerden per E-Mail. Widersprichst du nicht bis zum
-          genannten Zeitpunkt, gelten die geänderten Bedingungen als angenommen;
-          hierauf weisen wir in der Mitteilung gesondert hin. Du kannst in diesem
-          Fall dein Konto jederzeit löschen.
+          Änderungen dieser Bedingungen teilen wir dir mit. Soweit eine Zustimmung erforderlich ist, holen wir sie ausdrücklich ein; dein Schweigen gilt nicht als Zustimmung. Für bereits gekaufte Leistungen bleiben die vereinbarten Bedingungen maßgeblich.
         </p>
       </Section>
 

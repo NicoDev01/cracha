@@ -37,10 +37,12 @@ interface StreamDone {
   usage?: Usage
   model?: string
   fallback?: boolean
+  refunded?: boolean
+  reference?: string
 }
 
 export interface ChatStreamHandlers {
-  onStart: (data: { sources: Source[]; model: string }) => void
+  onStart: (data: { sources: Source[]; model: string; fallback?: boolean }) => void
   onDelta: (text: string) => void
   onDone: (metadata: ChatResponse['metadata']) => void
 }
@@ -57,35 +59,57 @@ function mapSources(sources: RawSource[] = []): Source[] {
 
 function requestBody(request: QueryRequest) {
   return {
+    request_id: request.request_id,
     question: request.question,
     tenant_id: request.tenant_id,
     top_k: request.top_k ?? 8,
     messages: request.messages ?? [],
+    api_key: request.api_key,
+    model: request.model,
+    mode: request.mode ?? 'default',
   }
 }
 
 class ChatAPIClient {
-  async streamChatQuery(request: QueryRequest, handlers: ChatStreamHandlers): Promise<void> {
+  async streamChatQuery(request: QueryRequest, handlers: ChatStreamHandlers, signal?: AbortSignal): Promise<void> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (request.api_key) headers['x-byok-gemini-key'] = request.api_key
+    if (request.model) headers['x-byok-model'] = request.model
+
     const response = await apiFetch('/api/chat', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      signal,
+      headers,
       body: JSON.stringify(requestBody(request)),
     })
 
     const contentType = response.headers.get('content-type') ?? ''
-    if (!response.ok || !contentType.includes('text/event-stream')) {
-      const dataBody = (await response.json().catch(() => ({}))) as RAGWorkerResponse
-      if (!response.ok) throw new Error(dataBody.error ?? `RAG-Anfrage fehlgeschlagen (${response.status}).`)
+    const headerModel = response.headers.get('x-generation-model') ?? ''
+    const headerFallback = response.headers.get('x-byok-fallback') === 'true'
 
-      const model = dataBody.model ?? ''
-      handlers.onStart({ sources: mapSources(dataBody.sources), model })
+    if (!response.ok || !contentType.includes('text/event-stream')) {
+      const dataBody = (await response.json().catch(() => ({}))) as RAGWorkerResponse & {
+        refunded?: boolean
+        reference?: string
+      }
+      if (!response.ok) {
+        const errorMsg = dataBody.refunded
+          ? `${dataBody.error ?? `RAG-Anfrage fehlgeschlagen (${response.status}).`} Credits wurden erstattet. Referenz: ${dataBody.reference}`
+          : (dataBody.error ?? `RAG-Anfrage fehlgeschlagen (${response.status}).`)
+        throw new Error(errorMsg)
+      }
+
+      const model = dataBody.model ?? headerModel
+      handlers.onStart({ sources: mapSources(dataBody.sources), model, fallback: dataBody.fallback === true || headerFallback })
       handlers.onDelta(dataBody.answer ?? 'Keine Antwort erhalten.')
       handlers.onDone({
         query_time: dataBody.usage?.latency_ms ?? 0,
         retrieval_time: dataBody.usage?.retrieval_ms,
         retrieval_cached: dataBody.usage?.retrieval_cached === true,
         model_used: model,
-        fallback: dataBody.fallback === true,
+        fallback: dataBody.fallback === true || headerFallback,
+        refunded: dataBody.refunded,
+        reference: dataBody.reference,
       })
       return
     }
@@ -96,8 +120,8 @@ class ChatAPIClient {
     const decoder = new TextDecoder()
     let buffer = ''
     let finished = false
-    let currentModel = ''
-    let usedFallback = false
+    let currentModel = headerModel
+    let usedFallback = headerFallback
 
     const processFrame = (frame: string) => {
       const lines = frame.split(/\r?\n/)
@@ -112,7 +136,7 @@ class ChatAPIClient {
       if (event === 'meta') {
         currentModel = data.model ?? currentModel
         usedFallback = data.fallback === true
-        handlers.onStart({ sources: mapSources(data.sources), model: currentModel })
+        handlers.onStart({ sources: mapSources(data.sources), model: currentModel, fallback: usedFallback })
       } else if (event === 'delta' && typeof data.text === 'string') {
         handlers.onDelta(data.text)
       } else if (event === 'done') {
@@ -125,6 +149,8 @@ class ChatAPIClient {
           retrieval_cached: data.usage?.retrieval_cached === true,
           model_used: currentModel,
           fallback: usedFallback,
+          refunded: data.refunded,
+          reference: data.reference,
         })
       } else if (event === 'error') {
         throw new Error(data.message ?? 'Die Antwort konnte nicht erzeugt werden.')
@@ -177,6 +203,6 @@ export function sendChatQuery(request: QueryRequest): Promise<ChatResponse> {
   return chatAPI.sendChatQuery(request)
 }
 
-export function streamChatQuery(request: QueryRequest, handlers: ChatStreamHandlers): Promise<void> {
-  return chatAPI.streamChatQuery(request, handlers)
+export function streamChatQuery(request: QueryRequest, handlers: ChatStreamHandlers, signal?: AbortSignal): Promise<void> {
+  return chatAPI.streamChatQuery(request, handlers, signal)
 }

@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,31 +11,63 @@ import { useAuthStore } from '@/stores/auth-store'
 import { Eye, EyeOff, Mail, Lock, User, AlertCircle, Loader2, CheckCircle } from 'lucide-react'
 import { GoogleAuthButton } from './GoogleAuthButton'
 
+const DISPOSABLE_DOMAINS = new Set([
+  'mailinator.com', 'guerrillamail.com', 'tempmail.com', '10minutemail.com',
+  'yopmail.com', 'trashmail.com', 'throwawaymail.com', 'sharklasers.com',
+  'dispostable.com', 'getairmail.com', 'fakemailgenerator.com', 'temp-mail.org',
+  'burnermail.io', 'dropmail.me', 'guerrillamailblock.com',
+])
+
 export function RegisterForm() {
   const { register, isLoading, error, clearError } = useAuthStore()
   const [registrationComplete, setRegistrationComplete] = useState(false)
   const [confirmationMessage, setConfirmationMessage] = useState('')
+  const [resending, setResending] = useState(false)
+  const [cooldown, setCooldown] = useState(0)
+  useEffect(() => {
+    if (cooldown <= 0) return
+    const timer = setTimeout(() => setCooldown(value => value - 1), 1000)
+    return () => clearTimeout(timer)
+  }, [cooldown])
+  const resend = async () => {
+    if (resending || cooldown > 0) return
+    setResending(true)
+    try {
+      const { error } = await createClient().auth.resend({
+        type: 'signup', email: formData.email.trim(),
+        options: { emailRedirectTo: `${window.location.origin}/confirm?next=/dashboard` },
+      })
+      if (error) throw error
+      setConfirmationMessage('Falls eine Bestätigung aussteht, wurde eine neue E-Mail angefordert. Prüfe dein Postfach.')
+      setCooldown(60)
+    } catch {
+      setConfirmationMessage('Die E-Mail konnte gerade nicht erneut angefordert werden. Bitte warte kurz und versuche es noch einmal.')
+      setCooldown(60)
+    } finally { setResending(false) }
+  }
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
   })
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
 
   const validateForm = () => {
     const errors: Record<string, string> = {}
     
-    if (!formData.name.trim()) {
-      errors.name = 'Name ist erforderlich'
-    }
     
     if (!formData.email.trim()) {
       errors.email = 'E-Mail ist erforderlich'
     } else if (!formData.email.includes('@')) {
       errors.email = 'Bitte gib eine gültige E-Mail-Adresse ein'
+    } else {
+      const domain = formData.email.split('@')[1]?.toLowerCase().trim()
+      if (domain && DISPOSABLE_DOMAINS.has(domain)) {
+        errors.email = 'Wegwerf-E-Mail-Adressen sind nicht gestattet.'
+      }
     }
     
     if (!formData.password) {
@@ -60,11 +93,13 @@ export function RegisterForm() {
     }
     
     try {
-      await register(formData.email, formData.password, formData.name)
+      await register(formData.email.trim(), formData.password, formData.name.trim())
       
       // Keep confirmation instructions visible until the visitor chooses to leave.
       setConfirmationMessage(useAuthStore.getState().error || 'Bitte prüfe dein Postfach und bestätige deine E-Mail-Adresse.')
+      setFormData(value => ({ ...value, email: value.email.trim() }))
       setRegistrationComplete(true)
+      setCooldown(60)
       
     } catch (registrationError) {
       // Only actual errors (not success messages) will reach here
@@ -74,16 +109,10 @@ export function RegisterForm() {
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }))
-    // Don't clear errors immediately - let user read them
-    if (validationErrors[field]) {
-      // Clear validation errors after a delay
-      setTimeout(() => {
-        setValidationErrors(prev => ({ ...prev, [field]: '' }))
-      }, 3000)
-    }
+    if (validationErrors[field]) setValidationErrors(prev => ({ ...prev, [field]: '' }))
   }
 
-  const isFormValid = formData.name && formData.email && formData.password && formData.confirmPassword
+  const isFormValid = formData.email && formData.password && formData.confirmPassword
 
   if (registrationComplete) {
     return (
@@ -98,6 +127,13 @@ export function RegisterForm() {
           <p className="text-sm text-gray-600">
             Keine E-Mail gefunden? Prüfe auch den Spam-Ordner. Öffne den Bestätigungslink, bevor du dich anmeldest.
           </p>
+          <p className="text-sm break-all">Bestätigungsadresse: {formData.email}</p>
+          <Button variant="outline" disabled={resending || cooldown > 0} onClick={() => void resend()}>
+            {resending ? 'Wird angefordert…' : cooldown > 0 ? `Erneut senden in ${cooldown} s` : 'Bestätigung erneut senden'}
+          </Button>
+          <button type="button" className="block text-sm underline" onClick={() => { setRegistrationComplete(false); clearError(); setFormData(value => ({ ...value, password: '', confirmPassword: '' })) }}>
+            Mit korrigierter E-Mail-Adresse registrieren
+          </button>
           <Link href="/login" className="block font-semibold text-blue-600 hover:underline">
             Weiter zur Anmeldung
           </Link>
@@ -119,7 +155,13 @@ export function RegisterForm() {
       
       <CardContent className="space-y-6">
         {/* Google Auth Button */}
-        <GoogleAuthButton isRegister />
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between text-xs text-blue-600 font-medium px-1">
+            <span>⚡ Empfohlen</span>
+            <span>Sofortiger Zugriff</span>
+          </div>
+          <GoogleAuthButton isRegister />
+        </div>
         
         {/* Divider */}
         <div className="relative" role="separator" aria-label="Oder mit E-Mail">
@@ -151,7 +193,7 @@ export function RegisterForm() {
           {/* Name Field */}
           <div className="space-y-2">
             <Label htmlFor="name" className="text-gray-700 font-medium">
-              Vollständiger Name
+              Name (optional)
             </Label>
             <div className="relative">
               <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -163,7 +205,7 @@ export function RegisterForm() {
                 onChange={(e) => handleInputChange('name', e.target.value)}
                 className="pl-10 h-12 border-gray-300 focus:border-blue-500 focus:ring-blue-500 text-base"
                 autoComplete="name"
-                required
+                maxLength={100}
               />
             </div>
             {validationErrors.name && (
@@ -213,6 +255,7 @@ export function RegisterForm() {
               />
               <button
                 type="button"
+                aria-label={showPassword ? 'Passwort verbergen' : 'Passwort anzeigen'}
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
               >
@@ -243,6 +286,7 @@ export function RegisterForm() {
               />
               <button
                 type="button"
+                aria-label={showConfirmPassword ? 'Passwortbestätigung verbergen' : 'Passwortbestätigung anzeigen'}
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                 className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
               >
@@ -262,11 +306,11 @@ export function RegisterForm() {
               <Link href="/nutzungsbedingungen" className="text-blue-600 hover:underline">
                 Nutzungsbedingungen
               </Link>{' '}
-              und der{' '}
+              zu. Informationen zur Datenverarbeitung findest du in der{' '}
               <Link href="/datenschutz" className="text-blue-600 hover:underline">
                 Datenschutzerklärung
               </Link>{' '}
-              zu.
+              .
             </p>
           </div>
           
