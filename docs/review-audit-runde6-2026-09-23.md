@@ -48,9 +48,9 @@ Stand: 23.09.2026. Bezug: `docs/review-audit-runde5-2026-09-21.md`.
 | `venv/Scripts/python.exe -m pytest evals -q` | 19 bestanden |
 | `ruff check services/crawler evals` | ohne Befund |
 | `npm audit --audit-level=high` (Root, `workers/rag-api`) | 0 Schwachstellen |
+| `scripts/run-test-billing-wsl.sh` (PostgreSQL 16 in WSL) | `BILLING TRANSACTIONS AND CONCURRENCY PASSED` |
 
 ## Offene Grenzen
 
 - Den Stopp *innerhalb* einer externen AI-Search-Operation prüfen nur die In-Process-Tests mit der echten Koordinatorklasse. Miniflare bietet kein AI-Search-Binding; der workerd-Test deckt den Neustart nach persistierter Absicht vor dem externen Effekt ab.
 - Lesende Chat-Anfragen (`owned`) laufen durch dieselbe DO-Queue und warten während eines Ingest-Batches, bis dieser fertig ist. Das ist korrekt, kann aber die Antwortzeit während eines Crawls verlängern.
-- `scripts/test-billing.py` (CI-Job mit PostgreSQL) wurde lokal nicht ausgeführt.
