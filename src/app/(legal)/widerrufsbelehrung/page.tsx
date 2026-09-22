@@ -30,7 +30,7 @@ export default function WiderrufsbelehrungPage() {
         </p>
         <p>
           Um dein Widerrufsrecht auszuüben, musst du uns (Nicolas Guerrero Tello, Meyerstraße 216,
-          28201 Bremen, Deutschland, E-Mail: aimpact.agency@gmail.com) mittels einer eindeutigen
+          28201 Bremen, Deutschland, E-Mail: hallo@cracha-app.com) mittels einer eindeutigen
           Erklärung (z. B. ein mit der Post versandter Brief oder eine E-Mail) über deinen
           Entschluss, diesen Vertrag zu widerrufen, informieren. Du kannst dafür das beigefügte
           Muster-Widerrufsformular verwenden, das jedoch nicht vorgeschrieben ist.
@@ -64,7 +64,7 @@ export default function WiderrufsbelehrungPage() {
           zurück.)
         </p>
         <div className="rounded-xl border border-border p-4 text-sm space-y-2 bg-muted/30">
-          <p>An: Nicolas Guerrero Tello, Meyerstraße 216, 28201 Bremen, Deutschland, E-Mail: aimpact.agency@gmail.com</p>
+          <p>An: Nicolas Guerrero Tello, Meyerstraße 216, 28201 Bremen, Deutschland, E-Mail: hallo@cracha-app.com</p>
           <p>
             Hiermit widerrufe(n) ich/wir (*) den von mir/uns (*) abgeschlossenen Vertrag über den
             Kauf der folgenden Waren (*) / die Erbringung der folgenden Dienstleistung (*):

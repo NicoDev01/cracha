@@ -37,7 +37,7 @@ export default function DatenschutzPage() {
           <br />
           Deutschland
         </p>
-        <p>E-Mail: aimpact.agency@gmail.com</p>
+        <p>E-Mail: hallo@cracha-app.com</p>
         <p>
           Ein Datenschutzbeauftragter ist nicht bestellt, da die gesetzlichen
           Voraussetzungen hierfür nicht vorliegen.

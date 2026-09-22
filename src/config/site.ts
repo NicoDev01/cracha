@@ -18,5 +18,5 @@ export const siteConfig: SiteConfig = {
     twitter: "https://twitter.com/cracha_ai",
     github: "https://github.com/cracha/cracha-rag-agent",
   },
-  mailSupport: "aimpact.agency@gmail.com",
+  mailSupport: "hallo@cracha-app.com",
 };

@@ -24,7 +24,7 @@ export default function ImpressumPage() {
       </Section>
 
       <Section heading="Kontakt">
-        <p>E-Mail: aimpact.agency@gmail.com</p>
+        <p>E-Mail: hallo@cracha-app.com</p>
       </Section>
 
       <Section heading="Verantwortlich für den Inhalt">

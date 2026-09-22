@@ -25,7 +25,7 @@ export default function NutzungsbedingungenPage() {
       <Section heading="1. Anbieter">
         <p>
           Nicolas Guerrero Tello, Meyerstraße 216, 28201 Bremen, Deutschland.
-          Kontakt: aimpact.agency@gmail.com
+          Kontakt: hallo@cracha-app.com
         </p>
       </Section>
 
