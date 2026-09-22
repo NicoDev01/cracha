@@ -26,8 +26,9 @@ Request-Header → `Cookie` kopieren.
 python evals/evaluate.py --endpoint https://<rag-api> --token <RAG_QUERY_SECRET> --database-id <id> --user-id <uid> --cases evals/cases.webmen.json --chat-endpoint https://<app>/api/chat --chat-cookie "<cookie>"
 ```
 
-Fälle mit Antwort-Feldern werden ohne `--chat-endpoint` übersprungen und am Ende
-gezählt — ein grüner Lauf, der das Modell nie gefragt hat, sagt das auch.
+Fälle mit Antwort-Feldern können ohne `--chat-endpoint` nicht bestehen. Sie werden
+als unvollständig gezählt; der Prozess endet mit Exit-Code 2. Exit-Code 0 setzt
+mindestens einen Fall und alle angeforderten Antwortprüfungen voraus.
 Antwortet das Ersatzmodell, steht das am Fall: dann misst der Lauf das
 Ersatzmodell, nicht das primäre.
 
@@ -91,3 +92,41 @@ Fall-Datei ist erst aussagekräftig, wenn sie diese Typen enthält:
 
 Die Archetypen ohne Live-Index sind zusätzlich als Offline-Szenarien in
 `workers/rag-api/test/scenarios.test.ts` abgedeckt und laufen bei jedem Commit.
+
+
+## Versionierte Testquellen und 40 kuratierte Fälle
+
+`fixtures/v1/*.html` enthält vier **fiktive, eigens geschriebene** Quellen:
+Museum, CLI-Dokumentation, Kurskatalog und Gartenhandbuch. Sie sind keine
+Produktversprechen, echten Organisationen oder gemessenen Modellausgaben.
+`cases.curated.v1.json` deckt je Quelle Fakten, Negation, Zahlen, Vergleiche,
+Aufzählungen, Englisch, Folgefragen, fehlendes Wissen, eingeschleuste Anweisungen
+und unvollständige Übersichten ab. Die absichtlich bösartigen Kommentare sind
+Testdaten. Befehle der fiktiven CLI nicht installieren oder ausführen.
+
+1. Die vier HTML-Dateien unverändert auf einer kontrollierten Testseite mit den
+   Dateinamen `museum.html`, `docs.html`, `courses.html`, `garden.html` bereitstellen.
+2. Jede Quelle separat über den normalen Crawl in eine eigene Test-Wissensbasis
+   indexieren. So bleibt die Nutzer-/Datenbanktrennung Teil des echten Tests.
+3. Eine lokale JSON-Datei mit der Zuordnung anlegen, zum Beispiel:
+   `{"museum-v1":"<id>","docs-v1":"<id>","courses-v1":"<id>","garden-v1":"<id>"}`.
+4. Die Suite mit `--cases evals/cases.curated.v1.json --fixture-databases <datei>`
+   sowie den oben beschriebenen Retrieval-, Benutzer- und Chatparametern starten.
+   Fehlende Zuordnungen sind Fehler; sie fallen nicht auf irgendeine Datenbank zurück.
+   Ein vollständiger Lauf erzeugt 40 echte Chat-Anfragen und verbraucht Guthaben.
+
+`messages` wird für Folgefragen an Retrieval und Chat weitergereicht. Jeder
+Chat-Aufruf erhält eine neue UUID als `request_id`. Ein SSE-Abbruch ohne `done`
+zählt als Fehler. Quellenmarker dürfen nur tatsächlich gelieferte Quellen nennen.
+`answer_required_pattern` prüft notwendige Einschränkungen/Verweigerungen;
+`answer_required_terms_any` erlaubt mehrere zutreffende Formulierungen.
+
+Die `reference_answer`-Texte sind handgeschriebene Beispiele zur Prüfung des
+**Evaluators**, keine aufgezeichneten Antworten eines Modells. `pytest evals`
+prüft ausschließlich diese Prüfmechanik und die Integrität der Testfälle. Es
+belegt weder Retrievalqualität noch Modelltreue. Für eine Freigabe zusätzlich
+echte Antworten auf sachlich richtige Zuordnung jeder Behauptung zur Quelle,
+plausible Einschränkungen und natürliche Sprache prüfen. Schlagwort- und
+Markerprüfungen können diese inhaltliche Kontrolle nicht ersetzen. Live-Ergebnisse
+mit Modell, Datum, Quellenversion, Fallbackanteil und Fehlern dokumentieren;
+keine Qualitätsquote aus Offline-Tests ableiten.

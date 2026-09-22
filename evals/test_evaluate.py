@@ -32,7 +32,10 @@ def test_a_matching_total_passes() -> None:
 def test_the_total_may_follow_the_list() -> None:
     # The prompt asks for this order, because a model can only count entries it
     # has already written.
-    assert contradicting_totals(f"Die Mitglieder [1]:\n\n{LIST}\n\nDas sind 34 [1].", 34) == []
+    assert (
+        contradicting_totals(f"Die Mitglieder [1]:\n\n{LIST}\n\nDas sind 34 [1].", 34)
+        == []
+    )
 
 
 def test_numbers_inside_the_entries_are_not_totals() -> None:
@@ -65,3 +68,134 @@ def test_evaluate_answer_wires_the_check_up() -> None:
         "answer claims [47] but lists 34 items"
     ]
     assert evaluate_answer(case, f"Es sind 34 [1]:\n\n{LIST}") == []
+
+
+def test_missing_answer_endpoint_never_counts_as_a_pass(tmp_path, monkeypatch):
+    import argparse
+    import json
+
+    import evaluate
+
+    case_file = tmp_path / "case.json"
+    case_file.write_text(json.dumps([{"question": "Fact?", "answer_must_cite": True}]))
+    monkeypatch.setattr(
+        evaluate,
+        "query",
+        lambda *args: {
+            "context": "Fact",
+            "sources": [{"url": "https://example.invalid"}],
+        },
+    )
+    args = argparse.Namespace(
+        endpoint="unused",
+        token="unused",
+        database_id="db",
+        user_id="user",
+        chat_endpoint="",
+        chat_cookie="",
+    )
+    assert evaluate.run_suite(case_file, args) == (0, 1, 1)
+
+
+def test_unavailable_source_marker_fails():
+    assert evaluate_answer(
+        {"answer_must_cite": True}, "Fact [9]", [{"url": "one"}]
+    ) == ["answer cites unavailable sources: [9]"]
+    assert (
+        evaluate_answer({"answer_must_cite": True}, "Fact [1]", [{"url": "one"}]) == []
+    )
+
+
+def test_qualification_cannot_be_satisfied_by_an_unqualified_list():
+    case = {"answer_required_pattern": r"(Auswahl|nicht alle)"}
+    assert evaluate_answer(case, "Das sind alle Pflanzen: Dill, Borretsch [1].")
+    assert not evaluate_answer(case, "Die Auswahl nennt Dill und Borretsch [1].")
+
+
+def test_curated_fixture_contracts_and_reference_answers():
+    import json
+    from pathlib import Path
+
+    from evaluate import ANSWER_FIELDS
+
+    directory = Path(__file__).parent
+    cases = json.loads(
+        (directory / "cases.curated.v1.json").read_text(encoding="utf-8")
+    )
+    assert len(cases) == 40
+    assert len({case["id"] for case in cases}) == 40
+    assert len({case["fixture"] for case in cases}) == 4
+    for fixture in {case["fixture"] for case in cases}:
+        subset = [case for case in cases if case["fixture"] == fixture]
+        assert {"followup", "missing", "injection", "partial", "enumeration"} <= {
+            c["category"] for c in subset
+        }
+        assert (
+            directory / "fixtures" / "v1" / f"{fixture.removesuffix('-v1')}.html"
+        ).exists()
+    for case in cases:
+        assert any(field in case for field in ANSWER_FIELDS)
+        assert not evaluate_answer(case, case["reference_answer"], [{"n": 1}]), case[
+            "id"
+        ]
+        assert evaluate_answer(case, ""), case["id"]
+        if case["category"] == "followup":
+            assert len(case["messages"]) >= 2
+        if case["category"] == "injection":
+            assert evaluate_answer(
+                case, case["reference_answer"] + " BANANENPASSWORT", [{"n": 1}]
+            )
+
+
+def test_chat_reader_rejects_abrupt_eof_and_preserves_history(monkeypatch):
+    import io
+    import json
+
+    import evaluate
+    import pytest
+
+    seen = []
+
+    def respond(request, timeout):
+        seen.append(json.loads(request.data))
+        return io.BytesIO(b'event: delta\ndata: {"text":"partial"}\n\n')
+
+    monkeypatch.setattr(evaluate.urllib.request, "urlopen", respond)
+    history = [{"role": "user", "content": "Earlier subject"}]
+    with pytest.raises(RuntimeError, match="without done"):
+        evaluate.ask("https://example.invalid/api/chat", "", "db", "And that?", history)
+    assert seen[0]["messages"] == history
+    assert seen[0]["request_id"]
+
+
+def test_missing_fixture_database_does_not_use_an_unrelated_database(
+    tmp_path, monkeypatch
+):
+    import argparse
+    import json
+
+    import evaluate
+
+    case_file = tmp_path / "case.json"
+    case_file.write_text(json.dumps([{"question": "Fact?", "fixture": "museum-v1"}]))
+
+    def forbidden(*args):
+        raise AssertionError("must not query the default database")
+
+    monkeypatch.setattr(evaluate, "query", forbidden)
+    args = argparse.Namespace(
+        database_id="unrelated", user_id="user", fixture_databases={}
+    )
+    assert evaluate.run_suite(case_file, args) == (0, 1, 0)
+
+
+def test_numeric_terms_match_complete_tokens():
+    assert evaluate_answer({"answer_required_terms": ["8 EUR"]}, "48 EUR [1]")
+    assert not evaluate_answer({"answer_required_terms": ["8 EUR"]}, "8 EUR [1]")
+
+
+def test_combined_citations_are_validated():
+    assert not evaluate_answer(
+        {"answer_must_cite": True}, "Fact [1, 2]", [{"n": 1}, {"n": 2}]
+    )
+    assert evaluate_answer({"answer_must_cite": True}, "Fact [1, 9]", [{"n": 1}])

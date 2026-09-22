@@ -3,6 +3,7 @@ import json
 import re
 import unicodedata
 import urllib.request
+import uuid
 from pathlib import Path
 
 _UMLAUTS = str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss"})
@@ -24,7 +25,7 @@ def normalize(value: str) -> str:
 
 
 LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(.*)$")
-CITATION_MARKER = re.compile(r"\[\d+\]")
+CITATION_MARKER = re.compile(r"\[\d+(?:\s*,\s*\d+)*\]")
 INTEGER = re.compile(r"\b(\d{1,6})\b")
 ANSWER_FIELDS = (
     "answer_min_list_items",
@@ -32,6 +33,8 @@ ANSWER_FIELDS = (
     "answer_forbidden_terms",
     "answer_must_cite",
     "answer_total_matches_list",
+    "answer_required_terms_any",
+    "answer_required_pattern",
 )
 
 
@@ -82,7 +85,7 @@ def contradicting_totals(answer: str, item_count: int) -> list[int]:
     return sorted(claimed - {item_count})
 
 
-def query(endpoint: str, token: str, database_id: str, user_id: str, question: str) -> dict:
+def query(endpoint: str, token: str, database_id: str, user_id: str, question: str, messages: list | None = None) -> dict:
     request = urllib.request.Request(
         f"{endpoint.rstrip('/')}/query",
         data=json.dumps(
@@ -91,6 +94,7 @@ def query(endpoint: str, token: str, database_id: str, user_id: str, question: s
                 "user_id": user_id,
                 "question": question,
                 "top_k": 6,
+                "messages": messages or [],
             }
         ).encode(),
         headers={
@@ -103,7 +107,7 @@ def query(endpoint: str, token: str, database_id: str, user_id: str, question: s
         return json.load(response)
 
 
-def ask(chat_endpoint: str, cookie: str, database_id: str, question: str) -> dict:
+def ask(chat_endpoint: str, cookie: str, database_id: str, question: str, messages: list | None = None) -> dict:
     """Read one answer off the chat endpoint's SSE stream.
 
     This is the deployed pipeline, generation included — the only place where a
@@ -112,7 +116,7 @@ def ask(chat_endpoint: str, cookie: str, database_id: str, question: str) -> dic
     request = urllib.request.Request(
         chat_endpoint,
         data=json.dumps(
-            {"tenant_id": database_id, "question": question, "top_k": 8, "messages": []}
+            {"tenant_id": database_id, "question": question, "top_k": 8, "messages": messages or [], "request_id": str(uuid.uuid4())}
         ).encode(),
         headers={"Content-Type": "application/json", "Cookie": cookie},
         method="POST",
@@ -120,6 +124,8 @@ def ask(chat_endpoint: str, cookie: str, database_id: str, question: str) -> dic
     answer = ""
     fallback = False
     event = ""
+    complete = False
+    sources = []
     with urllib.request.urlopen(request, timeout=300) as response:
         for raw in response:
             line = raw.decode("utf-8").rstrip("\r\n")
@@ -131,12 +137,20 @@ def ask(chat_endpoint: str, cookie: str, database_id: str, question: str) -> dic
                     answer += payload.get("text", "")
                 elif event in {"meta", "done"}:
                     fallback = payload.get("fallback", fallback) is True
+                    if event == "meta":
+                        sources = payload.get("sources", [])
+                    if event == "done":
+                        complete = True
+                        if payload.get("incomplete"):
+                            raise RuntimeError("incomplete answer")
                 elif event == "error":
                     raise RuntimeError(payload.get("message", "generation failed"))
-    return {"answer": answer, "fallback": fallback}
+    if not complete:
+        raise RuntimeError("chat stream ended without done event")
+    return {"answer": answer, "fallback": fallback, "sources": sources}
 
 
-def evaluate_answer(case: dict, answer: str) -> list[str]:
+def evaluate_answer(case: dict, answer: str, sources: list | None = None) -> list[str]:
     """Assertions about the text the reader sees, not the context behind it."""
     reasons: list[str] = []
     normalized = normalize(answer)
@@ -152,7 +166,7 @@ def evaluate_answer(case: dict, answer: str) -> list[str]:
     missing = [
         term
         for term in case.get("answer_required_terms", [])
-        if normalize(term).strip() not in normalized
+        if normalize(term) not in normalized
     ]
     if missing:
         shown = ", ".join(missing[:5])
@@ -162,13 +176,26 @@ def evaluate_answer(case: dict, answer: str) -> list[str]:
     present = [
         term
         for term in case.get("answer_forbidden_terms", [])
-        if normalize(term).strip() in normalized
+        if normalize(term) in normalized
     ]
     if present:
         reasons.append(f"answer contains forbidden: {present[:5]}")
 
     if case.get("answer_must_cite") and not CITATION_MARKER.search(answer):
         reasons.append("answer carries no citation marker")
+
+    any_terms = case.get("answer_required_terms_any", [])
+    if any_terms and not any(normalize(term) in normalized for term in any_terms):
+        reasons.append("answer misses all accepted alternative terms")
+    pattern = case.get("answer_required_pattern")
+    if pattern and not re.search(pattern, answer, re.IGNORECASE):
+        reasons.append("answer does not match required qualification/refusal")
+    if sources is not None:
+        cited = {int(number.strip()) for marker in CITATION_MARKER.findall(answer)
+                 for number in marker[1:-1].split(",")}
+        allowed = {int(source.get("n", index + 1)) for index, source in enumerate(sources)}
+        if cited - allowed:
+            reasons.append(f"answer cites unavailable sources: {sorted(cited - allowed)}")
 
     if case.get("answer_total_matches_list"):
         listed = len({normalize(item) for item in list_items(answer)})
@@ -213,7 +240,7 @@ def evaluate_case(case: dict, result: dict) -> tuple[bool, str]:
 
     required_terms = case.get("required_context_terms", [])
     missing_terms = [
-        term for term in required_terms if normalize(term).strip() not in normalized_context
+        term for term in required_terms if normalize(term) not in normalized_context
     ]
     coverage = (
         1.0
@@ -228,13 +255,13 @@ def evaluate_case(case: dict, result: dict) -> tuple[bool, str]:
     # "At least one of these" fits questions with several correct phrasings,
     # where demanding all of them would test the page, not the retrieval.
     any_terms = case.get("required_context_terms_any", [])
-    if any_terms and not any(normalize(term).strip() in normalized_context for term in any_terms):
+    if any_terms and not any(normalize(term) in normalized_context for term in any_terms):
         reasons.append(f"none of {any_terms[:5]} in the context")
 
     present_forbidden = [
         term
         for term in case.get("forbidden_context_terms", [])
-        if normalize(term).strip() in normalized_context
+        if normalize(term) in normalized_context
     ]
     if present_forbidden:
         reasons.append(f"forbidden terms present: {present_forbidden[:5]}")
@@ -264,7 +291,7 @@ def evaluate_case(case: dict, result: dict) -> tuple[bool, str]:
     ):
         reasons.append("the collection page did not fit the context budget")
 
-    if not context:
+    if not context and not case.get("allow_empty_context"):
         reasons.append("empty context")
 
     detail = f" [coverage={coverage:.0%}, source_rank={source_rank}, sources={len(sources)}]"
@@ -283,7 +310,12 @@ def run_suite(path: Path, args: argparse.Namespace) -> tuple[int, int, int]:
     for case in cases:
         # A suite may target its own knowledge base, so one run can cover a
         # company site, a documentation site and a university site at once.
-        case_database = case.get("database_id", database_id)
+        fixture_id = case.get("fixture")
+        fixture_database = getattr(args, "fixture_databases", {}).get(fixture_id)
+        if fixture_id and not fixture_database:
+            print(f"FAIL: {case['question']} [no database mapping for fixture {fixture_id}]")
+            continue
+        case_database = case.get("database_id", fixture_database or database_id)
         try:
             result = query(
                 args.endpoint,
@@ -291,6 +323,7 @@ def run_suite(path: Path, args: argparse.Namespace) -> tuple[int, int, int]:
                 case_database,
                 case.get("user_id", user_id),
                 case["question"],
+                case.get("messages", []),
             )
         except Exception as error:  # noqa: BLE001 - one broken call must not hide the rest
             print(f"FAIL: {case['question']} [request failed: {type(error).__name__}: {error}]")
@@ -300,15 +333,16 @@ def run_suite(path: Path, args: argparse.Namespace) -> tuple[int, int, int]:
         wants_answer = any(case.get(field) is not None for field in ANSWER_FIELDS)
         if wants_answer and not args.chat_endpoint:
             skipped_answers += 1
+            ok = False
             detail += " [answer checks skipped: no --chat-endpoint]"
         elif wants_answer:
             try:
-                spoken = ask(args.chat_endpoint, args.chat_cookie, case_database, case["question"])
+                spoken = ask(args.chat_endpoint, args.chat_cookie, case_database, case["question"], case.get("messages", []))
             except Exception as error:  # noqa: BLE001
                 ok = False
                 detail += f" [chat failed: {type(error).__name__}: {error}]"
             else:
-                answer_reasons = evaluate_answer(case, spoken["answer"])
+                answer_reasons = evaluate_answer(case, spoken["answer"], spoken["sources"])
                 # A run against the standby model measures the standby model.
                 # Saying so beats an unexplained regression in the numbers.
                 if spoken["fallback"]:
@@ -341,14 +375,17 @@ def main() -> int:
     parser.add_argument(
         "--chat-endpoint",
         default="",
-        help="Voll qualifizierte /api/chat-URL. Ohne sie werden Antwort-Prüfungen übersprungen.",
+        help="Voll qualifizierte /api/chat-URL. Fehlende Antwort-Prüfungen machen den Lauf unvollständig (Exit 2).",
     )
     parser.add_argument(
         "--chat-cookie",
         default="",
         help="Session-Cookie für --chat-endpoint, wie im Browser gesendet.",
     )
+    parser.add_argument("--fixture-databases", type=Path,
+                        help="JSON object mapping versioned fixture IDs to their indexed database IDs.")
     args = parser.parse_args()
+    args.fixture_databases = json.loads(args.fixture_databases.read_text(encoding="utf-8")) if args.fixture_databases else {}
 
     passed = 0
     total = 0
@@ -363,7 +400,8 @@ def main() -> int:
         # Loud, because a green run that never asked the model proves less than
         # it looks like it does.
         print(f"{skipped} Fall/Fälle ohne Antwort-Prüfung — --chat-endpoint fehlt.")
-    return 0 if passed == total else 1
+        return 2
+    return 0 if total > 0 and passed == total else 1
 
 
 if __name__ == "__main__":
