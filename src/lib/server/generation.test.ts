@@ -637,6 +637,20 @@ describe('BYOK request and fallback reasons', () => {
     expect(run).not.toHaveBeenCalled()
   })
 
+  it('moves on at once when the chosen model has no quota, and says so', async () => {
+    const fetchMock = vi.fn().mockImplementation(async (url: string) => url.includes('gemini-3.8-flash')
+      ? googleError(429, 'RESOURCE_EXHAUSTED', 'Quota exceeded for metric generate_content_free_tier_requests, limit: 0')()
+      : new Response(okBody(), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const result = await streamGroundedAnswer({ ai: { run: fallbackRun() } as unknown as CloudflareEnv['AI'], model: 'gemini-3.8-flash', question: 'Q', history: [], context: 'K', apiKey: 'k' })
+    expect(fetchMock.mock.calls.map(([url]) => String(url).match(/models\/([^:]+)/)?.[1])).toEqual(['gemini-3.8-flash', 'gemini-3.7-flash'])
+    expect(result).toMatchObject({
+      usedModel: 'gemini-3.7-flash',
+      substituteReason: 'byok_quota',
+      substituteDetail: expect.stringContaining('limit: 0'),
+    })
+  })
+
   it('drops the thinking setting for a model that rejects it', async () => {
     const fetchMock = vi.fn()
       .mockImplementationOnce(async () => googleError(400, 'INVALID_ARGUMENT', 'Thinking level is not supported for this model.')())

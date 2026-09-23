@@ -34,6 +34,8 @@ interface StreamMeta {
   fallback?: boolean
   fallbackReason?: FallbackReason
   fallbackDetail?: string
+  substituteReason?: FallbackReason
+  substituteDetail?: string
 }
 
 interface StreamDone {
@@ -42,6 +44,8 @@ interface StreamDone {
   fallback?: boolean
   fallbackReason?: FallbackReason
   fallbackDetail?: string
+  substituteReason?: FallbackReason
+  substituteDetail?: string
   refunded?: boolean
   reference?: string
 }
@@ -166,6 +170,8 @@ class ChatAPIClient {
           fallback_reason: usedFallback ? fallbackReason : undefined,
           fallback_detail: usedFallback ? fallbackDetail : undefined,
           requested_model: requestedModel,
+          substitute_reason: requestedModel && !usedFallback ? data.substituteReason : undefined,
+          substitute_detail: requestedModel && !usedFallback ? data.substituteDetail : undefined,
           refunded: data.refunded,
           reference: data.reference,
         })

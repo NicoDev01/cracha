@@ -51,6 +51,9 @@ export interface ChatResponse {
     fallback_detail?: string
     /** The model that was asked for, when another one wrote the answer. */
     requested_model?: string
+    /** Why the requested Gemini model did not answer when another Gemini model did. */
+    substitute_reason?: FallbackReason
+    substitute_detail?: string
     refunded?: boolean
     reference?: string
   }

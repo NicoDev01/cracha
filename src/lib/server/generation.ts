@@ -30,6 +30,9 @@ export interface StreamingGenerationResult {
   fallbackReason?: FallbackReason
   /** What Google said, for the reader and the log. */
   fallbackDetail?: string
+  /** Why the chosen Gemini model did not answer when another Gemini model did. */
+  substituteReason?: FallbackReason
+  substituteDetail?: string
   text: AsyncGenerator<string>
 }
 
@@ -788,18 +791,27 @@ export async function streamGroundedAnswer(input: ModelStreamInput): Promise<Str
   const chosen = normalizeGeminiModel(primaryModel)
   const attempts = [chosen, chosen, ...BYOK_ALTERNATES.filter((model) => model !== chosen)]
   let lastError: unknown
+  let chosenError: unknown
   for (const [index, model] of attempts.entries()) {
     if (input.signal?.aborted || Date.now() >= deadline) break
-    if (index === 1) await new Promise((resolve) => setTimeout(resolve, TRANSIENT_RETRY_DELAY_MS))
+    if (index === 1) {
+      // Exhausted quota stays exhausted for minutes; asking the same model
+      // again only added seconds before the next model got its turn.
+      if (lastError instanceof ProviderError && lastError.status === 429) continue
+      await new Promise((resolve) => setTimeout(resolve, TRANSIENT_RETRY_DELAY_MS))
+    }
     try {
+      const text = await prepareTextStream({ ...input, model }, deadline)
       return {
         model: chosen,
         usedModel: model,
         fallback: false,
-        text: await prepareTextStream({ ...input, model }, deadline),
+        ...(model !== chosen ? { substituteReason: fallbackReasonFor(chosenError), substituteDetail: fallbackDetailFor(chosenError) } : {}),
+        text,
       }
     } catch (error) {
       lastError = error
+      if (model === chosen) chosenError = error
       console.warn(JSON.stringify({
         event: 'byok_attempt_failed',
         model,

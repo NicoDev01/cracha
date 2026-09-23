@@ -141,6 +141,13 @@ export const useChatStore = create<ChatState>()(persist((set, get) => ({
       // The answer is finished only once the reader has seen all of it.
       await smoother.drain()
       if (complete) update(messages => messages.map(message => message.id === assistantId ? { ...message, isStreaming: false, metadata: doneMetadata } : message))
+      // A model without quota or without access fails the same way next time,
+      // and trying it first cost every answer several seconds. The one that
+      // answered takes its place until the reader picks another.
+      const substitute = doneMetadata?.substitute_reason
+      if (doneMetadata?.requested_model && (substitute === 'byok_quota' || substitute === 'byok_model') && get().byokModel === state.byokModel) {
+        set({ byokModel: doneMetadata.model_used })
+      }
       return complete
     } catch (error) {
       smoother.flush()

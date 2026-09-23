@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { getCitedSources, getUncitedSources } from './citations'
+import { collapseRepeatedCitations, getCitedSources, getUncitedSources } from './citations'
 import type { Source } from '@/types/chat'
 
 const sources = (count: number): Source[] => Array.from({ length: count }, (_, index) => ({
@@ -50,5 +50,26 @@ describe('getUncitedSources', () => {
       { index: 1, source: all[0] },
       { index: 2, source: all[1] },
     ])
+  })
+})
+
+describe('collapseRepeatedCitations', () => {
+  it('marks a source once per paragraph, at its last mention', () => {
+    expect(collapseRepeatedCitations('Erstens gilt das [3]. Zweitens auch [3]. Drittens ebenso [3].'))
+      .toBe('Erstens gilt das. Zweitens auch. Drittens ebenso.[3]')
+  })
+
+  it('keeps different sources and each list item on its own', () => {
+    expect(collapseRepeatedCitations('1. Crawling [3]. Mehr dazu [2][3].\n2. Indexierung [3].'))
+      .toBe('1. Crawling. Mehr dazu.[2][3]\n2. Indexierung.[3]')
+  })
+
+  it('keeps the other source of a combined marker', () => {
+    expect(collapseRepeatedCitations('A [1, 2]. B [2].')).toBe('A.[1] B.[2]')
+  })
+
+  it('leaves code blocks alone', () => {
+    const code = '```js\nx[1]; y[1]\n```'
+    expect(collapseRepeatedCitations(code)).toBe(code)
   })
 })

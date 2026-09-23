@@ -56,3 +56,39 @@ export function linkifyCitations(content: string, sources: Source[]): string {
     return links.length > 0 ? links.join(' ') : original
   })
 }
+
+const CITATION_GROUP = /(\s*)\[(\d+(?:\s*,\s*\d+)*)\]/g
+/** "Sitemaps [3]." left the full stop hanging after the marker's chip. */
+const MARKERS_BEFORE_PUNCTUATION = /\s*((?:\[\d+(?:\s*,\s*\d+)*\])+)([.,;:!?])(?=\s|$)/g
+
+function collapseLine(line: string): string {
+  const groups = [...line.matchAll(CITATION_GROUP)].map((match) => match[2].split(',').map((value) => Number(value.trim())))
+  if (groups.length < 2) return line
+  const lastGroup = new Map<number, number>()
+  groups.forEach((numbers, index) => numbers.forEach((number) => lastGroup.set(number, index)))
+  let index = -1
+  return line.replace(CITATION_GROUP, (_whole, space: string) => {
+    index += 1
+    const kept = groups[index].filter((number) => lastGroup.get(number) === index)
+    return kept.length ? `${space}[${kept.join(', ')}]` : ''
+  })
+}
+
+/**
+ * A model told to cite every claim cites every sentence, so a paragraph drawn
+ * from one page read "… [3]. … [3]. … [3]." Within a paragraph or list item a
+ * source is marked once, at its last mention; a marker that carried another
+ * source as well keeps that one. Markers move behind the sentence's
+ * punctuation. Code blocks are left alone.
+ */
+export function collapseRepeatedCitations(content: string): string {
+  let inFence = false
+  return content.split('\n').map((line) => {
+    if (/^\s*(```|~~~)/.test(line)) {
+      inFence = !inFence
+      return line
+    }
+    if (inFence) return line
+    return collapseLine(line).replace(MARKERS_BEFORE_PUNCTUATION, '$2$1')
+  }).join('\n')
+}

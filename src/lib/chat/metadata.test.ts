@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { answerMetaParts, fallbackNotice, formatDuration, formatModel } from './metadata'
+import { answerMetaParts, fallbackNotice, formatDuration, formatModel, substituteNotice } from './metadata'
 
 describe('formatModel', () => {
   it('drops the routing prefix from a Workers AI id', () => {
@@ -98,5 +98,20 @@ describe('answerMetaParts', () => {
   it('stays empty until the answer is timed', () => {
     expect(answerMetaParts({ ...metadata, query_time: 0 }, 3)).toEqual([])
     expect(answerMetaParts(undefined, 3)).toEqual([])
+  })
+})
+
+describe('substituteNotice', () => {
+  const base = { query_time: 1, model_used: 'gemini-3.5-flash-lite', requested_model: 'gemini-3.8-flash' }
+  it('names the cause and keeps a model without quota out of the next answer', () => {
+    expect(substituteNotice({ ...base, substitute_reason: 'byok_quota' }))
+      .toBe('Gemini 3.8 Flash hat kein Kontingent mehr – Gemini 3.5 Flash-Lite hat geantwortet und wird ab jetzt verwendet')
+  })
+  it('treats an overload as passing', () => {
+    expect(substituteNotice({ ...base, substitute_reason: 'byok_unavailable' }))
+      .toBe('Gemini 3.8 Flash war ausgelastet – Gemini 3.5 Flash-Lite hat geantwortet')
+  })
+  it('stays silent when the requested model answered', () => {
+    expect(substituteNotice({ query_time: 1, model_used: 'gemini-3.8-flash' })).toBeNull()
   })
 })

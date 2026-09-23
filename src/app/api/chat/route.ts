@@ -205,9 +205,11 @@ export async function POST(request: NextRequest) {
         const fallback = generated.fallback
         const fallbackReason = generated.fallbackReason
         const fallbackDetail = generated.fallbackDetail
+        const substituteReason = generated.substituteReason
+        const substituteDetail = generated.substituteDetail
         let hasText = false
         try {
-          send('meta', { sources, model, usedModel, fallback, fallbackReason, fallbackDetail, mode })
+          send('meta', { sources, model, usedModel, fallback, fallbackReason, fallbackDetail, substituteReason, substituteDetail, mode })
           for await (const text of generated.text) {
             signal.throwIfAborted()
             hasText ||= Boolean(text.trim())
@@ -215,7 +217,7 @@ export async function POST(request: NextRequest) {
           }
           signal.throwIfAborted()
           if (!hasText) throw new Error('Empty generation')
-          send('done', { usage: usage(), model, usedModel, fallback, fallbackReason, fallbackDetail, mode, reference, refunded: false })
+          send('done', { usage: usage(), model, usedModel, fallback, fallbackReason, fallbackDetail, substituteReason, substituteDetail, mode, reference, refunded: false })
         } catch (error) {
           console.error(JSON.stringify({ event: 'chat_generation_failed', reason: error instanceof Error ? error.name : 'unknown' }))
           // Deliberately stopping after receiving text must not permit unlimited

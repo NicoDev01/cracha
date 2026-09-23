@@ -38,6 +38,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { useHydratedChatStore } from '@/hooks/use-chat-store';
 import {
+  collapseRepeatedCitations,
   getCitedSources,
   getUncitedSources,
   linkifyCitations,
@@ -473,7 +474,7 @@ export function ChatInterface() {
       .map((item) => `[${item.index}] [${item.source.title}](${item.source.url})`)
       .join('\n');
 
-    return `${content.trim()}\n\n### Quellen\n${sourcesList}`;
+    return `${collapseRepeatedCitations(content.trim())}\n\n### Quellen\n${sourcesList}`;
   };
 
   const handleCopyWithSources = async (message: ChatMessage) => {
@@ -653,7 +654,7 @@ export function ChatInterface() {
                     : getUncitedSources(messageSources, citedSources);
                   const renderedContent = isUser
                     ? message.content
-                    : linkifyCitations(message.isStreaming ? streamingMarkdown(message.content) : message.content, messageSources);
+                    : linkifyCitations(collapseRepeatedCitations(message.isStreaming ? streamingMarkdown(message.content) : message.content), messageSources);
                   const metadata = !isUser && !message.isStreaming ? message.metadata : undefined;
                   const metaParts = answerMetaParts(metadata, messageSources.length);
                   return (
@@ -763,7 +764,10 @@ export function ChatInterface() {
                               </span>
                             )}
                             {substituteNotice(metadata) && (
-                              <span className="inline-flex items-center gap-1 rounded-md bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                              <span
+                                className="inline-flex items-center gap-1 rounded-md bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300"
+                                title={metadata?.substitute_detail ? `Google: ${metadata.substitute_detail}` : undefined}
+                              >
                                 {substituteNotice(metadata)}
                               </span>
                             )}

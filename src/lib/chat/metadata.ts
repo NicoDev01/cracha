@@ -89,7 +89,17 @@ export function fallbackNotice(reason: FallbackReason | undefined): string {
  * answered. Not a fallback to our model, but the reader picked a model and
  * should know it was not the one that wrote this.
  */
+const SUBSTITUTE_CAUSES: Partial<Record<FallbackReason, string>> = {
+  byok_quota: 'hat kein Kontingent mehr',
+  byok_model: 'ist für deinen Key nicht verfügbar',
+}
+
 export function substituteNotice(metadata: Metadata | undefined): string | null {
   if (!metadata?.requested_model || metadata.fallback) return null
-  return `${formatModel(metadata.requested_model)} war ausgelastet – ${formatModel(metadata.model_used)} hat geantwortet`
+  const requested = formatModel(metadata.requested_model)
+  const used = formatModel(metadata.model_used)
+  const cause = SUBSTITUTE_CAUSES[metadata.substitute_reason ?? 'byok_unavailable'] ?? 'war ausgelastet'
+  // Those two causes persist, so the answering model is used from now on.
+  const kept = metadata.substitute_reason === 'byok_quota' || metadata.substitute_reason === 'byok_model'
+  return `${requested} ${cause} – ${used} hat geantwortet${kept ? ' und wird ab jetzt verwendet' : ''}`
 }

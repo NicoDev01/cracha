@@ -194,3 +194,13 @@ it('records fallback flag in message metadata on start', async () => {
   await useChatStore.getState().sendMessage('Frage nach Fallback')
 })
 
+it('switches to the Gemini model that answered when the chosen one has no quota', async () => {
+  useChatStore.getState().setByokApiKey('AIzaSyTestKey')
+  useChatStore.getState().setByokModel('gemini-3.8-flash')
+  mocks.stream.mockImplementation(async (_request, handlers) => {
+    handlers.onStart({ sources: [], model: 'gemini-3.5-flash-lite', requestedModel: 'gemini-3.8-flash' }); handlers.onDelta('Antwort')
+    handlers.onDone({ query_time: 1, model_used: 'gemini-3.5-flash-lite', requested_model: 'gemini-3.8-flash', substitute_reason: 'byok_quota' })
+  })
+  await useChatStore.getState().sendMessage('Frage')
+  expect(useChatStore.getState().byokModel).toBe('gemini-3.5-flash-lite')
+})
