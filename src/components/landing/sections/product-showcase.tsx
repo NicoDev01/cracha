@@ -26,10 +26,11 @@ export default function ProductShowcase() {
                            Warum <span className="text-gradient_indigo-purple">CraCha</span>?
                         </h2>
                         <p className="mt-4 text-base text-muted-foreground">
-                            Recherchiere gezielt in den Seiten, die du eingelesen hast.
-                            CraCha hält diese Inhalte in deiner Wissensbasis bereit,
-                            damit du wiederholt Fragen dazu stellen kannst.
-                            Die verlinkten Originalseiten helfen dir, Aussagen nachzuprüfen.
+                            Statt einzelne Seiten in einen KI-Chat zu kopieren, befragst du mit
+                            CraCha alle Seiten, die du eingelesen hast – eine ganze Kundenwebsite
+                            oder eine umfangreiche Dokumentation. Jede Antwort verlinkt die
+                            Seiten, aus denen sie stammt. Die Wissensbasis bleibt in
+                            deinem Konto, du musst also nicht bei jeder Frage von vorn anfangen.
                             <br /><strong>Eine Website, deine Fragen, nachvollziehbare Quellen.</strong>
                         </p>
                     </div>

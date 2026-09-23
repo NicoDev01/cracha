@@ -23,6 +23,8 @@ interface Feature {
  * sources do not contain the answer. That is the honest version and it is the
  * stronger one. And the answer carries a citation marker linking to the source
  * page, not a verbatim quote; the chat lists them under "Verwendete Quellen".
+ * The caveat that such an answer can still be wrong lives in the FAQ
+ * ("Sind die Antworten immer richtig?"), not on this card.
  */
 const features: Feature[] = [
   {
@@ -44,9 +46,9 @@ const features: Feature[] = [
     icon: <SlidersHorizontal className="h-4 w-4" />,
   },
   {
-    title: "Quellen zum Nachprüfen",
+    title: "Jede Antwort mit Quelle",
     description:
-      "Öffne die verlinkten Quellen und prüfe Aussagen im Original. Auch eine KI-Antwort mit Quellen kann Fehler enthalten oder wichtige Details auslassen.",
+      "Unter jeder Antwort stehen die Seiten, auf die sie sich stützt – als klickbare Links. Ein Klick, und du liest die Aussage im Original nach.",
     icon: <BadgeCheck className="h-4 w-4" />,
   },
   {

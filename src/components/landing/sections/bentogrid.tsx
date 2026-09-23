@@ -36,12 +36,12 @@ export function BentoGrid() {
           <GridItem
             icon={<Settings className="h-4 w-4" />}
             title="2. Inhalte einlesen"
-            description="CraCha liest erreichbare Seiten ein und bereitet sie für Fragen auf. Warte, bis deine Wissensbasis bereit ist; gesperrte Inhalte werden nicht automatisch zugänglich."
+            description="CraCha liest die erreichbaren Seiten ein und bereitet sie für deine Fragen auf. Im Dashboard siehst du, sobald deine Wissensbasis bereit ist."
           />
           <GridItem
             icon={<MessageSquare className="h-4 w-4" />}
             title="3. Fragen und Quellen prüfen"
-            description="Öffne die Wissensbasis im Chat, stelle eine konkrete Frage und prüfe die Antwort an den verlinkten Originalseiten. Deine Wissensbasen bleiben in deinem Konto erreichbar."
+            description="Stell deine Frage im Chat und spring über die Quellenlinks direkt zur passenden Originalseite. Deine Wissensbasen bleiben in deinem Konto, du kannst jederzeit weiterfragen."
           />
         </div>
       </MaxWidthWrapper>
