@@ -485,3 +485,36 @@ async def test_the_confirming_poll_does_not_wait_out_the_backoff(monkeypatch) ->
     # The wait before the confirming poll is the short one, not the grown one.
     assert sleeps[-1] == INDEX_STATUS_INTERVAL_SECONDS
     assert max(sleeps) > INDEX_STATUS_INTERVAL_SECONDS
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("crawl_complete", [True, False, None])
+async def test_finalize_tells_the_worker_whether_the_crawl_saw_the_whole_site(
+    crawl_complete: bool | None,
+) -> None:
+    ingest = object.__new__(RagIngestClient)
+    ingest.base_url = "https://rag.example.test"
+    ingest.secret = "secret"
+    sent: list[tuple[str, dict]] = []
+
+    async def post(_client, path: str, payload: dict):
+        sent.append((path, payload))
+        if path == "/ingest/status":
+            return SimpleNamespace(
+                json=lambda: {"ready": True, "pending": 0, "failures": [], "chunks_count": 3}
+            )
+        return SimpleNamespace(json=lambda: {"success": True})
+
+    ingest._post = post
+
+    await ingest.finalize(
+        "database", "user", ["page-a.md"], attempts=1, job_id="job", crawl_complete=crawl_complete
+    )
+
+    completes = [payload for path, payload in sent if path == "/ingest/complete"]
+    assert len(completes) == 1
+    if crawl_complete is None:
+        # Leaving the field out keeps an older Worker's behaviour exactly.
+        assert "complete" not in completes[0]
+    else:
+        assert completes[0]["complete"] is crawl_complete

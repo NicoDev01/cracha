@@ -22,6 +22,13 @@ interface CompleteBody {
   pages_count: number
   chunks_count?: number
   job_id?: string
+  /**
+   * Whether the crawl saw the whole site. Only a complete crawl may delete
+   * indexed pages it did not return; one cut off by its page limit, a timeout
+   * or many failed fetches keeps them. Absent (crawlers that predate the flag)
+   * means complete, which is the behaviour those crawlers were built against.
+   */
+  complete?: boolean
 }
 
 interface IndexStatusBody {
@@ -119,18 +126,27 @@ async function handleComplete(request: Request, env: Env, coord: MutationContext
   if (!Array.isArray(body.active_keys) || !body.active_keys.every((key) => typeof key === 'string')) {
     throw new HttpError(400, 'active_keys ist ungültig.')
   }
+  if (body.complete !== undefined && typeof body.complete !== 'boolean') {
+    throw new HttpError(400, 'complete ist ungültig.')
+  }
+  const pruneStale = body.complete !== false
 
   const database = await assertActiveJob(env, databaseId, userId, body.job_id, coord)
   const instanceId = database.ai_search_instance_id ?? (await instanceIdFor(databaseId))
   const instance = env.AI_SEARCH.get(instanceId)
   await coord.beginExternal()
-  const deleted = await deleteStaleItems(
-    instance,
-    new Set(body.active_keys),
-    async () => {
-      await assertActiveJob(env, databaseId, userId, body.job_id, coord)
-    },
-  )
+  const deleted = pruneStale
+    ? await deleteStaleItems(
+      instance,
+      new Set(body.active_keys),
+      async () => {
+        await assertActiveJob(env, databaseId, userId, body.job_id, coord)
+      },
+    )
+    : 0
+  if (!pruneStale) {
+    console.log(JSON.stringify({ event: 'stale_items_kept', database_id: databaseId, job_id: body.job_id ?? null }))
+  }
 
   const fresh = await assertActiveJob(env, databaseId, userId, body.job_id, coord)
   // The crawler calls this endpoint only after every retained item has produced
@@ -158,7 +174,12 @@ async function handleComplete(request: Request, env: Env, coord: MutationContext
   }
   await coord.save(updated, { expectedJobId: body.job_id })
 
-  return json(request, env, { success: true, deleted_stale_items: deleted, database: updated })
+  return json(request, env, {
+    success: true,
+    deleted_stale_items: deleted,
+    stale_items_kept: !pruneStale,
+    database: updated,
+  })
 }
 
 async function handleIndexStatus(request: Request, env: Env, coord: MutationContext): Promise<Response> {

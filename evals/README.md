@@ -16,6 +16,46 @@ Modell drei Personen in einen Aufzählungspunkt gepackt hatte.
 python evals/evaluate.py --endpoint https://<rag-api> --token <RAG_QUERY_SECRET> --database-id <id> --user-id <uid> --cases evals/cases.webmen.json evals/cases.example.json
 ```
 
+## Retrieval-Metriken und gespeicherte Läufe
+
+Für jeden Fall mit `required_source_url_contains` wird der Rang der ersten
+passenden Quelle festgehalten. Daraus berechnet der Lauf je Fall-Datei und
+insgesamt **Recall@1/3/5/8** (Anteil der Fälle, deren Soll-Quelle unter den
+ersten k Quellen steht) und **MRR** (Mittel von 1/Rang). Nicht gefundene Quellen
+und fehlgeschlagene Requests zählen als Treffer 0, nicht als ausgelassen.
+Fälle ohne Soll-URL gehen nicht in diese Werte ein.
+
+`--top-k` (Standard 8, wie `/api/chat`) bestimmt, wie viele Quellen `/query`
+liefert; Recall@8 ist nur bei `--top-k 8` oder mehr aussagekräftig.
+
+`--output` speichert den Lauf als JSON: Zusammenfassung, Werte je Fall-Datei und
+je Fall Rang, gelieferte URLs, Latenz, Cache-Treffer und Fehler. Ohne Pfad landet
+er in `evals/results/<UTC-Zeitstempel>.json`. Token und Cookie werden nicht
+gespeichert, nur die Hosts.
+
+```bash
+python evals/evaluate.py --endpoint https://<rag-api> --token <RAG_QUERY_SECRET> --database-id <id> --user-id <uid> --cases evals/cases.webmen.json --output
+```
+
+Achtung: `/query` cached Retrieval-Ergebnisse je Indexstand. Ein Fall mit
+`"cached": true` misst den Stand vom ersten Aufruf. Ergebnisse ohne Reranking
+haben eigene Cache-Einträge, `--rerank on` teilt sie mit dem Standard.
+
+### Reranking vergleichen (A/B)
+
+AI Search bietet als Reranker nur `@cf/baai/bge-reranker-base`, überwiegend auf
+Englisch und Chinesisch trainiert. Ob er deutschen Seiten hilft, ist nicht
+gemessen. `--rerank on` bzw. `--rerank off` erzwingt das Reranking des
+Hybrid-Pfads für diesen Lauf; ohne die Option gilt die Worker-Variable
+`RERANKING` (`off` schaltet ab, alles andere oder nicht gesetzt: an, wie bisher).
+Zwei Läufe gegen denselben Index nacheinander, dann die `summary.retrieval`-Werte
+der beiden Dateien vergleichen:
+
+```bash
+python evals/evaluate.py ... --rerank on --output evals/results/rerank-on.json
+python evals/evaluate.py ... --rerank off --output evals/results/rerank-off.json
+```
+
 ## Antworten mitbewerten
 
 `/api/chat` verlangt eine angemeldete Sitzung, deshalb braucht der Lauf das

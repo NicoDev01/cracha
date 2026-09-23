@@ -26,12 +26,20 @@ describe('getUncitedSources', () => {
     expect(getUncitedSources(all, cited)).toEqual([])
   })
 
-  it('returns nothing when an uncited answer falls back to showing all sources', () => {
+  it('lists every source as uncited when the answer cites none', () => {
     const all = sources(3)
     const cited = getCitedSources('Eine Antwort ohne Belegziffern.', all)
 
-    expect(cited).toHaveLength(3)
-    expect(getUncitedSources(all, cited)).toEqual([])
+    // Nothing is presented as cited that the answer did not cite.
+    expect(cited).toEqual([])
+    expect(getUncitedSources(all, cited).map((entry) => entry.index)).toEqual([1, 2, 3])
+  })
+
+  it('ignores markers that point past the retrieved sources', () => {
+    const all = sources(2)
+
+    expect(getCitedSources('Siehe [7].', all)).toEqual([])
+    expect(getCitedSources('Siehe [2, 7].', all)).toEqual([{ index: 2, source: all[1] }])
   })
 
   it('keeps the numbering aligned with the citation markers', () => {

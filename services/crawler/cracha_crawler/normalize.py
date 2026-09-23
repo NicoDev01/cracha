@@ -3,7 +3,7 @@ import hashlib
 import re
 from collections import deque
 from datetime import UTC, datetime
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import unquote_plus, urljoin, urlsplit, urlunsplit
 
 from .models import Page
 
@@ -411,13 +411,136 @@ def restore_tables(markdown: str, tables: list[dict] | None) -> str:
     return MARKDOWN_TABLE_BLOCK_RE.sub(replace, markdown)
 
 
+# Parameters that identify a campaign or a click, never the content. Two links
+# to the same page that differ only here were two index entries of one page.
+TRACKING_PARAMS = frozenset(
+    {
+        "_ga",
+        "_gl",
+        "_hsenc",
+        "_hsmi",
+        "dclid",
+        "fbclid",
+        "gbraid",
+        "gclid",
+        "gclsrc",
+        "igshid",
+        "mc_cid",
+        "mc_eid",
+        "msclkid",
+        "wbraid",
+        "yclid",
+    }
+)
+# `ref` is only tracking when it names where the visitor came from. On a code
+# host `?ref=main` or `?ref=v1.2.3` selects the content and must stay.
+_REF_SOURCES = frozenset(
+    {"twitter", "facebook", "linkedin", "producthunt", "hackernews", "reddit", "newsletter", "rss"}
+)
+_REF_HOSTNAME_RE = re.compile(r"^[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}$")
+
+
+def _is_tracking_param(name: str, value: str) -> bool:
+    key = name.strip().lower()
+    if key.startswith("utm_") or key in TRACKING_PARAMS:
+        return True
+    if key == "ref":
+        source = value.strip().lower()
+        return source in _REF_SOURCES or bool(_REF_HOSTNAME_RE.match(source))
+    return False
+
+
+def _clean_query(query: str) -> str:
+    """Drop tracking parameters and order the rest by name.
+
+    The segments keep their original encoding, so the URL we fetch is the one
+    the site linked. A stable sort by name keeps repeated keys (`a=2&a=1`) in
+    their original order, which some sites read as a list.
+    """
+    kept = []
+    for segment in query.split("&"):
+        if not segment:
+            continue
+        name, _, value = segment.partition("=")
+        if _is_tracking_param(unquote_plus(name), unquote_plus(value)):
+            continue
+        kept.append(segment)
+    return "&".join(sorted(kept, key=lambda segment: segment.partition("=")[0]))
+
+
 def canonical_url(url: str, *, preserve_fragment: bool = False) -> str:
     parsed = urlsplit(url)
     path = parsed.path or "/"
     if path != "/":
         path = path.rstrip("/")
     fragment = parsed.fragment if preserve_fragment else ""
-    return urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(), path, parsed.query, fragment))
+    return urlunsplit(
+        (parsed.scheme.lower(), parsed.netloc.lower(), path, _clean_query(parsed.query), fragment)
+    )
+
+
+def is_hash_route(requested_url: str, final_url: str) -> bool:
+    """Whether the final URL's fragment names a page rather than a spot on one.
+
+    Documentation SPAs route by fragment: three.js sends its legacy
+    `…/AnimationAction.html` to `docs/#AnimationAction`, and every class is a
+    different page behind the same path. A plain anchor (`/docs#intro`, or a
+    script scrolling to one) is the same page and must not become a second
+    index entry. `#/…` and `#!…` are routes by convention; otherwise it is a
+    route only when navigation left the requested document for it.
+    """
+    fragment = urlsplit(final_url).fragment
+    if not fragment:
+        return False
+    if fragment.startswith(("/", "!")):
+        return True
+    return canonical_url(requested_url) != canonical_url(final_url)
+
+
+_LINK_TAG_RE = re.compile(r"<link\b[^>]*>", re.IGNORECASE)
+_REL_RE = re.compile(r"\brel\s*=\s*(?:\"([^\"]*)\"|'([^']*)'|([^\s>]+))", re.IGNORECASE)
+_HREF_RE = re.compile(r"\bhref\s*=\s*(?:\"([^\"]*)\"|'([^']*)'|([^\s>]+))", re.IGNORECASE)
+
+
+def _attribute(pattern: re.Pattern[str], tag: str) -> str | None:
+    match = pattern.search(tag)
+    if not match:
+        return None
+    return next(group for group in match.groups() if group is not None)
+
+
+def extract_canonical_url(html: str, page_url: str) -> str | None:
+    """The page's own `<link rel="canonical">`, when it is safe to trust.
+
+    It is only an identifier here and is never fetched. It still has to stay on
+    the page's scheme and host: another host's canonical would file the text
+    under a URL the crawl never had permission to speak for. Two common
+    misconfigurations are refused because trusting them loses content: every
+    page pointing at the home page, and paginated pages (`?page=2`) pointing at
+    the first page — the later pages would overwrite the first under one key.
+    """
+    if not html:
+        return None
+    for tag in _LINK_TAG_RE.findall(html[:500_000]):
+        rel = _attribute(_REL_RE, tag)
+        if not rel or "canonical" not in rel.lower().split():
+            continue
+        href = (_attribute(_HREF_RE, tag) or "").strip()
+        if not href:
+            return None
+        candidate = canonical_url(urljoin(page_url, href))
+        page = urlsplit(canonical_url(page_url))
+        target = urlsplit(candidate)
+        if target.scheme not in {"http", "https"}:
+            return None
+        if (target.scheme, target.netloc) != (page.scheme, page.netloc):
+            return None
+        if target.path == "/" and page.path != "/":
+            return None
+        if target.path == page.path and target.query != page.query:
+            return None
+        return candidate
+    return None
 
 
 def matches_patterns(url: str, includes: list[str], excludes: list[str]) -> bool:
@@ -466,12 +589,20 @@ def page_from_result(result: object, includes: list[str], excludes: list[str]) -
     if isinstance(status_code, int) and status_code >= 400:
         return None
 
-    result_url = getattr(result, "redirected_url", None) or getattr(result, "url", "")
-    # Hash routes can identify distinct pages in documentation SPAs. Regular
-    # link discovery still strips ordinary anchors before scheduling requests.
-    url = canonical_url(str(result_url), preserve_fragment=True)
+    requested_url = str(getattr(result, "url", "") or "")
+    result_url = str(getattr(result, "redirected_url", None) or requested_url)
+    # Hash routes identify distinct pages in documentation SPAs; an ordinary
+    # anchor does not, and keeping it filed one page under two keys.
+    hash_route = is_hash_route(requested_url, result_url)
+    url = canonical_url(result_url, preserve_fragment=hash_route)
     if not url or not matches_patterns(url, includes, excludes):
         return None
+    html = str(getattr(result, "html", "") or "")
+    # An SPA shell usually declares itself canonical for every route it serves,
+    # so a route keeps its own URL.
+    declared = None if hash_route else extract_canonical_url(html, url)
+    if declared and matches_patterns(declared, includes, excludes):
+        url = declared
 
     markdown_result = getattr(result, "markdown", None)
     fit_markdown = normalize_markdown(
@@ -500,5 +631,5 @@ def page_from_result(result: object, includes: list[str], excludes: list[str]) -
         checksum=checksum,
         crawled_at=datetime.now(UTC).isoformat(),
         depth=int(metadata.get("depth", 0) or 0),
-        published_at=extract_published_at(str(getattr(result, "html", "") or "")),
+        published_at=extract_published_at(html),
     )

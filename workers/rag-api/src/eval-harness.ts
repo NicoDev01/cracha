@@ -1,4 +1,4 @@
-import { instanceIdFor, retrieve } from './search'
+import { instanceIdFor, resolveReranking, retrieve } from './search'
 import type { Env } from './types'
 
 /**
@@ -15,13 +15,15 @@ export default {
       return Response.json({ error: 'only /query' }, { status: 404 })
     }
     try {
-      const body = await request.json<{ tenant_id: string; question: string; top_k?: number }>()
+      const body = await request.json<{ tenant_id: string; question: string; top_k?: number; rerank?: boolean }>()
       const instance = env.AI_SEARCH.get(await instanceIdFor(body.tenant_id))
       const started = Date.now()
       const { context, blocks, sources, searchQuery } = await retrieve(
         instance,
         body.question,
         body.top_k ?? 8,
+        [],
+        { rerank: resolveReranking(body.rerank, env.RERANKING) },
       )
       return Response.json({
         context,

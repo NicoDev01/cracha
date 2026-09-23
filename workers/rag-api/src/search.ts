@@ -160,7 +160,96 @@ async function indexedItemsByKey(
 export function needsUpload(page: IngestPage, current: IndexedItem | undefined): boolean {
   if (!current) return true
   if (current.status !== 'completed' || current.chunks < 1) return true
-  return current.checksum !== page.checksum || current.title !== page.title
+  return current.checksum !== documentChecksum(page) || current.title !== page.title
+}
+
+/**
+ * The layout of the uploaded document, beyond the page's own markdown. It is
+ * part of the stored checksum, so a change to `documentContent` re-uploads
+ * every page once on its next crawl instead of leaving old items in the old
+ * layout until their text happens to change.
+ */
+export const DOCUMENT_FORMAT = 'sections-v1'
+
+export function documentChecksum(page: Pick<IngestPage, 'checksum'>): string {
+  return `${page.checksum}:${DOCUMENT_FORMAT}`
+}
+
+/** Sections shorter than this rarely start a chunk of their own (chunks are
+ *  800 tokens, split at paragraphs), so their context line would only add
+ *  noise — and on a collection page of short entries, a lot of it. */
+const SECTION_CONTEXT_MIN_CHARACTERS = 400
+const SECTION_CONTEXT_MAX_PART = 80
+const SECTION_CONTEXT_MAX_LINES = 60
+const SECTION_CONTEXT_LINE = /^> [^\n]* › [^\n]*$/u
+const MARKDOWN_HEADING = /^ {0,3}(#{1,6})[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$/
+const MARKDOWN_FENCE = /^[ \t]*(`{3,}|~{3,})/
+
+function contextPart(value: string): string {
+  const text = value.replace(/\s+/g, ' ').trim()
+  return text.length > SECTION_CONTEXT_MAX_PART ? `${text.slice(0, SECTION_CONTEXT_MAX_PART - 1)}…` : text
+}
+
+/**
+ * Put `> Title › Section › Subsection` in front of every H2/H3 section long
+ * enough to be chunked on its own.
+ *
+ * AI Search splits a document into 800-token chunks at paragraph boundaries, so
+ * only the first chunk carries the `# Title` line. A later chunk that begins at
+ * "## Preise" has lost which page and which product it is about, and neither
+ * its embedding nor the model reading it can recover that. The line sits
+ * directly above the heading, in the same paragraph, so a split before the
+ * heading keeps the two together. Fenced code is left alone.
+ */
+export function withSectionContext(title: string, markdown: string): string {
+  const lines = markdown.split('\n')
+  const headings: Array<{ index: number; level: number; text: string }> = []
+  let fence: string | null = null
+  lines.forEach((line, index) => {
+    const marker = MARKDOWN_FENCE.exec(line)?.[1]
+    if (marker) {
+      if (fence === null) fence = marker[0]
+      else if (marker[0] === fence) fence = null
+      return
+    }
+    if (fence !== null) return
+    const heading = MARKDOWN_HEADING.exec(line)
+    if (heading) headings.push({ index, level: heading[1].length, text: heading[2] })
+  })
+
+  const pageTitle = contextPart(title)
+  const insertions = new Map<number, string>()
+  let section: string | null = null
+  for (const [position, heading] of headings.entries()) {
+    if (heading.level === 1) section = null
+    if (heading.level === 2) section = contextPart(heading.text)
+    if (heading.level !== 2 && heading.level !== 3) continue
+    if (insertions.size >= SECTION_CONTEXT_MAX_LINES) break
+    // The section runs to the next heading of level three or above.
+    const end = headings.slice(position + 1).find((next) => next.level <= 3)?.index ?? lines.length
+    const body = lines.slice(heading.index + 1, end).join('\n').trim()
+    if (body.length < SECTION_CONTEXT_MIN_CHARACTERS) continue
+    const parts = [pageTitle]
+    if (heading.level === 3 && section) parts.push(section)
+    parts.push(contextPart(heading.text))
+    const path = parts.filter((part, index) => part && part !== parts[index - 1])
+    if (path.length < 2) continue
+    insertions.set(heading.index, `> ${path.join(' › ')}`)
+  }
+  if (!insertions.size) return markdown
+  return lines.flatMap((line, index) => {
+    const context = insertions.get(index)
+    return context ? [context, line] : [line]
+  }).join('\n')
+}
+
+/** The context lines are for chunks, not for a page read as a whole. */
+export function stripSectionContext(text: string): string {
+  return text.split('\n').filter((line) => !SECTION_CONTEXT_LINE.test(line)).join('\n')
+}
+
+export function documentContent(page: Pick<IngestPage, 'title' | 'url' | 'markdown'>): string {
+  return `# ${page.title}\n\nQuelle: ${page.url}\n\n${withSectionContext(page.title, page.markdown.trim())}`
 }
 
 /** The listing covers the crawler's 500-page ceiling with room to spare. */
@@ -217,14 +306,14 @@ export async function uploadPages(
       const key = await itemKeyFor(page.url)
       if (!needsUpload(page, existing.get(key))) return key
       if (beforeUploadCheck) await beforeUploadCheck()
-      const content = `# ${page.title}\n\nQuelle: ${page.url}\n\n${page.markdown.trim()}`
+      const content = documentContent(page)
       // Queue the item instead of holding a Worker request open while the
       // managed embedding/indexing pipeline runs (often longer than 30 s).
       await instance.items.upload(key, content, {
         metadata: {
           url: page.url,
           title: page.title,
-          checksum: page.checksum,
+          checksum: documentChecksum(page),
           // Absent on pages that state no date. Omitted rather than defaulted,
           // so a missing date can never masquerade as a real one.
           ...(page.published_at ? { published_at: page.published_at } : {}),
@@ -408,7 +497,9 @@ async function readItemText(
   let consumed = 0
   for (const chunk of ordered) {
     if (text.length >= HUB_MAX_CHARACTERS) break
-    text = appendWithoutOverlap(text, chunk.text)
+    // The whole page is read here, so the per-section context lines would only
+    // repeat what its own headings already say.
+    text = appendWithoutOverlap(text, stripSectionContext(chunk.text))
     consumed += 1
   }
   return {
@@ -602,11 +693,28 @@ async function resolveHubPage(
   return null
 }
 
+export interface RetrievalOptions {
+  /** Rerank the hybrid path with bge-reranker-base. Default: on. */
+  rerank?: boolean
+}
+
+/**
+ * The reranker AI Search offers is bge-reranker-base, trained mostly on English
+ * and Chinese. Whether it helps German sites is an open measurement, so it is
+ * switchable per deployment (`RERANKING=off`) and per request (`rerank`), and
+ * the default stays what it was until an eval run shows otherwise.
+ */
+export function resolveReranking(requested: unknown, configured: string | undefined): boolean {
+  if (typeof requested === 'boolean') return requested
+  return configured?.trim().toLowerCase() !== 'off'
+}
+
 export async function retrieve(
   instance: RetrievalInstance,
   question: string,
   topK: number,
   history: ConversationMessage[] = [],
+  options: RetrievalOptions = {},
 ): Promise<{ context: string; blocks: ContextBlock[]; sources: Source[]; searchQuery: string }> {
   const intent = classifyQuestion(question)
   const messages: AiSearchMessage[] = [
@@ -646,7 +754,7 @@ export async function retrieve(
   // supplies keyword precision. Local rank fusion keeps either path from
   // discarding a useful result solely because one model assigned a low score.
   const [hybridResult, vectorResult] = await Promise.allSettled([
-    search('hybrid', true, true),
+    search('hybrid', options.rerank ?? true, true),
     search('vector', false, false),
   ])
   // One path failing is survivable and stays survivable — but it silently halves

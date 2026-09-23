@@ -7,7 +7,7 @@ import {
 import { databaseForUser } from './database'
 import { forwardOperation, KnowledgeBaseCoordinator } from './coordinator'
 import { assertText, HttpError, json, readJson } from './http'
-import { instanceIdFor, retrieve } from './search'
+import { instanceIdFor, resolveReranking, retrieve } from './search'
 import type { ConversationMessage, Env, QueryBody } from './types'
 
 export { KnowledgeBaseCoordinator }
@@ -41,11 +41,15 @@ async function handleQuery(request: Request, env: Env): Promise<Response> {
 
   const topK = Number.isFinite(body.top_k) ? Math.min(Math.max(Number(body.top_k), 1), 12) : 8
   const messages = validHistory(body.messages)
+  if (body.rerank !== undefined && typeof body.rerank !== 'boolean') {
+    throw new HttpError(400, 'rerank muss true oder false sein.')
+  }
+  const rerank = resolveReranking(body.rerank, env.RERANKING)
 
   // Only the search is cached, never the answer. Retrieval is deterministic for
   // a given index version and is the larger half of the wait; the answer is
   // written fresh every time, so nobody is served yesterday's wording.
-  const cacheKey = await retrievalCacheKey(database, question, topK, messages)
+  const cacheKey = await retrievalCacheKey(database, question, topK, messages, { rerank })
   const cached = await readRetrievalCache(env, cacheKey)
   if (cached) {
     return json(request, env, { ...cached, usage: { latency_ms: Date.now() - started, cached: true } })
@@ -54,7 +58,7 @@ async function handleQuery(request: Request, env: Env): Promise<Response> {
   const instance = env.AI_SEARCH.get(database.ai_search_instance_id ?? (await instanceIdFor(databaseId)))
   let retrieval
   try {
-    retrieval = await retrieve(instance, question, topK, messages)
+    retrieval = await retrieve(instance, question, topK, messages, { rerank })
   } catch (error) {
     if (error instanceof Error && /ai_search_not_found|not found/i.test(error.message)) {
       throw new HttpError(409, 'Die Wissensbasis wird noch indexiert.')

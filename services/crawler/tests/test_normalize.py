@@ -4,7 +4,9 @@ from cracha_crawler.normalize import (
     canonical_url,
     clean_code_fences,
     drop_duplicate_table_of_contents,
+    extract_canonical_url,
     extract_published_at,
+    is_hash_route,
     matches_patterns,
     normalize_markdown,
     page_from_result,
@@ -425,3 +427,127 @@ def test_fenced_code_blocks_protected_from_toc_and_heading_extraction() -> None:
     # But code block content is completely preserved
     assert "# Introduction" in cleaned
     assert "- not_a_toc_item = 1" in cleaned
+
+
+def test_tracking_parameters_are_dropped_and_the_rest_sorted() -> None:
+    assert (
+        canonical_url(
+            "https://Example.com/p/?utm_source=nl&b=2&fbclid=x&a=1&gclid=y&mc_cid=1&msclkid=z&_ga=2"
+        )
+        == "https://example.com/p?a=1&b=2"
+    )
+    # Two spellings of one page end up as one key.
+    assert canonical_url("https://example.com/p?b=2&a=1") == canonical_url(
+        "https://example.com/p?a=1&b=2&utm_medium=mail"
+    )
+
+
+def test_genuine_query_parameters_survive_unchanged() -> None:
+    assert canonical_url("https://example.com/blog?page=2") == "https://example.com/blog?page=2"
+    # Original encoding is kept, so the fetched URL is the one the site linked.
+    assert canonical_url("https://example.com/s?q=a%20b+c") == "https://example.com/s?q=a%20b+c"
+    # Repeated keys keep their relative order.
+    assert canonical_url("https://example.com/f?tag=b&id=1&tag=a") == (
+        "https://example.com/f?id=1&tag=b&tag=a"
+    )
+
+
+def test_ref_is_only_dropped_when_it_names_a_referrer() -> None:
+    assert canonical_url("https://example.com/p?ref=producthunt") == "https://example.com/p"
+    assert canonical_url("https://example.com/p?ref=news.ycombinator.com") == "https://example.com/p"
+    assert canonical_url("https://example.com/p?ref=main") == "https://example.com/p?ref=main"
+    assert canonical_url("https://example.com/p?ref=v1.2.3") == "https://example.com/p?ref=v1.2.3"
+
+
+def test_hash_routes_are_told_apart_from_anchors() -> None:
+    assert not is_hash_route("https://example.com/docs", "https://example.com/docs#intro")
+    assert not is_hash_route("https://example.com/docs#intro", "https://example.com/docs/#intro")
+    assert is_hash_route("https://example.com/", "https://example.com/#/pricing")
+    assert is_hash_route("https://example.com/", "https://example.com/#!/pricing")
+    assert is_hash_route("https://example.com/legacy.html", "https://example.com/docs/#Vector3")
+    assert not is_hash_route("https://example.com/docs", "https://example.com/docs")
+
+
+def test_the_browser_path_drops_an_ordinary_anchor() -> None:
+    result = SimpleNamespace(
+        success=True,
+        url="https://example.com/docs/#intro",
+        metadata={"title": "Docs"},
+        markdown=SimpleNamespace(fit_markdown="# Docs\n\n" + "useful content " * 20),
+    )
+    page = page_from_result(result, [], [])
+    assert page is not None
+    assert page.url == "https://example.com/docs"
+
+
+def _canonical_html(href: str) -> str:
+    return f'<html><head><link href="{href}" rel="canonical"></head><body></body></html>'
+
+
+def test_canonical_link_on_the_same_host_is_used() -> None:
+    page = "https://example.com/index.php?id=7&utm_source=x"
+    assert extract_canonical_url(_canonical_html("/ueber-uns/"), page) == (
+        "https://example.com/ueber-uns"
+    )
+    assert extract_canonical_url(
+        "<link rel='alternate stylesheet' href='/a.css'><link rel=canonical href=https://example.com/b>",
+        "https://example.com/a",
+    ) == "https://example.com/b"
+
+
+def test_untrustworthy_canonical_links_are_ignored() -> None:
+    page = "https://example.com/blog/post"
+    # Another host, another scheme, or not a web URL at all.
+    assert extract_canonical_url(_canonical_html("https://evil.test/post"), page) is None
+    assert extract_canonical_url(_canonical_html("http://example.com/post"), page) is None
+    assert extract_canonical_url(_canonical_html("javascript:alert(1)"), page) is None
+    # Every page pointing at the home page is a misconfiguration.
+    assert extract_canonical_url(_canonical_html("https://example.com/"), page) is None
+    # Page 2 pointing at page 1 would overwrite page 1 with page 2's text.
+    assert extract_canonical_url(
+        _canonical_html("https://example.com/blog"), "https://example.com/blog?page=2"
+    ) is None
+    assert extract_canonical_url("<html></html>", page) is None
+
+
+def test_two_addresses_of_one_page_become_one_page() -> None:
+    def result(url: str) -> SimpleNamespace:
+        return SimpleNamespace(
+            success=True,
+            url=url,
+            html=_canonical_html("https://example.com/produkte/lampe"),
+            metadata={"title": "Lampe"},
+            markdown=SimpleNamespace(fit_markdown="# Lampe\n\n" + "useful content " * 20),
+        )
+
+    first = page_from_result(result("https://example.com/p?id=12"), [], [])
+    second = page_from_result(result("https://example.com/produkte/lampe/?utm_source=x"), [], [])
+    assert first is not None and second is not None
+    assert first.url == second.url == "https://example.com/produkte/lampe"
+
+
+def test_a_canonical_outside_the_include_patterns_is_not_adopted() -> None:
+    result = SimpleNamespace(
+        success=True,
+        url="https://example.com/docs/lampe",
+        html=_canonical_html("https://example.com/shop/lampe"),
+        metadata={"title": "Lampe"},
+        markdown=SimpleNamespace(fit_markdown="# Lampe\n\n" + "useful content " * 20),
+    )
+    page = page_from_result(result, ["*/docs/*"], [])
+    assert page is not None
+    assert page.url == "https://example.com/docs/lampe"
+
+
+def test_a_hash_route_keeps_its_url_despite_the_shells_canonical() -> None:
+    result = SimpleNamespace(
+        success=True,
+        url="https://example.com/legacy.html",
+        redirected_url="https://example.com/docs/#Vector3",
+        html=_canonical_html("https://example.com/docs/"),
+        metadata={"title": "Vector3"},
+        markdown=SimpleNamespace(fit_markdown="# Vector3\n\n" + "useful content " * 20),
+    )
+    page = page_from_result(result, [], [])
+    assert page is not None
+    assert page.url == "https://example.com/docs#Vector3"
