@@ -49,7 +49,7 @@ export function DatabaseSelector() {
       setDatabases(dbs)
     } catch (error) {
       console.error('Failed to load databases:', error)
-      const errorMessage = error instanceof Error ? error.message : 'Fehler beim Laden der Datenbanken'
+      const errorMessage = error instanceof Error ? error.message : 'Wissensbasen konnten nicht geladen werden.'
       setError(errorMessage)
       setDatabases([])
     } finally {
@@ -74,7 +74,7 @@ export function DatabaseSelector() {
         }
       } catch (loadError) {
         if (!cancelled) {
-          const errorMessage = loadError instanceof Error ? loadError.message : 'Fehler beim Laden der Datenbanken'
+          const errorMessage = loadError instanceof Error ? loadError.message : 'Wissensbasen konnten nicht geladen werden.'
           setError(errorMessage)
           setDatabases([])
         }
@@ -104,7 +104,7 @@ export function DatabaseSelector() {
           <div className="flex items-center gap-2">
             <Database className="w-4 h-4 text-gray-500 dark:text-gray-400" />
             <span className="truncate">
-              {selectedDb ? selectedDb.name : "Datenbank wählen"}
+              {selectedDb ? selectedDb.name : "Wissensbasis wählen"}
             </span>
           </div>
           <ChevronDown className="w-4 h-4 text-gray-500 dark:text-gray-400" />
@@ -118,7 +118,7 @@ export function DatabaseSelector() {
         <DropdownMenuLabel className="flex items-center justify-between text-gray-700 dark:text-white/90">
           <div className="flex items-center gap-2">
             <Database className="w-4 h-4" />
-            Verfügbare Datenbanken
+            Deine Wissensbasen
             {(isLoading || isRefreshing) && (
               <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin"></div>
             )}
@@ -128,7 +128,7 @@ export function DatabaseSelector() {
             size="sm"
             onClick={handleRefresh}
             disabled={isLoading || isRefreshing}
-            aria-label="Datenbanken aktualisieren"
+            aria-label="Wissensbasen aktualisieren"
             className="size-6 rounded-full p-0 hover:bg-gray-100 dark:hover:bg-gray-800"
           >
             <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin' : ''}`} />
@@ -153,14 +153,14 @@ export function DatabaseSelector() {
         ) : isLoading ? (
           <div className="p-4 text-center text-gray-500">
             <div className="w-6 h-6 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin mx-auto mb-2"></div>
-            <p className="text-sm">Lade Datenbanken...</p>
+            <p className="text-sm">Wissensbasen werden geladen …</p>
           </div>
         ) : databases.length === 0 ? (
           <div className="p-4 text-center text-gray-500">
             <Database className="w-8 h-8 mx-auto mb-2 text-gray-300" />
-            <p className="text-sm">Keine Datenbanken vorhanden</p>
+            <p className="text-sm">Noch keine Wissensbasis</p>
             <p className="text-xs text-gray-400 mt-1">
-              Klicke auf Crawl um eine Datenbank zu erstellen
+              Lies eine Website ein, um eine Wissensbasis zu erstellen.
             </p>
           </div>
         ) : (
@@ -208,14 +208,14 @@ export function DatabaseSelector() {
                   {(database.source_url || database.url || database.urls?.[0]) && (
                     <button
                       type="button"
-                      title={`„${database.name}“ neu crawlen / aktualisieren`}
+                      title={`„${database.name}“ neu einlesen`}
                       onClick={(e) => {
                         e.stopPropagation()
                         const targetUrl = database.source_url || database.url || database.urls?.[0] || ''
                         router.push(`/dashboard/crawl?url=${encodeURIComponent(targetUrl)}&name=${encodeURIComponent(database.name)}`)
                       }}
                       className="rounded p-1 text-gray-400 hover:bg-gray-200 hover:text-gray-700 dark:hover:bg-gray-700 dark:hover:text-gray-200 transition-colors"
-                      aria-label={`„${database.name}“ aktualisieren`}
+                      aria-label={`„${database.name}“ neu einlesen`}
                     >
                       <RefreshCw className="w-3 h-3" />
                     </button>
@@ -239,7 +239,7 @@ export function DatabaseSelector() {
               }}
             >
               <RefreshCw className="w-4 h-4 mr-2" />
-              Aktive Datenbank aktualisieren
+              Diese Wissensbasis neu einlesen
             </Button>
           )}
           <Button
@@ -249,7 +249,7 @@ export function DatabaseSelector() {
             onClick={() => router.push('/dashboard/crawl')}
           >
             <Database className="w-4 h-4 mr-2" />
-            Neue Datenbank erstellen
+            Website einlesen
           </Button>
         </div>
       </DropdownMenuContent>

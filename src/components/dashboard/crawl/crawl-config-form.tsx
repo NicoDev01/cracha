@@ -189,9 +189,9 @@ export function CrawlConfigForm({
       await startCrawl(config)
       window.dispatchEvent(new Event("cracha:credits-changed"))
       onStarted?.()
-      toast.success("Crawl gestartet. Er läuft im Hintergrund weiter.")
+      toast.success("Einlesen gestartet. Es läuft im Hintergrund weiter.")
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Crawl konnte nicht gestartet werden.")
+      toast.error(error instanceof Error ? error.message : "Einlesen konnte nicht gestartet werden.")
     }
   }
 
@@ -245,7 +245,7 @@ export function CrawlConfigForm({
             {analysis.status === "done" && discovered === null && (
               <p className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-800/40 dark:text-gray-300">
                 Keine Sitemap gefunden. Die Gesamtzahl der Seiten lässt sich vorab nicht bestimmen —
-                sie steht erst fest, wenn der Crawl keine neuen Links mehr findet. Stelle Seitenanzahl
+                sie steht erst fest, wenn beim Einlesen keine neuen Links mehr auftauchen. Stelle Seitenanzahl
                 und Tiefe unten selbst ein.
               </p>
             )}
@@ -259,7 +259,7 @@ export function CrawlConfigForm({
                   {discovered === 1 ? " Seite" : " Seiten"} in der Sitemap gefunden
                   {analysis.truncated && " (Zählung abgebrochen, es sind mehr)"}.
                   {discovered > MAX_PAGES_PER_CRAWL
-                    && ` Ein Crawl erfasst derzeit höchstens ${MAX_PAGES_PER_CRAWL} davon.`}
+                    && ` Pro Durchgang werden derzeit höchstens ${MAX_PAGES_PER_CRAWL} davon eingelesen.`}
                 </p>
 
                 <FormField
@@ -273,7 +273,7 @@ export function CrawlConfigForm({
                         </FormLabel>
                         <FormDescription>
                           {discovered > MAX_PAGES_PER_CRAWL
-                            ? `Pro Crawl sind derzeit ${MAX_PAGES_PER_CRAWL} Seiten möglich — ${new Intl.NumberFormat("de-DE").format(discovered - MAX_PAGES_PER_CRAWL)} bleiben außen vor.`
+                            ? `Pro Durchgang sind derzeit ${MAX_PAGES_PER_CRAWL} Seiten möglich — ${new Intl.NumberFormat("de-DE").format(discovered - MAX_PAGES_PER_CRAWL)} bleiben außen vor.`
                             : "Erfasst auch Seiten, auf die nichts verlinkt. Eine Sitemap darf unvollständig sein — führt die Website mehr Seiten, findet „Verlinkte Seiten“ über die Links mehr."}
                         </FormDescription>
                       </div>
@@ -317,7 +317,7 @@ export function CrawlConfigForm({
             <FormItem>
               <FormLabel>Umfang</FormLabel>
               <FormControl>
-                <div className="grid gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Crawl-Umfang">
+                <div className="grid gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Umfang">
                   {modes.map((mode) => {
                     const Icon = mode.icon
                     const selected = field.value === mode.value
@@ -397,7 +397,7 @@ export function CrawlConfigForm({
                         value={[field.value]}
                         disabled={isRunning}
                         onValueChange={(value) => field.onChange(value[0])}
-                        aria-label="Crawl-Tiefe"
+                        aria-label="Link-Tiefe"
                         className="py-2"
                       />
                     </FormControl>
@@ -458,16 +458,16 @@ export function CrawlConfigForm({
 
         <div role="status" className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm dark:border-gray-700 dark:bg-gray-800/40">
           <p className="font-medium">Maximal {maximumCost} Credits für bis zu {allowedPages} Seiten</p>
-          <p className="mt-1 text-gray-500">Abgerechnet werden nur indexierte Seiten. Nicht benötigtes reserviertes Guthaben wird freigegeben. Auch ein erfolgreicher Crawl kann nur einen Teil der Website erfassen.</p>
+          <p className="mt-1 text-gray-500">Abgerechnet werden nur indexierte Seiten. Nicht benötigtes reserviertes Guthaben wird freigegeben. Auch vollständig eingelesen kann eine Wissensbasis nur einen Teil der Website abbilden.</p>
           {credits && <p className="mt-2">Verfügbar: {credits.balance} Credits. Danach bleiben mindestens {remainingQuestions} bezahlbare Fragen, sofern du zwischenzeitlich kein weiteres Guthaben verbrauchst.</p>}
-          {credits && allowedPages < requestedPages && <p className="mt-2 text-amber-700 dark:text-amber-400">Dein Guthaben begrenzt diesen Crawl auf {allowedPages} statt {requestedPages} Seiten. <Link className="underline" href="/dashboard#guthaben">Guthaben aufladen</Link></p>}
+          {credits && allowedPages < requestedPages && <p className="mt-2 text-amber-700 dark:text-amber-400">Dein Guthaben begrenzt das Einlesen auf {allowedPages} statt {requestedPages} Seiten. <Link className="underline" href="/dashboard#guthaben">Guthaben aufladen</Link></p>}
           {remainingQuestions === 0 && allowedPages > 0 && <p className="mt-2 text-amber-700 dark:text-amber-400">Bei voller Ausschöpfung bleibt kein Guthaben für Fragen. Reduziere die Seitenzahl oder lade Guthaben auf.</p>}
           {creditError && <p className="mt-2">{creditError} <button type="button" className="underline" onClick={() => void refresh()}>Erneut laden</button></p>}
           {!credits && !creditError && <p className="mt-2">Dein verfügbares Guthaben wird geladen. Der Server prüft das endgültige Limit beim Start.</p>}
         </div>
         <Button type="submit" disabled={isRunning || (credits !== null && allowedPages === 0)} className="h-11 w-full gap-2 rounded-xl bg-brand-500 !text-white hover:bg-brand-600 sm:w-auto sm:min-w-44">
           {isRunning ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" />}
-          {isRunning ? "Crawl läuft" : "Crawl starten"}
+          {isRunning ? "Wird eingelesen" : "Einlesen starten"}
         </Button>
       </form>
     </Form>

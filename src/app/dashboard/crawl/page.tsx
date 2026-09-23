@@ -6,8 +6,8 @@ import { CrawlInterface } from "@/components/dashboard/crawl/crawl-interface"
 
 export const metadata: Metadata = {
   ...noIndex,
-  title: "Website erfassen",
-  description: "Websites crawlen und als durchsuchbare Wissensbasis bereitstellen.",
+  title: "Website einlesen",
+  description: "Websites einlesen und als durchsuchbare Wissensbasis bereitstellen.",
 }
 
 export default function CrawlPage() {

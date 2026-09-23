@@ -2,7 +2,7 @@ import type { Database } from '@/types/chat'
 
 export const STATUS_LABELS = {
   active: 'Aktiv',
-  crawling: 'Crawling',
+  crawling: 'Wird eingelesen',
   pending: 'Ausstehend',
   failed: 'Fehler',
   inactive: 'Inaktiv',

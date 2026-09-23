@@ -5,8 +5,8 @@ import { DashboardOverview } from "@/components/dashboard/overview/dashboard-ove
 
 export const metadata: Metadata = {
   ...noIndex,
-  title: "Dashboard",
-  description: "Status der Wissensbasen und der laufenden Crawls",
+  title: "Übersicht",
+  description: "Guthaben, Wissensbasen und laufende Einlesevorgänge",
 };
 
 export default function DashboardPage() {

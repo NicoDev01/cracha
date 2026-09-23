@@ -60,8 +60,8 @@ export function CrawlJobsList() {
     return (
       <div className="flex min-h-72 flex-col items-center justify-center text-center">
         <div className="flex size-12 items-center justify-center rounded-2xl bg-gray-100 text-gray-400 dark:bg-gray-800"><Database className="size-5" /></div>
-        <h2 className="mt-4 text-sm font-semibold text-gray-900 dark:text-white">Noch keine Crawls</h2>
-        <p className="mt-1 text-xs leading-5 text-gray-500">Gestartete Crawls erscheinen automatisch in diesem Verlauf.</p>
+        <h2 className="mt-4 text-sm font-semibold text-gray-900 dark:text-white">Noch nichts eingelesen</h2>
+        <p className="mt-1 text-xs leading-5 text-gray-500">Jede eingelesene Website erscheint automatisch in diesem Verlauf.</p>
       </div>
     )
   }
@@ -70,8 +70,8 @@ export function CrawlJobsList() {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="font-semibold text-gray-900 dark:text-white">Crawl-Verlauf</h2>
-          <p className="mt-0.5 text-xs text-gray-500">{jobs.length} {jobs.length === 1 ? "Crawl" : "Crawls"} auf diesem Gerät</p>
+          <h2 className="font-semibold text-gray-900 dark:text-white">Verlauf</h2>
+          <p className="mt-0.5 text-xs text-gray-500">{jobs.length} {jobs.length === 1 ? "Einlesevorgang" : "Einlesevorgänge"} auf diesem Gerät</p>
         </div>
         {jobs.length > 4 && (
           <div className="relative w-full sm:w-64">
@@ -121,7 +121,7 @@ export function CrawlJobsList() {
         })}
       </div>
 
-      {filteredJobs.length === 0 && <p className="py-8 text-center text-sm text-gray-500">Keine passenden Crawls gefunden.</p>}
+      {filteredJobs.length === 0 && <p className="py-8 text-center text-sm text-gray-500">Keine passenden Einträge gefunden.</p>}
       <p className="text-[11px] leading-5 text-gray-400">Der Verlauf wird lokal im Browser gespeichert. Das Entfernen löscht keine Wissensbasis.</p>
     </div>
   )

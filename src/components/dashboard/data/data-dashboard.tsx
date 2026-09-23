@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { ExternalLink, Library, Loader2, MessagesSquare, Plus, RefreshCw, Search, Trash2 } from "lucide-react"
+import { ExternalLink, Globe, Library, Loader2, MessagesSquare, RefreshCw, Search, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
 import {
@@ -89,7 +89,7 @@ export function DataDashboard() {
       setError(null)
     } catch (loadError) {
       if (background) return
-      setError(loadError instanceof Error ? loadError.message : "Fehler beim Laden der Datenbanken")
+      setError(loadError instanceof Error ? loadError.message : "Wissensbasen konnten nicht geladen werden.")
       setDatabases([])
       pruneSelection([])
     } finally {
@@ -176,13 +176,13 @@ export function DataDashboard() {
         method: "POST",
       })
       const result = await response.json().catch(() => ({})) as { error?: string }
-      if (!response.ok) throw new Error(result.error || "Recrawl konnte nicht gestartet werden.")
+      if (!response.ok) throw new Error(result.error || "Neu einlesen konnte nicht gestartet werden.")
       setDatabases((current) => current.map((entry) => (
         entry.id === database.id ? { ...entry, status: "crawling" } : entry
       )))
-      toast.success(`Recrawl für „${databaseName(database)}“ gestartet.`)
+      toast.success(`„${databaseName(database)}“ wird neu eingelesen.`)
     } catch (recrawlError) {
-      toast.error(recrawlError instanceof Error ? recrawlError.message : "Recrawl konnte nicht gestartet werden.")
+      toast.error(recrawlError instanceof Error ? recrawlError.message : "Neu einlesen konnte nicht gestartet werden.")
     } finally {
       setRecrawlingIds((current) => {
         const next = new Set(current)
@@ -200,7 +200,7 @@ export function DataDashboard() {
           <Input
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Datenbanken durchsuchen"
+            placeholder="Wissensbasen durchsuchen"
             className="h-10 rounded-xl pl-9"
           />
         </div>
@@ -210,7 +210,7 @@ export function DataDashboard() {
             Aktualisieren
           </Button>
           <Button asChild size="sm" className="h-10 gap-2 rounded-xl bg-brand-500 !text-white hover:bg-brand-600">
-            <Link href="/dashboard/crawl"><Plus className="size-4" />Neue Wissensbasis</Link>
+            <Link href="/dashboard/crawl"><Globe className="size-4" />Website einlesen</Link>
           </Button>
         </div>
       </div>
@@ -234,13 +234,13 @@ export function DataDashboard() {
       <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-theme-xs dark:border-gray-700 dark:bg-gray-900">
         {isLoading ? (
           <div className="flex min-h-64 items-center justify-center gap-2 text-sm text-gray-500">
-            <Loader2 className="size-4 animate-spin" />Datenbanken werden geladen
+            <Loader2 className="size-4 animate-spin" />Wissensbasen werden geladen
           </div>
         ) : !error && filteredDatabases.length === 0 ? (
           <div className="flex min-h-64 flex-col items-center justify-center px-6 text-center">
             <Library className="size-8 text-gray-300 dark:text-gray-600" />
             <h2 className="mt-3 text-sm font-semibold text-gray-900 dark:text-white">{searchQuery ? "Keine Treffer" : "Noch keine Wissensbasis"}</h2>
-            <p className="mt-1 text-xs text-gray-500">{searchQuery ? "Passe deine Suche an." : "Starte einen Crawl, um Inhalte hinzuzufügen."}</p>
+            <p className="mt-1 text-xs text-gray-500">{searchQuery ? "Passe deine Suche an." : "Lies eine Website ein, um deine erste Wissensbasis anzulegen."}</p>
           </div>
         ) : !error && (
           <Table className="min-w-[980px]">
@@ -261,7 +261,7 @@ export function DataDashboard() {
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Seiten</TableHead>
                 <TableHead className="text-right">Abschnitte</TableHead>
-                <TableHead>Letzter Crawl</TableHead>
+                <TableHead>Zuletzt eingelesen</TableHead>
                 <TableHead className="w-32 text-right">Aktionen</TableHead>
               </TableRow>
             </TableHeader>
@@ -329,8 +329,8 @@ export function DataDashboard() {
                           onClick={() => void handleRecrawl(database)}
                           disabled={isRecrawling || databaseStatus(database) === "crawling"}
                           className="size-8 rounded-lg text-gray-500 hover:text-brand-600"
-                          aria-label={`${databaseName(database)} erneut crawlen`}
-                          title="Recrawl starten"
+                          aria-label={`${databaseName(database)} neu einlesen`}
+                          title="Neu einlesen"
                         >
                           <RefreshCw className={cn("size-4", isRecrawling && "animate-spin")} />
                         </Button>

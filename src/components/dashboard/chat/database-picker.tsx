@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Loader2, Plus } from 'lucide-react'
+import { Globe, Loader2 } from 'lucide-react'
 
 import { StatusBadge } from '@/components/dashboard/common/StatusBadge'
 import { Button } from '@/components/ui/button'
@@ -93,7 +93,7 @@ export function DatabasePicker() {
       <div className="flex w-full flex-col items-center rounded-2xl border border-gray-200 bg-white px-6 py-14 text-center dark:border-gray-800 dark:bg-white/[0.03]">
         <h2 className="text-base font-semibold text-gray-900 dark:text-white">Noch keine Wissensbasis</h2>
         <Button asChild className="mt-5 h-10 gap-1.5 rounded-full bg-brand-500 px-5 !text-white shadow-sm hover:bg-brand-600">
-          <Link href="/dashboard/crawl"><Plus className="size-4" />Neuen Crawl starten</Link>
+          <Link href="/dashboard/crawl"><Globe className="size-4" />Website einlesen</Link>
         </Button>
       </div>
     )

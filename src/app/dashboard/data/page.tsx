@@ -1,4 +1,3 @@
-import PageBreadcrumb from "@/components/dashboard/common/PageBreadCrumb";
 import { DataDashboard } from '@/components/dashboard/data/data-dashboard';
 import { Metadata } from "next";
 import { noIndex } from "@/lib/seo";
@@ -12,7 +11,7 @@ export const metadata: Metadata = {
 export default function DataPage() {
   return (
     <div>
-      <PageBreadcrumb pageTitle="Datenbankverwaltung" />
+      <h1 className="mb-5 text-xl font-semibold text-gray-800 dark:text-white/90">Wissensbasen</h1>
       <section className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.03] sm:p-6">
           <DataDashboard />
       </section>
