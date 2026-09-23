@@ -81,7 +81,7 @@ def test_missing_answer_endpoint_never_counts_as_a_pass(tmp_path, monkeypatch):
     monkeypatch.setattr(
         evaluate,
         "query",
-        lambda *args: {
+        lambda *args, **kwargs: {
             "context": "Fact",
             "sources": [{"url": "https://example.invalid"}],
         },
@@ -199,3 +199,115 @@ def test_combined_citations_are_validated():
         {"answer_must_cite": True}, "Fact [1, 2]", [{"n": 1}, {"n": 2}]
     )
     assert evaluate_answer({"answer_must_cite": True}, "Fact [1, 9]", [{"n": 1}])
+
+
+def test_source_rank_is_one_based_and_substring_matched():
+    from evaluate import source_rank
+
+    sources = [{"url": "https://x.test/a"}, {"url": "https://x.test/team"}, {"url": "https://x.test/team"}]
+    assert source_rank(sources, "/team") == 2
+    assert source_rank(sources, "/missing") is None
+    assert source_rank(sources, "") is None
+
+
+def test_recall_at_k_and_mrr_count_misses_as_zero():
+    from evaluate import retrieval_metrics
+
+    # Ranks 1, 3, 6 and a miss: four cases with an expected source.
+    metrics = retrieval_metrics([1, 3, 6, None])
+    assert metrics["cases"] == 4
+    assert metrics["recall@1"] == 0.25
+    assert metrics["recall@3"] == 0.5
+    assert metrics["recall@5"] == 0.5
+    assert metrics["recall@8"] == 0.75
+    # (1 + 1/3 + 1/6 + 0) / 4 = 0.375
+    assert metrics["mrr"] == 0.375
+
+
+def test_metrics_without_expected_sources_are_absent_not_zero():
+    from evaluate import retrieval_metrics
+
+    assert retrieval_metrics([]) == {
+        "cases": 0, "mrr": None, "recall@1": None, "recall@3": None, "recall@5": None, "recall@8": None,
+    }
+
+
+def test_run_records_ranks_and_the_summary_ignores_cases_without_expected_url(tmp_path, monkeypatch):
+    import argparse
+    import json
+
+    import evaluate
+
+    cases = [
+        {"question": "Team?", "required_source_url_contains": "/team"},
+        {"question": "Preise?", "required_source_url_contains": "/preise"},
+        {"question": "Offen?"},
+    ]
+    case_file = tmp_path / "cases.json"
+    case_file.write_text(json.dumps(cases))
+    seen = []
+
+    def fake_query(*args, top_k, rerank):
+        seen.append((top_k, rerank))
+        return {
+            "context": "Kontext",
+            "sources": [{"url": "https://x.test/start"}, {"url": "https://x.test/team"}],
+        }
+
+    monkeypatch.setattr(evaluate, "query", fake_query)
+    args = argparse.Namespace(
+        endpoint="unused", token="unused", database_id="db", user_id="user",
+        chat_endpoint="", chat_cookie="", top_k=8, rerank=False,
+    )
+    records = []
+    assert evaluate.run_suite(case_file, args, records) == (2, 3, 0)
+    assert seen == [(8, False)] * 3
+    assert [record["source_rank"] for record in records] == [2, None, None]
+
+    summary = evaluate.summarize(records)
+    assert summary["cases"] == 3
+    assert summary["passed"] == 2
+    assert summary["retrieval"]["cases"] == 2
+    assert summary["retrieval"]["recall@1"] == 0
+    assert summary["retrieval"]["recall@3"] == 0.5
+    assert summary["retrieval"]["mrr"] == 0.25
+
+
+def test_results_are_written_without_credentials(tmp_path, monkeypatch):
+    import json
+    import sys
+
+    import evaluate
+
+    case_file = tmp_path / "cases.json"
+    case_file.write_text(json.dumps([{"question": "Team?", "required_source_url_contains": "/team"}]))
+    monkeypatch.setattr(
+        evaluate, "query",
+        lambda *args, **kwargs: {"context": "Kontext", "sources": [{"url": "https://x.test/team"}]},
+    )
+    target = tmp_path / "out" / "run.json"
+    monkeypatch.setattr(sys, "argv", [
+        "evaluate.py", "--endpoint", "https://rag.example.test", "--token", "SECRET-TOKEN",
+        "--database-id", "db", "--user-id", "user", "--cases", str(case_file),
+        "--rerank", "off", "--output", str(target),
+    ])
+    assert evaluate.main() == 0
+    written = target.read_text(encoding="utf-8")
+    assert "SECRET-TOKEN" not in written
+    run = json.loads(written)
+    assert run["rerank"] is False
+    assert run["top_k"] == 8
+    assert run["endpoint_host"] == "rag.example.test"
+    assert run["summary"]["retrieval"]["recall@1"] == 1.0
+    assert run["cases"][0]["retrieved_urls"] == ["https://x.test/team"]
+
+
+def test_default_output_path_is_timestamped():
+    from datetime import UTC, datetime
+    from pathlib import Path
+
+    from evaluate import default_output_path
+
+    assert default_output_path(datetime(2026, 9, 23, 8, 5, 1, tzinfo=UTC)) == Path(
+        "evals/results/20260923T080501Z.json"
+    )

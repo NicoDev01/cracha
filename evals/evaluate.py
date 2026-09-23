@@ -1,10 +1,13 @@
 import argparse
 import json
 import re
+import time
 import unicodedata
 import urllib.request
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import urlsplit
 
 _UMLAUTS = str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss"})
 
@@ -85,18 +88,107 @@ def contradicting_totals(answer: str, item_count: int) -> list[int]:
     return sorted(claimed - {item_count})
 
 
-def query(endpoint: str, token: str, database_id: str, user_id: str, question: str, messages: list | None = None) -> dict:
+# Recall is reported at these cut-offs. 8 is what /api/chat asks for, so
+# Recall@8 is the share of cases whose expected page reached the model.
+RECALL_KS = (1, 3, 5, 8)
+DEFAULT_TOP_K = 8
+
+
+def source_rank(sources: list, expected_url: str) -> int | None:
+    """1-based position of the first source whose URL contains `expected_url`."""
+    if not expected_url:
+        return None
+    return next(
+        (
+            index + 1
+            for index, source in enumerate(sources)
+            if expected_url in str(source.get("url", ""))
+        ),
+        None,
+    )
+
+
+def retrieval_metrics(ranks: list[int | None], ks: tuple[int, ...] = RECALL_KS) -> dict:
+    """Recall@k and MRR over the cases that name an expected source.
+
+    One expected URL per case, so Recall@k is the share of cases whose source
+    appeared within the first k results and MRR the mean of 1/rank. A case
+    whose source never appeared, or whose request failed, is a miss and adds 0
+    to both; dropping it would flatter the numbers.
+    """
+    count = len(ranks)
+    if not count:
+        return {"cases": 0, "mrr": None, **{f"recall@{k}": None for k in ks}}
+    found = [rank for rank in ranks if rank is not None]
+    return {
+        "cases": count,
+        "mrr": round(sum(1 / rank for rank in found) / count, 4),
+        **{f"recall@{k}": round(sum(1 for rank in found if rank <= k) / count, 4) for k in ks},
+    }
+
+
+def summarize(records: list[dict]) -> dict:
+    """The numbers a run is judged by, over any set of case records."""
+    total = len(records)
+    passed = sum(1 for record in records if record["passed"])
+    return {
+        "cases": total,
+        "passed": passed,
+        "pass_rate": round(passed / total, 4) if total else None,
+        "request_errors": sum(1 for record in records if record.get("error")),
+        "answer_checks_skipped": sum(1 for record in records if record.get("answer_skipped")),
+        "fallback_answers": sum(1 for record in records if record.get("fallback")),
+        "retrieval": retrieval_metrics(
+            [record["source_rank"] for record in records if record.get("expected_url")]
+        ),
+    }
+
+
+def format_retrieval(metrics: dict) -> str:
+    if not metrics["cases"]:
+        return "Retrieval: keine Fälle mit required_source_url_contains"
+    recalls = ", ".join(
+        f"Recall@{key.split('@')[1]}={value:.2f}"
+        for key, value in metrics.items()
+        if key.startswith("recall@")
+    )
+    return f"Retrieval ({metrics['cases']} Fälle mit Soll-URL): {recalls}, MRR={metrics['mrr']:.3f}"
+
+
+def default_output_path(now: datetime) -> Path:
+    return Path("evals") / "results" / f"{now.strftime('%Y%m%dT%H%M%SZ')}.json"
+
+
+def write_results(path: Path, run: dict) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(run, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+def query(
+    endpoint: str,
+    token: str,
+    database_id: str,
+    user_id: str,
+    question: str,
+    messages: list | None = None,
+    top_k: int = DEFAULT_TOP_K,
+    rerank: bool | None = None,
+) -> dict:
+    body: dict = {
+        "tenant_id": database_id,
+        "user_id": user_id,
+        "question": question,
+        "top_k": top_k,
+        "messages": messages or [],
+    }
+    # Absent means the deployed default, so a run without --rerank measures
+    # exactly what users get.
+    if rerank is not None:
+        body["rerank"] = rerank
     request = urllib.request.Request(
         f"{endpoint.rstrip('/')}/query",
-        data=json.dumps(
-            {
-                "tenant_id": database_id,
-                "user_id": user_id,
-                "question": question,
-                "top_k": 6,
-                "messages": messages or [],
-            }
-        ).encode(),
+        data=json.dumps(body).encode(),
         headers={
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
@@ -221,20 +313,13 @@ def evaluate_case(case: dict, result: dict) -> tuple[bool, str]:
     reasons: list[str] = []
 
     expected_url = case.get("required_source_url_contains", "")
-    source_rank = next(
-        (
-            index + 1
-            for index, source in enumerate(sources)
-            if expected_url and expected_url in source.get("url", "")
-        ),
-        None,
-    )
+    rank = source_rank(sources, expected_url)
     if expected_url:
         max_source_rank = int(case.get("max_source_rank", len(sources) or 1))
-        if source_rank is None:
+        if rank is None:
             reasons.append(f"source {expected_url} not retrieved")
-        elif source_rank > max_source_rank:
-            reasons.append(f"source_rank={source_rank} > {max_source_rank}")
+        elif rank > max_source_rank:
+            reasons.append(f"source_rank={rank} > {max_source_rank}")
 
     normalized_context = normalize(context)
 
@@ -294,28 +379,45 @@ def evaluate_case(case: dict, result: dict) -> tuple[bool, str]:
     if not context and not case.get("allow_empty_context"):
         reasons.append("empty context")
 
-    detail = f" [coverage={coverage:.0%}, source_rank={source_rank}, sources={len(sources)}]"
+    detail = f" [coverage={coverage:.0%}, source_rank={rank}, sources={len(sources)}]"
     if reasons:
         detail += " " + "; ".join(reasons)
     return not reasons, detail
 
 
-def run_suite(path: Path, args: argparse.Namespace) -> tuple[int, int, int]:
+def run_suite(
+    path: Path, args: argparse.Namespace, records: list[dict] | None = None
+) -> tuple[int, int, int]:
+    """Run one case file; each case's outcome is appended to `records` if given."""
     cases = json.loads(path.read_text(encoding="utf-8"))
     database_id = args.database_id
     user_id = args.user_id
+    top_k = getattr(args, "top_k", DEFAULT_TOP_K)
+    rerank = getattr(args, "rerank", None)
     passed = 0
     skipped_answers = 0
     print(f"\n=== {path.name} ({len(cases)} Fälle) ===")
     for case in cases:
+        record: dict = {
+            "suite": path.name,
+            "id": case.get("id"),
+            "question": case["question"],
+            "expected_url": case.get("required_source_url_contains") or None,
+            "source_rank": None,
+            "passed": False,
+        }
+        if records is not None:
+            records.append(record)
         # A suite may target its own knowledge base, so one run can cover a
         # company site, a documentation site and a university site at once.
         fixture_id = case.get("fixture")
         fixture_database = getattr(args, "fixture_databases", {}).get(fixture_id)
         if fixture_id and not fixture_database:
+            record["error"] = f"no database mapping for fixture {fixture_id}"
             print(f"FAIL: {case['question']} [no database mapping for fixture {fixture_id}]")
             continue
         case_database = case.get("database_id", fixture_database or database_id)
+        started = time.monotonic()
         try:
             result = query(
                 args.endpoint,
@@ -324,15 +426,25 @@ def run_suite(path: Path, args: argparse.Namespace) -> tuple[int, int, int]:
                 case.get("user_id", user_id),
                 case["question"],
                 case.get("messages", []),
+                top_k=top_k,
+                rerank=rerank,
             )
         except Exception as error:  # noqa: BLE001 - one broken call must not hide the rest
+            record["error"] = f"{type(error).__name__}: {error}"
             print(f"FAIL: {case['question']} [request failed: {type(error).__name__}: {error}]")
             continue
+        sources = result.get("sources", [])
+        record["latency_ms"] = round((time.monotonic() - started) * 1000)
+        # A cached retrieval says nothing about a changed search setting.
+        record["cached"] = bool((result.get("usage") or {}).get("cached"))
+        record["retrieved_urls"] = [str(source.get("url", "")) for source in sources]
+        record["source_rank"] = source_rank(sources, record["expected_url"] or "")
         ok, detail = evaluate_case(case, result)
 
         wants_answer = any(case.get(field) is not None for field in ANSWER_FIELDS)
         if wants_answer and not args.chat_endpoint:
             skipped_answers += 1
+            record["answer_skipped"] = True
             ok = False
             detail += " [answer checks skipped: no --chat-endpoint]"
         elif wants_answer:
@@ -340,9 +452,11 @@ def run_suite(path: Path, args: argparse.Namespace) -> tuple[int, int, int]:
                 spoken = ask(args.chat_endpoint, args.chat_cookie, case_database, case["question"], case.get("messages", []))
             except Exception as error:  # noqa: BLE001
                 ok = False
+                record["error"] = f"chat: {type(error).__name__}: {error}"
                 detail += f" [chat failed: {type(error).__name__}: {error}]"
             else:
                 answer_reasons = evaluate_answer(case, spoken["answer"], spoken["sources"])
+                record["fallback"] = spoken["fallback"]
                 # A run against the standby model measures the standby model.
                 # Saying so beats an unexplained regression in the numbers.
                 if spoken["fallback"]:
@@ -352,6 +466,8 @@ def run_suite(path: Path, args: argparse.Namespace) -> tuple[int, int, int]:
                     detail += " " + "; ".join(answer_reasons)
 
         passed += int(ok)
+        record["passed"] = ok
+        record["detail"] = detail.strip()
         print(f"{'PASS' if ok else 'FAIL'}: {case['question']}{detail}")
     print(f"{passed}/{len(cases)} bestanden in {path.name}")
     return passed, len(cases), skipped_answers
@@ -384,18 +500,62 @@ def main() -> int:
     )
     parser.add_argument("--fixture-databases", type=Path,
                         help="JSON object mapping versioned fixture IDs to their indexed database IDs.")
+    parser.add_argument("--top-k", type=int, default=DEFAULT_TOP_K,
+                        help=f"top_k für /query (Standard {DEFAULT_TOP_K}, wie /api/chat).")
+    parser.add_argument(
+        "--rerank",
+        choices=("default", "on", "off"),
+        default="default",
+        help="Reranking für diesen Lauf erzwingen. 'default' sendet nichts und misst die Deploy-Einstellung.",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        nargs="?",
+        const=True,
+        default=None,
+        help="Ergebnisse als JSON speichern. Ohne Pfad: evals/results/<UTC-Zeitstempel>.json.",
+    )
     args = parser.parse_args()
     args.fixture_databases = json.loads(args.fixture_databases.read_text(encoding="utf-8")) if args.fixture_databases else {}
+    args.rerank = {"default": None, "on": True, "off": False}[args.rerank]
 
+    started_at = datetime.now(UTC)
+    records: list[dict] = []
+    suites: dict[str, dict] = {}
     passed = 0
     total = 0
     skipped = 0
     for path in args.cases:
-        suite_passed, suite_total, suite_skipped = run_suite(path, args)
+        suite_records: list[dict] = []
+        suite_passed, suite_total, suite_skipped = run_suite(path, args, suite_records)
+        suites[path.name] = summarize(suite_records)
+        print(format_retrieval(suites[path.name]["retrieval"]))
+        records.extend(suite_records)
         passed += suite_passed
         total += suite_total
         skipped += suite_skipped
+    summary = summarize(records)
     print(f"\n{passed}/{total} bestanden insgesamt")
+    print(format_retrieval(summary["retrieval"]))
+    if args.output is not None:
+        target = write_results(
+            default_output_path(started_at) if args.output is True else args.output,
+            {
+                "started_at": started_at.isoformat(),
+                "finished_at": datetime.now(UTC).isoformat(),
+                # Hosts only: the token and the chat cookie never go to disk.
+                "endpoint_host": urlsplit(args.endpoint).hostname,
+                "chat_endpoint_host": urlsplit(args.chat_endpoint).hostname if args.chat_endpoint else None,
+                "top_k": args.top_k,
+                "rerank": args.rerank,
+                "cases_files": [str(path) for path in args.cases],
+                "summary": summary,
+                "suites": suites,
+                "cases": records,
+            },
+        )
+        print(f"Ergebnisse gespeichert: {target}")
     if skipped:
         # Loud, because a green run that never asked the model proves less than
         # it looks like it does.
