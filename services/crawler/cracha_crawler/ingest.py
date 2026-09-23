@@ -181,7 +181,14 @@ class RagIngestClient:
         attempts: int,
         on_progress: ProgressCallback | None = None,
         job_id: str | None = None,
+        crawl_complete: bool | None = None,
     ) -> IndexStatus:
+        """Wait for the index, then publish it.
+
+        `crawl_complete` tells the Worker whether this crawl saw the whole
+        site. Only then may it delete indexed pages the crawl did not return;
+        None leaves the field out and the Worker keeps its old behaviour.
+        """
         async with httpx.AsyncClient(timeout=180) as client:
             status = await self._wait_for_index(
                 client,
@@ -205,6 +212,7 @@ class RagIngestClient:
                     active_keys,
                     status.chunks_count,
                     job_id=job_id,
+                    crawl_complete=crawl_complete,
                 )
             return status
 
@@ -216,6 +224,7 @@ class RagIngestClient:
         active_keys: list[str],
         chunks_count: int,
         job_id: str | None = None,
+        crawl_complete: bool | None = None,
     ) -> None:
         payload: dict[str, object] = {
             "database_id": database_id,
@@ -226,6 +235,8 @@ class RagIngestClient:
         }
         if job_id is not None:
             payload["job_id"] = job_id
+        if crawl_complete is not None:
+            payload["complete"] = crawl_complete
         await self._post(client, "/ingest/complete", payload)
 
     async def _wait_for_index(

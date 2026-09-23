@@ -407,6 +407,75 @@ describe('database lifecycle & deletion protection', () => {
     expect(db.pages_count).toBe(5)
   })
 
+  describe('stale item pruning on complete', () => {
+    async function completeWith(extra: Record<string, unknown>) {
+      const env = mockEnv()
+      const dbId = 'kb-prune'
+      env.store.set(dbId, JSON.stringify({ ...record(dbId, ANNA, 'crawling'), current_job_id: 'job-1' }))
+      const deleteItem = vi.fn(async () => {})
+      env.AI_SEARCH = {
+        ...env.AI_SEARCH,
+        get: () => ({
+          items: {
+            list: async () => ({
+              result: [
+                { id: 'id-keep', key: 'keep.md' },
+                { id: 'id-stale', key: 'stale.md' },
+              ],
+              result_info: { total_count: 2 },
+            }),
+            delete: deleteItem,
+          },
+        }),
+      } as unknown as Env['AI_SEARCH']
+      const response = await worker.fetch(
+        new Request('https://cracha-rag.internal/ingest/complete', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${env.INGEST_SECRET}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            database_id: dbId,
+            user_id: ANNA,
+            job_id: 'job-1',
+            active_keys: ['keep.md'],
+            pages_count: 1,
+            ...extra,
+          }),
+        }),
+        env,
+      )
+      return { response, deleteItem, env, dbId }
+    }
+
+    it('deletes pages a complete crawl no longer found', async () => {
+      const { response, deleteItem } = await completeWith({ complete: true })
+      expect(response.status).toBe(200)
+      expect(deleteItem).toHaveBeenCalledWith('id-stale')
+      expect(await response.json()).toMatchObject({ deleted_stale_items: 1, stale_items_kept: false })
+    })
+
+    it('keeps the pages a partial crawl did not reach and still publishes the index', async () => {
+      const { response, deleteItem, env, dbId } = await completeWith({ complete: false })
+      expect(response.status).toBe(200)
+      expect(deleteItem).not.toHaveBeenCalled()
+      expect(await response.json()).toMatchObject({ deleted_stale_items: 0, stale_items_kept: true })
+      const db = JSON.parse(env.store.get(dbId)!) as DatabaseRecord
+      expect(db.status).toBe('active')
+      expect(db.current_job_id).toBeUndefined()
+    })
+
+    it('prunes as before when an older crawler sends no flag', async () => {
+      const { response, deleteItem } = await completeWith({})
+      expect(response.status).toBe(200)
+      expect(deleteItem).toHaveBeenCalledWith('id-stale')
+    })
+
+    it('rejects a flag that is not a boolean', async () => {
+      const { response, deleteItem } = await completeWith({ complete: 'no' })
+      expect(response.status).toBe(400)
+      expect(deleteItem).not.toHaveBeenCalled()
+    })
+  })
+
   it('ignores failed callback without job_id when active job has current_job_id, preventing job corruption', async () => {
     const env = mockEnv()
     const dbId = 'kb-missing-jobid'

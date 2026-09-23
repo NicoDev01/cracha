@@ -8,7 +8,7 @@ from typing import Annotated
 
 import modal
 
-from cracha_crawler.crawl import CrawlBlockedError, analyze_site, crawl_pages
+from cracha_crawler.crawl import CrawlBlockedError, CrawlStats, analyze_site, crawl_pages
 from cracha_crawler.ingest import INDEX_STATUS_ATTEMPTS, PageBuffer, RagIngestClient
 from cracha_crawler.models import AnalyzeRequest, CrawlRequest, Page, SiteAnalysis
 from cracha_crawler.settlement import settle_status
@@ -102,6 +102,7 @@ async def finalize_index(
     user_id: str,
     active_keys: list[str],
     skipped_count: int,
+    crawl_complete: bool | None = None,
 ) -> dict:
     ingest_client = RagIngestClient()
     submitted_count = len(active_keys)
@@ -133,6 +134,7 @@ async def finalize_index(
             attempts=250,
             on_progress=report_progress,
             job_id=job_id,
+            crawl_complete=crawl_complete,
         )
         # Only an empty index is a failure. AI Search leaving a handful of items
         # in "running" is not: their chunks are searchable, and declaring the
@@ -282,12 +284,23 @@ async def process_crawl(payload: dict, job_id: str) -> dict:
             },
         )
         stale_flusher = asyncio.create_task(flush_when_stale())
+        coverage = CrawlStats()
         try:
-            pages, skipped = await crawl_pages(request, report_progress, accept_page)
+            pages, skipped = await crawl_pages(request, report_progress, accept_page, coverage)
         finally:
             stale_flusher.cancel()
         if not pages:
             raise RuntimeError("No indexable content was found.")
+        # A re-crawl prunes the index to what it found. One that stopped at the
+        # page limit, ran out of time or failed on many pages did not see the
+        # whole site, and must not delete the pages it merely did not reach.
+        crawl_complete = coverage.complete(len(pages))
+        if not crawl_complete:
+            print(
+                f"[CRAWL] partial coverage (truncated={coverage.truncated}, "
+                f"timed_out={coverage.timed_out}, failed={coverage.failed}, "
+                f"pages={len(pages)}); previously indexed pages are kept"
+            )
 
         send(buffer.drain())
         # Nothing may wait on a scan that will never happen: if the crawl ended
@@ -324,6 +337,7 @@ async def process_crawl(payload: dict, job_id: str) -> dict:
             attempts=INDEX_STATUS_ATTEMPTS,
             on_progress=report_progress,
             job_id=job_id,
+            crawl_complete=crawl_complete,
         )
         result = {
             "success": True,
@@ -342,6 +356,7 @@ async def process_crawl(payload: dict, job_id: str) -> dict:
                 request.user_id,
                 active_keys,
                 skipped,
+                crawl_complete,
             )
             await update_status(
                 job_id,
