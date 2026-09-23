@@ -156,8 +156,7 @@ export function RegisterForm() {
       <CardContent className="space-y-6">
         {/* Google Auth Button */}
         <div className="space-y-1.5">
-          <div className="flex items-center justify-between text-xs text-blue-600 font-medium px-1">
-            <span>⚡ Empfohlen</span>
+          <div className="text-right text-xs text-blue-600 font-medium px-1">
             <span>Sofortiger Zugriff</span>
           </div>
           <GoogleAuthButton isRegister />

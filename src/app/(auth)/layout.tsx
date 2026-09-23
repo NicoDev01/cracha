@@ -4,6 +4,17 @@ import { useAuthStore } from '@/stores/auth-store'
 import { useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { useLightOnly } from '@/lib/theme/use-light-only'
+import Image from 'next/image'
+import Link from 'next/link'
+
+// Auth pages are always light, so only the light wordmark is needed.
+const logo = (
+  <div className="mb-8 flex justify-center">
+    <Link href="/">
+      <Image src="/images/logo/logo.svg" alt="CraCha" width={148} height={36} priority />
+    </Link>
+  </div>
+)
 
 export default function AuthLayout({
   children,
@@ -41,18 +52,7 @@ export default function AuthLayout({
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4 sm:p-6 lg:p-8">
         <div className="w-full max-w-md mx-auto">
-          {/* Logo */}
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center space-x-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-                <span className="text-white font-bold text-lg">C</span>
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">CraCha</h1>
-                <p className="text-sm text-gray-600">Deine Fragen. Deine Website-Quellen.</p>
-              </div>
-            </div>
-          </div>
+          {logo}
           
           {children}
         </div>
@@ -90,18 +90,7 @@ export default function AuthLayout({
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4 sm:p-6 lg:p-8">
       <div className="w-full max-w-md mx-auto">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center space-x-3">
-            <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-              <span className="text-white font-bold text-lg">C</span>
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">CraCha</h1>
-              <p className="text-sm text-gray-600">Deine Fragen. Deine Website-Quellen.</p>
-            </div>
-          </div>
-        </div>
+        {logo}
         
         {children}
       </div>
