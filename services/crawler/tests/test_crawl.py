@@ -107,12 +107,12 @@ async def test_browser_failure_uses_http_fallback(monkeypatch) -> None:
         return None
 
     async def failed_browser(
-        _request: CrawlRequest, _on_progress=None, _on_page=None
+        _request: CrawlRequest, _on_progress=None, _on_page=None, **_kwargs
     ) -> tuple[list[Page], int]:
         raise RuntimeError("Browser is not available")
 
     async def fallback(
-        _request: CrawlRequest, _on_progress=None, _on_page=None
+        _request: CrawlRequest, _on_progress=None, _on_page=None, **_kwargs
     ) -> tuple[list[Page], int]:
         return [fallback_page], 0
 
@@ -139,12 +139,12 @@ async def test_successful_browser_result_skips_fallback(monkeypatch) -> None:
         return None
 
     async def browser(
-        _request: CrawlRequest, _on_progress=None, _on_page=None
+        _request: CrawlRequest, _on_progress=None, _on_page=None, **_kwargs
     ) -> tuple[list[Page], int]:
         return [browser_page], 1
 
     async def unexpected_fallback(
-        _request: CrawlRequest, _on_progress=None, _on_page=None
+        _request: CrawlRequest, _on_progress=None, _on_page=None, **_kwargs
     ) -> tuple[list[Page], int]:
         raise AssertionError("fallback must not run")
 
@@ -373,12 +373,12 @@ async def test_fallback_does_not_stream_a_page_the_browser_pass_already_sent(mon
             crawled_at="2026-08-22T00:00:00+00:00",
         )
 
-    async def dying_browser(_request, _on_progress=None, on_page=None):
+    async def dying_browser(_request, _on_progress=None, on_page=None, **_kwargs):
         for url in ("https://example.com/a", "https://example.com/b"):
             await on_page(page(url))
         raise TimeoutError("browser ran out of time")
 
-    async def fallback(_request, _on_progress=None, on_page=None):
+    async def fallback(_request, _on_progress=None, on_page=None, **_kwargs):
         pages = [page(f"https://example.com/{name}") for name in ("a", "b", "c")]
         for candidate in pages:
             await on_page(candidate)
@@ -423,12 +423,12 @@ async def test_streaming_stops_at_the_page_limit_across_both_passes(monkeypatch)
             crawled_at="2026-08-22T00:00:00+00:00",
         )
 
-    async def dying_browser(_request, _on_progress=None, on_page=None):
+    async def dying_browser(_request, _on_progress=None, on_page=None, **_kwargs):
         for index in range(3):
             await on_page(page(f"https://example.com/browser-{index}"))
         raise TimeoutError("browser ran out of time")
 
-    async def fallback(_request, _on_progress=None, on_page=None):
+    async def fallback(_request, _on_progress=None, on_page=None, **_kwargs):
         pages = [page(f"https://example.com/fallback-{index}") for index in range(3)]
         for candidate in pages:
             await on_page(candidate)
@@ -445,3 +445,190 @@ async def test_streaming_stops_at_the_page_limit_across_both_passes(monkeypatch)
     await crawl.crawl_pages(wanted, None, record)
 
     assert len(streamed) == 4
+
+
+def _document(*links: str, head: str = "") -> bytes:
+    anchors = "".join(f'<a href="{link}">Link</a> ' for link in links)
+    return (
+        f"<html><head><title>Seite</title>{head}</head>"
+        f"<body><main>{FILLER}<p>{anchors}</p></main></body></html>"
+    ).encode()
+
+
+def site(monkeypatch, pages: dict[str, bytes | int]) -> list[str]:
+    """An in-memory site for the HTTP fallback; an int is an error status."""
+    fetched: list[str] = []
+
+    async def allow_url(_url: str) -> None:
+        return None
+
+    async def download(_client, url: str) -> tuple[bytes, str]:
+        if url.endswith("/robots.txt"):
+            raise httpx.HTTPError("no robots.txt")
+        fetched.append(url)
+        answer = pages.get(url, 404)
+        if isinstance(answer, int):
+            response = httpx.Response(answer, request=httpx.Request("GET", url))
+            raise httpx.HTTPStatusError(str(answer), request=response.request, response=response)
+        return answer, url
+
+    monkeypatch.setattr(crawl, "assert_public_url", allow_url)
+    monkeypatch.setattr(crawl, "_safe_download", download)
+    return fetched
+
+
+def recursive(**changes) -> CrawlRequest:
+    return CrawlRequest(
+        url="https://example.com/",
+        tenant_id="test-db",
+        user_id="test-user",
+        type="recursive",
+        max_depth=2,
+        limit=10,
+    ).model_copy(update=changes)
+
+
+async def test_excluded_links_are_never_fetched(monkeypatch) -> None:
+    fetched = site(monkeypatch, {
+        "https://example.com/": _document("/docs/a", "/blog/b", "/docs/private/c"),
+        "https://example.com/docs/a": _document(),
+    })
+
+    pages, skipped = await crawl._http_fallback_pages(
+        recursive(include_patterns=["*/docs/*"], exclude_patterns=["*/private/*"])
+    )
+
+    # The start URL is fetched for its links although it matches no include;
+    # it is still not indexed.
+    assert fetched == ["https://example.com/", "https://example.com/docs/a"]
+    assert [page.url for page in pages] == ["https://example.com/docs/a"]
+    assert skipped == 1
+
+
+async def test_a_crawl_that_saw_the_whole_site_is_complete(monkeypatch) -> None:
+    site(monkeypatch, {
+        "https://example.com/": _document("/a", "/gone"),
+        "https://example.com/a": _document(),
+        # /gone answers 404: the page is gone, which is what pruning is for.
+    })
+    stats = crawl.CrawlStats()
+
+    pages, _ = await crawl._http_fallback_pages(recursive(), stats=stats)
+
+    assert len(pages) == 2
+    assert stats == crawl.CrawlStats(failed=0, truncated=False, timed_out=False)
+    assert stats.complete(len(pages))
+
+
+async def test_a_crawl_cut_off_by_the_page_limit_is_not_complete(monkeypatch) -> None:
+    site(monkeypatch, {
+        "https://example.com/": _document("/a", "/b"),
+        "https://example.com/a": _document(),
+        "https://example.com/b": _document(),
+    })
+    stats = crawl.CrawlStats()
+
+    pages, _ = await crawl._http_fallback_pages(recursive(limit=2), stats=stats)
+
+    assert len(pages) == 2
+    assert stats.truncated
+    assert not stats.complete(len(pages))
+
+
+async def test_the_limit_reached_exactly_is_still_complete(monkeypatch) -> None:
+    site(monkeypatch, {
+        "https://example.com/": _document("/a"),
+        "https://example.com/a": _document("/"),
+    })
+    stats = crawl.CrawlStats()
+
+    pages, _ = await crawl._http_fallback_pages(recursive(limit=2), stats=stats)
+
+    assert len(pages) == 2
+    assert not stats.truncated
+
+
+async def test_server_errors_count_against_completeness(monkeypatch) -> None:
+    site(monkeypatch, {
+        "https://example.com/": _document("/a", "/b"),
+        "https://example.com/a": _document(),
+        "https://example.com/b": 503,
+    })
+    stats = crawl.CrawlStats()
+
+    pages, _ = await crawl._http_fallback_pages(recursive(), stats=stats)
+
+    assert len(pages) == 2
+    assert stats.failed == 1
+    # One of three fetches failing is far above the tolerated share.
+    assert not stats.complete(len(pages))
+
+
+def test_failure_ratio_threshold() -> None:
+    assert crawl.CrawlStats(failed=1).complete(9)
+    assert not crawl.CrawlStats(failed=2).complete(9)
+    assert not crawl.CrawlStats().complete(0)
+    assert not crawl.CrawlStats(timed_out=True).complete(50)
+
+
+async def test_sitemap_targets_are_filtered_and_report_truncation(monkeypatch) -> None:
+    serve(monkeypatch, {
+        "https://example.com/sitemap.xml": _sitemap(
+            "https://example.com/docs/a",
+            "https://example.com/blog/b",
+            "https://example.com/docs/c",
+        ),
+    })
+    stats = crawl.CrawlStats()
+    wanted = recursive(type="sitemap", limit=2, include_patterns=["*/docs/*"])
+
+    urls = await crawl._sitemap_targets("https://example.com/sitemap.xml", wanted, stats)
+
+    assert urls == ["https://example.com/docs/a"]
+    assert stats.truncated
+
+    exact = crawl.CrawlStats()
+    await crawl._sitemap_targets(
+        "https://example.com/sitemap.xml", recursive(type="sitemap", limit=3), exact
+    )
+    assert not exact.truncated
+
+
+async def test_a_browser_timeout_makes_the_crawl_incomplete(monkeypatch) -> None:
+    fallback_page = Page(
+        url="https://example.com/docs",
+        title="Docs",
+        markdown="# Docs\n\n" + "Fallback content. " * 20,
+        checksum="a" * 64,
+        crawled_at="2026-08-04T00:00:00+00:00",
+    )
+
+    async def allow_url(_url: str) -> None:
+        return None
+
+    async def slow_browser(_request, _on_progress=None, _on_page=None, **_kwargs):
+        raise TimeoutError()
+
+    async def fallback(_request, _on_progress=None, _on_page=None, **_kwargs):
+        return [fallback_page], 0
+
+    monkeypatch.setattr(crawl, "assert_public_url", allow_url)
+    monkeypatch.setattr(crawl, "_crawl4ai_pages", slow_browser)
+    monkeypatch.setattr(crawl, "_http_fallback_pages", fallback)
+    stats = crawl.CrawlStats()
+
+    pages, _ = await crawl.crawl_pages(request(), stats=stats)
+
+    assert pages == [fallback_page]
+    assert stats.timed_out
+    assert not stats.complete(len(pages))
+
+
+def test_the_http_path_files_a_page_under_its_canonical_url() -> None:
+    document = _document(head='<link rel="canonical" href="https://example.com/preise-2026">')
+    page, _links = crawl._html_page(
+        document, "https://example.com/preise?utm_source=x", 0, request()
+    )
+
+    assert page is not None
+    assert page.url == "https://example.com/preise-2026"

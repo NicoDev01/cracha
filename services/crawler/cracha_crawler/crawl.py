@@ -3,6 +3,7 @@ import hashlib
 import re
 from collections import deque
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from urllib import robotparser
 from urllib.parse import urljoin, urlsplit, urlunsplit
@@ -13,6 +14,7 @@ from defusedxml import ElementTree as ET
 from .models import CrawlRequest, CrawlType, Page, SiteAnalysis
 from .normalize import (
     canonical_url,
+    extract_canonical_url,
     extract_published_at,
     matches_patterns,
     normalize_markdown,
@@ -60,6 +62,70 @@ DYNAMIC_PAGE_PREFIX_RE = re.compile(
     r"pageURL\s*=\s*['\"]([^'\"]+)['\"]\s*\+\s*htmlFile",
     re.IGNORECASE,
 )
+
+
+# Above this share of failed fetches the crawl is not a picture of the site,
+# and pruning the index against it would delete pages that still exist.
+MAX_FAILURE_RATIO = 0.1
+# Refusals and outages, as opposed to a page that is gone. A 404 or 410 is the
+# site saying the page no longer exists, which is exactly what pruning is for.
+FAILED_STATUS_CODES = frozenset({401, 403, 408, 429})
+
+
+@dataclass
+class CrawlStats:
+    """What the crawl knows about its own coverage of the site.
+
+    The index is pruned to the pages of a crawl, so the crawl must say when it
+    did not see the whole site: a re-crawl that hit its page limit, ran out of
+    time or could not fetch a good share of pages would otherwise delete every
+    page it merely did not reach.
+    """
+
+    failed: int = 0
+    truncated: bool = False
+    timed_out: bool = False
+
+    def complete(self, pages_count: int) -> bool:
+        if self.truncated or self.timed_out:
+            return False
+        attempted = pages_count + self.failed
+        return attempted > 0 and self.failed <= MAX_FAILURE_RATIO * attempted
+
+
+def _is_failed_status(status_code: object) -> bool:
+    return isinstance(status_code, int) and (
+        status_code >= 500 or status_code in FAILED_STATUS_CODES
+    )
+
+
+def _fetch_failed(error: Exception) -> bool:
+    """A transient or refused fetch, not a page the site no longer has.
+
+    ValueError covers our own refusals (off-host redirect, a non-HTML body),
+    which say something about the page rather than about the site's health.
+    """
+    if isinstance(error, httpx.HTTPStatusError):
+        return _is_failed_status(error.response.status_code)
+    return isinstance(error, (httpx.TransportError, OSError))
+
+
+def _wanted(url: str, request: CrawlRequest) -> bool:
+    return matches_patterns(url, request.include_patterns, request.exclude_patterns)
+
+
+async def _sitemap_targets(
+    url: str, request: CrawlRequest, stats: CrawlStats
+) -> list[str]:
+    """Sitemap URLs to fetch: filtered before any request, capped at the limit.
+
+    One URL past the limit is asked for, because that is how a sitemap that
+    exactly fits is told apart from one the limit cut off.
+    """
+    urls, _ = await sitemap_page_urls(url, request.limit + 1)
+    if len(urls) > request.limit:
+        stats.truncated = True
+    return [candidate for candidate in urls[: request.limit] if _wanted(candidate, request)]
 
 
 async def _report_progress(
@@ -410,7 +476,9 @@ def _html_page(
     title = " ".join(document.xpath("//title[1]//text()") or [url]).strip()[:500]
     links = [canonical_url(urljoin(url, href)) for href in document.xpath("//a[@href]/@href")]
     # Read before the JSON-LD script tags are dropped below.
-    published_at = extract_published_at(content.decode("utf-8", errors="ignore"))
+    source = content.decode("utf-8", errors="ignore")
+    published_at = extract_published_at(source)
+    declared_url = extract_canonical_url(source, url)
     for element in document.xpath("//script|//style|//noscript|//nav|//footer|//aside"):
         element.drop_tree()
     roots = (
@@ -435,10 +503,12 @@ def _html_page(
             lines.append(block)
     markdown = truncate_utf8(normalize_markdown("\n\n".join(lines)))
     page_url = canonical_url(url)
-    if len(markdown) < 200 or not matches_patterns(
-        page_url, request.include_patterns, request.exclude_patterns
-    ):
+    if len(markdown) < 200 or not _wanted(page_url, request):
         return None, links
+    # Two addresses of one page file under the one the site names, so the
+    # dictionary keyed by URL keeps a single entry for it.
+    if declared_url and _wanted(declared_url, request):
+        page_url = declared_url
     return Page(
         url=page_url,
         title=title or page_url,
@@ -454,11 +524,14 @@ async def _http_fallback_pages(
     request: CrawlRequest,
     on_progress: ProgressCallback | None = None,
     on_page: Callable[[Page], Awaitable[None]] | None = None,
+    *,
+    stats: CrawlStats | None = None,
 ) -> tuple[list[Page], int]:
+    stats = stats if stats is not None else CrawlStats()
     start_url = canonical_url(str(request.url))
     source_host = urlsplit(start_url).hostname
     initial_urls = (
-        (await sitemap_page_urls(start_url, request.limit))[0] or [start_url]
+        (await _sitemap_targets(start_url, request, stats)) or [start_url]
         if request.type is CrawlType.SITEMAP
         else [start_url]
     )
@@ -498,6 +571,8 @@ async def _http_fallback_pages(
                     f"[WARN] HTTP fallback skipped {url} "
                     f"({type(error).__name__}: {error})"
                 )
+                if _fetch_failed(error):
+                    stats.failed += 1
                 if url == start_url:
                     status = getattr(getattr(error, "response", None), "status_code", None)
                     blocked_start = (
@@ -529,7 +604,15 @@ async def _http_fallback_pages(
                 skipped += 1
             if request.type is CrawlType.RECURSIVE and depth < request.max_depth:
                 for link in links:
-                    if link not in visited and urlsplit(link).hostname == source_host:
+                    # Filtered before the request rather than after it: an
+                    # excluded page costs neither a fetch nor a place in the
+                    # limit. Only the start URL is fetched regardless, because
+                    # its links are how the wanted pages are found.
+                    if (
+                        link not in visited
+                        and urlsplit(link).hostname == source_host
+                        and _wanted(link, request)
+                    ):
                         pending.append((link, depth + 1))
             await _report_progress(
                 on_progress,
@@ -540,6 +623,10 @@ async def _http_fallback_pages(
                 skipped_count=skipped,
                 url=final_url,
             )
+    if len(pages) >= request.limit and any(
+        url not in visited and depth <= request.max_depth for url, depth in pending
+    ):
+        stats.truncated = True
     if not pages and blocked_start:
         raise CrawlBlockedError(blocked_start)
     return list(pages.values()), skipped
@@ -550,7 +637,10 @@ async def _http_direct_pages(
     urls: list[str],
     on_progress: ProgressCallback | None = None,
     on_page: Callable[[Page], Awaitable[None]] | None = None,
+    *,
+    stats: CrawlStats | None = None,
 ) -> tuple[list[Page], int]:
+    stats = stats if stats is not None else CrawlStats()
     pages: dict[str, Page] = {}
     skipped = 0
     lock = asyncio.Lock()
@@ -579,6 +669,8 @@ async def _http_direct_pages(
                 # Swallowing this without a word is how a whole crawl came back
                 # empty with nothing in the log to say which URL failed or why.
                 print(f"[WARN] Skipped {url} ({type(error).__name__}: {error})")
+                if _fetch_failed(error):
+                    stats.failed += 1
             async with lock:
                 if page:
                     pages[page.url] = page
@@ -604,12 +696,15 @@ async def _crawl4ai_pages(
     request: CrawlRequest,
     on_progress: ProgressCallback | None = None,
     on_page: Callable[[Page], Awaitable[None]] | None = None,
+    *,
+    stats: CrawlStats | None = None,
 ) -> tuple[list[Page], int]:
     from crawl4ai import AsyncWebCrawler, BrowserConfig, CacheMode, CrawlerRunConfig
     from crawl4ai.content_filter_strategy import PruningContentFilter
     from crawl4ai.content_scraping_strategy import LXMLWebScrapingStrategy
     from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 
+    stats = stats if stats is not None else CrawlStats()
     start_url = str(request.url)
     proxy = SafeEgressProxy()
     try:
@@ -693,13 +788,23 @@ async def _crawl4ai_pages(
         else []
     )
     if dynamic_page_urls:
+        wanted_urls = [url for url in dynamic_page_urls if _wanted(url, request)]
+        if len(wanted_urls) > request.limit:
+            stats.truncated = True
         return await _http_direct_pages(
-            request, dynamic_page_urls[: request.limit], on_progress, on_page
+            request, wanted_urls[: request.limit], on_progress, on_page, stats=stats
         )
 
     async def collect(result, depth: int = 0) -> tuple[list[str], list[str]]:
         nonlocal processed, skipped
         processed += 1
+        # robots.txt refusing a page is the owner's wish, not an outage.
+        refused_by_robots = "robots.txt" in str(getattr(result, "error_message", "") or "")
+        if not refused_by_robots and (
+            not getattr(result, "success", False)
+            or _is_failed_status(getattr(result, "status_code", None))
+        ):
+            stats.failed += 1
         result_url = str(getattr(result, "redirected_url", None) or getattr(result, "url", ""))
         try:
             await assert_public_url(result_url)
@@ -815,32 +920,35 @@ async def _crawl4ai_pages(
                 current_urls = [start_url]
                 visited: set[str] = set()
                 expected_total = request.limit
-                for depth in range(request.max_depth + 1):
+                def take(urls: list[str], filtered: bool) -> list[str]:
+                    # Include/exclude apply before the request, so an excluded
+                    # page costs neither a render nor a place in the limit. The
+                    # start URL is exempt: its links are how the wanted pages
+                    # are found, and it is still only indexed if it matches.
                     batch: list[str] = []
-                    for url in current_urls:
+                    for url in dict.fromkeys(urls):
                         normalized = canonical_url(url)
-                        if normalized in visited:
+                        if normalized in visited or (filtered and not _wanted(normalized, request)):
                             continue
+                        if len(pages_by_url) + len(batch) >= request.limit:
+                            # A wanted page is left over: the limit, not the
+                            # site, ended this crawl.
+                            stats.truncated = True
+                            break
                         visited.add(normalized)
                         batch.append(normalized)
-                        if len(pages_by_url) + len(batch) >= request.limit:
-                            break
+                    return batch
+
+                for depth in range(request.max_depth + 1):
+                    batch = take(current_urls, filtered=depth > 0)
                     if not batch:
                         break
                     results = await crawler.arun_many(urls=batch, config=config)
                     discovered_links, embedded_links = await consume(results, depth)
                     if depth == 0 and dynamic_page_urls:
                         discovered_links = dynamic_page_urls + discovered_links
-                    while embedded_links and len(pages_by_url) < request.limit:
-                        embedded_batch: list[str] = []
-                        for url in dict.fromkeys(embedded_links):
-                            normalized = canonical_url(url)
-                            if normalized in visited:
-                                continue
-                            visited.add(normalized)
-                            embedded_batch.append(normalized)
-                            if len(pages_by_url) + len(embedded_batch) >= request.limit:
-                                break
+                    while embedded_links:
+                        embedded_batch = take(embedded_links, filtered=True)
                         if not embedded_batch:
                             break
                         embedded_results = await crawler.arun_many(
@@ -850,9 +958,11 @@ async def _crawl4ai_pages(
                         discovered_links.extend(nested_links)
                     current_urls = list(dict.fromkeys(discovered_links))
                     if len(pages_by_url) >= request.limit:
+                        if depth < request.max_depth:
+                            take(current_urls, filtered=True)
                         break
             elif request.type is CrawlType.SITEMAP:
-                urls, _ = await sitemap_page_urls(start_url, request.limit)
+                urls = await _sitemap_targets(start_url, request, stats)
                 if not urls:
                     raise ValueError("No sitemap was found for this site.")
                 expected_total = max(1, len(urls))
@@ -879,7 +989,14 @@ async def crawl_pages(
     request: CrawlRequest,
     on_progress: ProgressCallback | None = None,
     on_page: Callable[[Page], Awaitable[None]] | None = None,
+    stats: CrawlStats | None = None,
 ) -> tuple[list[Page], int]:
+    """Crawl the site; `stats`, if given, is filled with the crawl's coverage.
+
+    The coverage describes the pass whose pages are returned, plus whether the
+    browser pass ran out of time before the fallback took over.
+    """
+    stats = stats if stats is not None else CrawlStats()
     await assert_public_url(str(request.url))
     browser_timeout = min(
         MAX_BROWSER_TIMEOUT_SECONDS,
@@ -897,25 +1014,42 @@ async def crawl_pages(
         # The limit is what the crawl's credits were held against, and the
         # status endpoint refuses more than five hundred keys, so the ceiling
         # has to hold across passes rather than within one.
-        if on_page is None or page.url in streamed or len(streamed) >= request.limit:
+        if on_page is None or page.url in streamed:
+            return
+        if len(streamed) >= request.limit:
+            stats.truncated = True
             return
         streamed.add(page.url)
         await on_page(page)
 
     forward = stream_once if on_page else None
 
+    browser_stats = CrawlStats()
     try:
         async with asyncio.timeout(browser_timeout):
-            pages, skipped = await _crawl4ai_pages(request, on_progress, forward)
+            pages, skipped = await _crawl4ai_pages(
+                request, on_progress, forward, stats=browser_stats
+            )
         if pages:
+            stats.failed = browser_stats.failed
+            stats.truncated = stats.truncated or browser_stats.truncated
             return pages, skipped
         print("[WARN] Crawl4AI returned no indexable pages; using the HTTP fallback.")
     except (UnsafeUrlError, CrawlBlockedError):
         raise
     except Exception as error:
+        # The browser pass already streamed part of the site, and the fallback
+        # that follows is a second, cruder look at it. Neither is the whole
+        # site as the browser would have seen it.
+        if isinstance(error, TimeoutError):
+            stats.timed_out = True
         print(
             f"[WARN] Crawl4AI unavailable ({type(error).__name__}: {error}); "
             "using the HTTP fallback."
         )
 
-    return await _http_fallback_pages(request, on_progress, forward)
+    fallback_stats = CrawlStats()
+    result = await _http_fallback_pages(request, on_progress, forward, stats=fallback_stats)
+    stats.failed = fallback_stats.failed
+    stats.truncated = stats.truncated or fallback_stats.truncated
+    return result
