@@ -306,6 +306,12 @@ export default function DatenschutzPage() {
               Index ändert.
             </>,
             <>
+              <strong className="text-foreground">Anmeldeprotokolle</strong> unseres
+              Authentifizierungsdienstleisters (Anmeldungen, Abmeldungen, Passwort-
+              und Kontoänderungen mit E-Mail-Adresse) löschen wir nach 30 Tagen,
+              nach einer Kontolöschung spätestens am folgenden Tag.
+            </>,
+            <>
               <strong className="text-foreground">Server-Protokolle</strong> werden
               nach den für den jeweiligen Dienst eingerichteten Aufbewahrungsfristen gelöscht. Technische Betriebsdaten können Fehler, Zeitpunkte, Nutzer- bzw. Anfragekennungen und Verbrauchswerte enthalten.
             </>,
