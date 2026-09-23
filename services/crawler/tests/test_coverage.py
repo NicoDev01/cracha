@@ -2,8 +2,9 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from cracha_crawler.models import Page
 from services.crawler import modal_app
+
+from cracha_crawler.models import Page
 
 
 @pytest.mark.asyncio
