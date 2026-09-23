@@ -17,8 +17,8 @@ export default function CanvasSection() {
           </div>
           <div className="flex flex-col items-center gap-7 text-center">
             <h2 className="font-heading text-3xl leading-tight text-foreground md:text-5xl">
-              Mach Website-Inhalte zu <br /> deiner{" "}
-              <span className="text-gradient_indigo-purple">Wissensbasis</span>
+              Verwandle Websites <br /> in{" "}
+              <span className="text-gradient_indigo-purple">Wissensbasen</span>
             </h2>
             <AppEntryLink prefetch={true} signedOutHref="/register">
               <RainbowButton className="gap-2">
@@ -34,8 +34,8 @@ export default function CanvasSection() {
       <div className="block md:hidden pb-16 pt-8 px-4">
         <div className="flex flex-col items-center gap-6 text-center max-w-sm mx-auto">
           <h2 className="font-heading text-2xl leading-tight text-foreground">
-            Deine Website-Inhalte. <br /> Deine{" "}
-            <span className="text-gradient_indigo-purple">Wissensbasis</span>
+            Verwandle Websites <br /> in{" "}
+            <span className="text-gradient_indigo-purple">Wissensbasen</span>
           </h2>
           <AppEntryLink prefetch={true} signedOutHref="/register">
             <RainbowButton className="gap-2">

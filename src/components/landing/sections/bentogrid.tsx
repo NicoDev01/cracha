@@ -16,7 +16,8 @@ import { GridItem } from "@/components/landing/ui/grid-item";
  * The steps are also written from the visitor's side now. "Crawlen, Chatten,
  * Verwalten" named the software's three screens; what a first-time reader
  * wants to know is how much of it lands on them, and the answer is: the first
- * step and the last one.
+ * step and the last one. The middle step is the point of the product — CraCha
+ * finds the subpages itself — so it says so in as many words.
  */
 export function BentoGrid() {
   return (
@@ -30,18 +31,18 @@ export function BentoGrid() {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-8">
           <GridItem
             icon={<Search className="h-4 w-4" />}
-            title="1. Website auswählen"
-            description="Konto erstellen, E-Mail bestätigen und eine öffentliche Website auswählen. Beginne mit einem passenden Bereich und höchstens 20 Seiten."
+            title="1. Start-URL eingeben"
+            description="Gib die Adresse einer Website ein und leg fest, wie viele Unterseiten CraCha einlesen soll – oder einfach alle aus der Sitemap, bis zu 500 pro Durchgang."
           />
           <GridItem
             icon={<Settings className="h-4 w-4" />}
-            title="2. Inhalte einlesen"
-            description="CraCha liest die erreichbaren Seiten ein und bereitet sie für deine Fragen auf. Im Dashboard siehst du, sobald deine Wissensbasis bereit ist."
+            title="2. CraCha findet alle Unterseiten"
+            description="CraCha folgt den Links oder der Sitemap der Website, findet die Unterseiten automatisch und liest sie ein – du klickst dich durch nichts. Im Dashboard siehst du, sobald deine Wissensbasis bereit ist."
           />
           <GridItem
             icon={<MessageSquare className="h-4 w-4" />}
-            title="3. Fragen und Quellen prüfen"
-            description="Stell deine Frage im Chat und spring über die Quellenlinks direkt zur passenden Originalseite. Deine Wissensbasen bleiben in deinem Konto, du kannst jederzeit weiterfragen."
+            title="3. Fragen stellen"
+            description="Frag im Chat, was du wissen willst. Jede Antwort nennt ihre Quellen als klickbare Links, die dich direkt zur passenden Originalseite führen."
           />
         </div>
       </MaxWidthWrapper>
