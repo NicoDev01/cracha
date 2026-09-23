@@ -788,6 +788,9 @@ async def _crawl4ai_pages(
         else []
     )
     if dynamic_page_urls:
+        # This path never starts the browser, so the proxy's finally below
+        # would not run; close it here instead.
+        await proxy.close()
         wanted_urls = [url for url in dynamic_page_urls if _wanted(url, request)]
         if len(wanted_urls) > request.limit:
             stats.truncated = True

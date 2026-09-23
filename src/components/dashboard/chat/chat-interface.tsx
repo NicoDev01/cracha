@@ -406,12 +406,11 @@ export function ChatInterface() {
 
   const formatAnswerWithSources = (content: string, sources: ChatSource[] = []): string => {
     if (!sources || sources.length === 0) return content;
+    // Only sources the answer cites; an uncited answer is exported without a list.
     const citedSources = getCitedSources(content, sources);
-    const activeSources = citedSources.length > 0
-      ? citedSources
-      : sources.map((source, index) => ({ index: index + 1, source }));
+    if (citedSources.length === 0) return content;
 
-    const sourcesList = activeSources
+    const sourcesList = citedSources
       .map((item) => `[${item.index}] [${item.source.title}](${item.source.url})`)
       .join('\n');
 
