@@ -194,7 +194,7 @@ interface Particle {
         ctx.globalAlpha = 1;
       }
 
-      rafRef.current = requestAnimationFrame(update);
+      if (running) rafRef.current = requestAnimationFrame(update);
     };
 
     // Pointer events
@@ -215,21 +215,52 @@ interface Particle {
       state.pointer.y = -9999;
     };
 
-    // Kick things off
-    resize();
-    cancelAnimationFrame(rafRef.current);
-    rafRef.current = requestAnimationFrame(update);
+    // The canvas sits at the very end of the page, and below md it is not
+    // shown at all. Drawing thousands of particles every frame regardless kept
+    // the main thread busy from the first second of every visit — on a phone
+    // for a full-window canvas nobody could see. The loop now runs only while
+    // the canvas is on screen; an element with display:none never is.
+    let running = false;
+    let built = false;
+    const start = () => {
+      if (running) return;
+      running = true;
+      if (!built) {
+        built = true;
+        resize();
+      }
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(update);
+    };
+    const stop = () => {
+      running = false;
+      cancelAnimationFrame(rafRef.current);
+    };
+    const onResize = () => {
+      if (built) resize();
+    };
+
+    const visibility =
+      typeof IntersectionObserver === "undefined"
+        ? null
+        : new IntersectionObserver((entries) => {
+            if (entries.some((entry) => entry.isIntersecting)) start();
+            else stop();
+          });
+    if (visibility) visibility.observe(canvas);
+    else start();
 
     // Listeners
-    window.addEventListener("resize", resize);
+    window.addEventListener("resize", onResize);
     canvas.addEventListener("pointermove", onMove);
     canvas.addEventListener("pointerdown", onMove);
     canvas.addEventListener("pointerleave", onLeave);
 
     // Cleanup
     return () => {
-      cancelAnimationFrame(rafRef.current);
-      window.removeEventListener("resize", resize);
+      visibility?.disconnect();
+      stop();
+      window.removeEventListener("resize", onResize);
       canvas.removeEventListener("pointermove", onMove);
       canvas.removeEventListener("pointerdown", onMove);
       canvas.removeEventListener("pointerleave", onLeave);
