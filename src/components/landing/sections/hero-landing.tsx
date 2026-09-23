@@ -2,11 +2,10 @@ import Link from "next/link";
 import { AppEntryLink } from "@/components/landing/app-entry-link";
 
 /**
- * The first screen has to say what happens, not hint at it: one start URL in,
- * every subpage found and read without clicking through, a knowledge base to
- * ask, and a source link under each answer. "Frag die Website. Finde Antworten
- * mit Quellen." left the mechanism — CraCha finding the subpages itself — to
- * the imagination.
+ * The first screen has to say what happens, not hint at it: CraCha crawls
+ * every subpage itself, turns them into a knowledge base, and you chat with it.
+ * Only that core. Start URL and source links are details the video and the
+ * sections below show; in the first lines they confused more than they told.
  */
 export default function HeroLanding() {
   return (
@@ -17,8 +16,9 @@ export default function HeroLanding() {
           <span className="text-gradient_indigo-purple">in eine Wissensbasis</span>
         </h1>
         <p className="max-w-2xl text-pretty leading-relaxed text-muted-foreground sm:text-xl">
-          Gib eine Start-URL ein – CraCha findet automatisch alle Unterseiten, liest sie ein und
-          beantwortet deine Fragen. Jede Antwort mit Quelle zum Anklicken.
+          CraCha crawlt jede Website bis in die letzte Unterseite und macht daraus deine
+          Wissensbasis. Dann fragst du einfach im Chat und bekommst Antworten aus dem gesamten
+          Inhalt.
         </p>
         <div className="flex flex-wrap items-center justify-center gap-4">
           <AppEntryLink signedOutHref="/register" className="inline-flex min-h-11 items-center justify-center rounded-full bg-primary px-6 py-3 font-medium text-primary-foreground focus-visible:outline-2 focus-visible:outline-offset-4">
