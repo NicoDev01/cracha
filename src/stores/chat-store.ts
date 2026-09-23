@@ -3,8 +3,42 @@ import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import type { ChatState, ChatConversation, Message } from '@/types/chat'
 import { streamChatQuery } from '@/lib/api/chat-api'
+import { createTextSmoother } from '@/lib/chat/smooth-text'
 
 let active: { controller: AbortController; owner: string; conversation: string } | null = null
+
+/**
+ * Every streamed piece changes the state, and persisting serialises every
+ * conversation into localStorage — dozens of times a second during an answer,
+ * on the thread that also has to render it. While an answer streams, writes
+ * are coalesced to one per second; any other change, above all an account
+ * switch that must clear the old history, is still written at once.
+ */
+const STREAMING_WRITE_INTERVAL_MS = 1_000
+let queuedWrite: { key: string; value: string } | null = null
+let writeTimer: ReturnType<typeof setTimeout> | null = null
+
+function writeNow(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value)
+  } catch {
+    window.dispatchEvent(new Event('cracha:chat-storage-full'))
+  }
+}
+
+function cancelQueuedWrite() {
+  if (writeTimer) clearTimeout(writeTimer)
+  writeTimer = null
+  queuedWrite = null
+}
+
+function flushQueuedWrite() {
+  const write = queuedWrite
+  cancelQueuedWrite()
+  if (write) writeNow(write.key, write.value)
+}
+
+if (typeof window !== 'undefined') window.addEventListener('pagehide', flushQueuedWrite)
 const empty = { messages: [] as Message[], conversations: {} as Record<string, ChatConversation>, selectedDatabase: null, selectedConversation: null, isLoading: false, isStreaming: false, error: null, byokApiKey: null as string | null, byokModel: null as string | null, chatMode: 'default' as 'default' | 'verification' }
 export function restoreConversations(value: unknown): Record<string, ChatConversation> {
   if (!value || typeof value !== 'object') return {}
@@ -81,6 +115,8 @@ export const useChatStore = create<ChatState>()(persist((set, get) => ({
       })
     }
     let complete = false
+    let doneMetadata: Message['metadata']
+    const smoother = createTextSmoother(text => update(messages => messages.map(message => message.id === assistantId ? { ...message, content: message.content + text } : message)))
     try {
       await streamChatQuery({
         request_id: crypto.randomUUID(),
@@ -91,15 +127,19 @@ export const useChatStore = create<ChatState>()(persist((set, get) => ({
         model: state.byokModel || undefined,
         mode: state.chatMode,
       }, {
-        onStart({ sources, model, fallback }) {
-          update(messages => [...messages, { id: assistantId, type: 'assistant', content: '', timestamp: new Date(), sources, isStreaming: true, metadata: { query_time: 0, model_used: model, fallback } }])
+        onStart({ sources, model, fallback, fallbackReason }) {
+          update(messages => [...messages, { id: assistantId, type: 'assistant', content: '', timestamp: new Date(), sources, isStreaming: true, metadata: { query_time: 0, model_used: model, fallback, fallback_reason: fallbackReason } }])
           if (active === request && get().ownerId === request.owner) set({ isLoading: false, isStreaming: true })
         },
-        onDelta(text) { update(messages => messages.map(message => message.id === assistantId ? { ...message, content: message.content + text } : message)) },
-        onDone(metadata) { complete = true; update(messages => messages.map(message => message.id === assistantId ? { ...message, isStreaming: false, metadata } : message)) },
+        onDelta(text) { smoother.push(text) },
+        onDone(metadata) { complete = true; doneMetadata = metadata },
       }, request.controller.signal)
+      // The answer is finished only once the reader has seen all of it.
+      await smoother.drain()
+      if (complete) update(messages => messages.map(message => message.id === assistantId ? { ...message, isStreaming: false, metadata: doneMetadata } : message))
       return complete
     } catch (error) {
+      smoother.flush()
       const detail = request.controller.signal.aborted ? 'Antwort gestoppt. Bereits begonnene Antworten werden berechnet; dieser Text ist unvollständig.' : error instanceof Error ? error.message : 'Die Anfrage ist fehlgeschlagen.'
       update(messages => messages.some(message => message.id === assistantId)
         ? messages.map(message => message.id === assistantId ? { ...message, content: message.content ? `${message.content}\n\n${detail}` : detail, isError: true, isStreaming: false } : message)
@@ -130,13 +170,18 @@ export const useChatStore = create<ChatState>()(persist((set, get) => ({
       }
       return raw
     },
-    removeItem: (key) => localStorage.removeItem(key),
+    removeItem: (key) => {
+      cancelQueuedWrite()
+      localStorage.removeItem(key)
+    },
     setItem(key, value) {
-      try {
-        localStorage.setItem(key, value)
-      } catch {
-        window.dispatchEvent(new Event('cracha:chat-storage-full'))
+      if (!active) {
+        cancelQueuedWrite()
+        writeNow(key, value)
+        return
       }
+      queuedWrite = { key, value }
+      writeTimer ??= setTimeout(flushQueuedWrite, STREAMING_WRITE_INTERVAL_MS)
     },
   })),
   // Old unowned histories cannot safely be inherited on a shared device.

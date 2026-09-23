@@ -1,17 +1,22 @@
 import { describe, expect, it } from 'vitest'
 
-import { answerMetaParts, formatDuration, formatModel } from './metadata'
+import { answerMetaParts, fallbackNotice, formatDuration, formatModel } from './metadata'
 
 describe('formatModel', () => {
   it('drops the routing prefix from a Workers AI id', () => {
     // The regex used to require a word character first, so `@cf/` survived and
     // the whole path reached the reader.
-    expect(formatModel('@cf/meta/llama-3.3-70b-instruct-fp8-fast'))
-      .toBe('llama-3.3-70b-instruct-fp8-fast')
+    expect(formatModel('@cf/meta/llama-3.3-70b-instruct-fp8-fast')).toBe('Llama 3.3 70B')
   })
 
-  it('drops the vendor prefix but keeps the rest of the line', () => {
-    expect(formatModel('google/gemini-3.5-flash-lite')).toBe('gemini-3.5-flash-lite')
+  it('names the platform model the way its vendor does', () => {
+    expect(formatModel('@cf/meta/llama-4-scout-17b-16e-instruct')).toBe('Llama 4 Scout')
+  })
+
+  it('drops the vendor prefix and names Gemini models readably', () => {
+    expect(formatModel('google/gemini-3.5-flash-lite')).toBe('Gemini 3.5 Flash-Lite')
+    expect(formatModel('gemini-3.8-flash')).toBe('Gemini 3.8 Flash')
+    expect(formatModel('gemini-3.1-pro-preview')).toBe('Gemini 3.1 Pro Preview')
   })
 
   it('leaves a name it was never meant to carry alone', () => {
@@ -22,8 +27,19 @@ describe('formatModel', () => {
     expect(formatModel('Cloudflare AI Search')).toBe('Cloudflare AI Search')
   })
 
-  it('leaves a plain model name untouched', () => {
-    expect(formatModel('gemini-3.5-flash-lite')).toBe('gemini-3.5-flash-lite')
+  it('leaves an unknown model id untouched', () => {
+    expect(formatModel('@cf/qwen/qwen3.8-27b')).toBe('qwen3.8-27b')
+  })
+})
+
+describe('fallbackNotice', () => {
+  it('tells the reader what to do about their own key', () => {
+    expect(fallbackNotice('byok_rejected')).toContain('API-Key wurde abgelehnt')
+    expect(fallbackNotice('byok_quota')).toContain('Kontingent')
+  })
+
+  it('still says something when an older answer carries no reason', () => {
+    expect(fallbackNotice(undefined)).toContain('Standardmodell')
   })
 })
 
@@ -54,7 +70,7 @@ describe('answerMetaParts', () => {
 
   it('names the model, the split timing and the source count', () => {
     expect(answerMetaParts(metadata, 12)).toEqual([
-      'gemini-3.5-flash-lite',
+      'Gemini 3.5 Flash-Lite',
       '18,8 s (davon 11,6 s Suche)',
       '12 Quellen',
     ])

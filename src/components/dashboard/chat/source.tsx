@@ -20,27 +20,37 @@ export const Sources = ({ className, ...props }: SourcesProps) => (
 
 export type SourcesTriggerProps = ComponentProps<typeof CollapsibleTrigger> & {
   count: number;
+  /** The sites the cited sources come from, shown while the list is closed. */
+  hosts?: { shown: string[]; more: number };
 };
 
 export const SourcesTrigger = ({
   className,
   count,
+  hosts,
   children,
   ...props
 }: SourcesTriggerProps) => (
   <CollapsibleTrigger
     className={cn(
-      'group/source flex w-full items-center gap-2 rounded-lg px-1 py-1.5 text-left font-medium text-gray-600 transition-colors hover:text-brand-600 dark:text-gray-300 dark:hover:text-brand-400',
+      'group/source flex w-full min-w-0 items-center gap-2 rounded-lg px-1 py-1.5 text-left font-medium text-gray-600 transition-colors hover:text-brand-600 dark:text-gray-300 dark:hover:text-brand-400',
       className
     )}
     {...props}
   >
     {children ?? (
       <>
-        <BookOpenIcon className="size-4 text-gray-400" />
-        <span>Verwendete Quellen</span>
-        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400">{count}</span>
-        <ChevronDownIcon className="ml-auto size-4 text-gray-400 transition-transform group-data-[state=open]/source:rotate-180" />
+        <BookOpenIcon className="size-4 shrink-0 text-gray-400" />
+        <span className="shrink-0">{count > 0 ? 'Verwendete Quellen' : 'Durchsuchte Quellen'}</span>
+        {count > 0 && (
+          <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400">{count}</span>
+        )}
+        {hosts && hosts.shown.length > 0 && (
+          <span className="hidden min-w-0 truncate text-xs font-normal text-gray-400 sm:inline dark:text-gray-500">
+            {hosts.shown.join(', ')}{hosts.more > 0 ? ` +${hosts.more}` : ''}
+          </span>
+        )}
+        <ChevronDownIcon className="ml-auto size-4 shrink-0 text-gray-400 transition-transform group-data-[state=open]/source:rotate-180" />
       </>
     )}
   </CollapsibleTrigger>
@@ -54,7 +64,7 @@ export const SourcesContent = ({
 }: SourcesContentProps) => (
   <CollapsibleContent
     className={cn(
-      'mt-2 grid w-full gap-3',
+      'mt-1 grid w-full gap-1',
       'data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 outline-none data-[state=closed]:animate-out data-[state=open]:animate-in',
       className
     )}

@@ -1,4 +1,5 @@
 import type { Source } from '@/types/chat'
+import { cleanSourceTitle } from './source-display'
 
 export interface IndexedSource {
   index: number
@@ -45,7 +46,9 @@ export function linkifyCitations(content: string, sources: Source[]): string {
         const url = new URL(source.url)
         if (url.protocol !== 'https:' && url.protocol !== 'http:') return `[${index}]`
         const href = encodeURI(url.toString()).replace(/\(/g, '%28').replace(/\)/g, '%29')
-        return `[[${index}]](${href})`
+        // The marker alone says nothing until clicked; the title is its tooltip.
+        const title = cleanSourceTitle(source.title, source.url).replace(/["\\]/g, '')
+        return `[[${index}]](${href} "${title}")`
       } catch {
         return `[${index}]`
       }

@@ -43,7 +43,9 @@ import {
   linkifyCitations,
   type IndexedSource,
 } from '@/lib/chat/citations';
-import { answerMetaParts, FALLBACK_NOTICE, formatModel } from '@/lib/chat/metadata';
+import { answerMetaParts, fallbackNotice, formatModel } from '@/lib/chat/metadata';
+import { cleanSnippet, cleanSourceTitle, sourceHosts, sourceLocation } from '@/lib/chat/source-display';
+import { streamingMarkdown } from '@/lib/chat/streaming-markdown';
 import { databaseFromChatQuery } from '@/lib/databases';
 import type { Message as ChatMessage, Source as ChatSource } from '@/types/chat';
 import { Conversation, ConversationContent, ConversationScrollButton } from './conversation';
@@ -88,75 +90,68 @@ const formatTime = (date: Date) => new Intl.DateTimeFormat('de-DE', {
   minute: '2-digit',
 }).format(date);
 
-const getHostname = (url: string) => {
-  try {
-    return new URL(url).hostname.replace(/^www\./, '');
-  } catch {
-    return url;
-  }
-};
-
-const getSourcePath = (url: string) => {
-  try {
-    const parsed = new URL(url);
-    const path = `${parsed.pathname}${parsed.search}`;
-    return path === '/' ? 'Startseite' : path;
-  } catch {
-    return url;
-  }
-};
-
-const groupSourcesByDomain = (sources: IndexedSource[]) => {
-  const groups = new Map<string, IndexedSource[]>();
-  sources.forEach((entry) => {
-    const hostname = getHostname(entry.source.url);
-    groups.set(hostname, [...(groups.get(hostname) ?? []), entry]);
-  });
-  return Array.from(groups, ([hostname, items]) => ({ hostname, items }));
-};
-
-const SourceRow = ({ index, source, muted = false }: IndexedSource & { muted?: boolean }) => (
-  <Source
-    href={source.url}
-    title={source.title}
-    className="rounded-none border-0 bg-transparent px-3 py-2.5 shadow-none hover:translate-y-0 hover:bg-brand-25 hover:shadow-none dark:bg-transparent dark:hover:bg-brand-500/10"
-  >
-    <span
-      className={`flex size-6 shrink-0 items-center justify-center rounded-md text-xs font-semibold ${muted
-        ? 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500'
-        : 'bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-400'}`}
+/*
+ * One flat list instead of a box per domain: a knowledge base is usually one
+ * site, so the domain header repeated what every row already implied and added
+ * a level of nesting to read through. The row names the page by its cleaned
+ * title and places it with a breadcrumb instead of the raw path.
+ */
+const SourceRow = ({ index, source, muted = false }: IndexedSource & { muted?: boolean }) => {
+  const snippet = cleanSnippet(source.snippet);
+  return (
+    <Source
+      href={source.url}
+      title={snippet ? `${source.title}\n\n${snippet}` : source.title}
+      className="items-center rounded-lg border-0 bg-transparent px-2 py-2 shadow-none hover:translate-y-0 hover:bg-gray-50 hover:shadow-none dark:bg-transparent dark:hover:bg-white/[0.04]"
     >
-      {index}
-    </span>
-    <span className="min-w-0 flex-1">
-      <span className={`block truncate font-medium ${muted ? 'text-gray-500 dark:text-gray-400' : 'text-gray-800 dark:text-gray-100'}`}>
-        {source.title}
+      <span
+        className={`flex size-6 shrink-0 items-center justify-center rounded-md text-[11px] font-semibold tabular-nums ${muted
+          ? 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500'
+          : 'bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300'}`}
+      >
+        {index}
       </span>
-      <span className="mt-0.5 block truncate font-mono text-[11px] text-gray-400">{getSourcePath(source.url)}</span>
-    </span>
-    <ExternalLink className="mt-1 size-3.5 shrink-0 text-gray-400" />
-  </Source>
+      <span className="min-w-0 flex-1">
+        <span className={`block truncate text-[13px] font-medium leading-5 ${muted ? 'text-gray-500 dark:text-gray-400' : 'text-gray-800 group-hover/link:text-brand-700 dark:text-gray-100 dark:group-hover/link:text-brand-300'}`}>
+          {cleanSourceTitle(source.title, source.url)}
+        </span>
+        <span className="block truncate text-[11px] leading-4 text-gray-400 dark:text-gray-500">{sourceLocation(source.url)}</span>
+      </span>
+      <ExternalLink className="size-3.5 shrink-0 text-gray-300 transition-colors group-hover/link:text-brand-500 dark:text-gray-600" aria-hidden="true" />
+    </Source>
+  );
+};
+
+const SourceList = ({ cited, uncited }: { cited: IndexedSource[]; uncited: IndexedSource[] }) => (
+  <>
+    {cited.length > 0 && (
+      <div className="grid gap-0.5">
+        {cited.map((entry) => (
+          <SourceRow key={entry.source.id} index={entry.index} source={entry.source} />
+        ))}
+      </div>
+    )}
+    {uncited.length > 0 && (
+      <div className="grid gap-0.5">
+        <p className="px-2 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+          Ebenfalls durchsucht, nicht zitiert
+        </p>
+        {uncited.map((entry) => (
+          <SourceRow key={entry.source.id} index={entry.index} source={entry.source} muted />
+        ))}
+      </div>
+    )}
+  </>
 );
 
-const SourceGroup = ({ label, items, muted = false }: {
-  label: string;
-  items: IndexedSource[];
-  muted?: boolean;
-}) => (
-  <div className={`overflow-hidden rounded-xl border bg-white dark:bg-gray-800/60 ${muted
-    ? 'border-dashed border-gray-200 dark:border-gray-700'
-    : 'border-gray-200 dark:border-gray-700'}`}
-  >
-    <div className="border-b border-gray-100 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">
-      {label}
-    </div>
-    <div className="divide-y divide-gray-100 dark:divide-gray-700">
-      {items.map((entry) => (
-        <SourceRow key={entry.source.id} index={entry.index} source={entry.source} muted={muted} />
-      ))}
-    </div>
-  </div>
-);
+// Checked against Google's model list on 2026-09-23. The 1.5 models are shut
+// down and 2.5 is only open to accounts that used it before, so neither is
+// offered; any other id can still be typed in.
+const BYOK_MODELS = [
+  { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash (empfohlen)' },
+  { id: 'gemini-3.7-flash', label: 'Gemini 3.7 Flash' },
+  { id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash-Lite (schnell, günstig)' },
+];
 
 function ByokDialogContent({
   byokApiKey,
@@ -172,8 +167,8 @@ function ByokDialogContent({
   onCancel: () => void;
 }) {
   const [tempApiKey, setTempApiKey] = useState(byokApiKey ?? '');
-  const initialModel = byokModel || 'gemini-3.8-flash';
-  const isPredefined = ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-1.5-flash', 'gemini-1.5-pro'].includes(initialModel);
+  const initialModel = byokModel || BYOK_MODELS[0].id;
+  const isPredefined = BYOK_MODELS.some((model) => model.id === initialModel);
   const [tempModel, setTempModel] = useState(isPredefined ? initialModel : 'custom');
   const [customModel, setCustomModel] = useState(isPredefined ? '' : initialModel);
   const [isCustom, setIsCustom] = useState(!isPredefined);
@@ -186,7 +181,7 @@ function ByokDialogContent({
           Eigenen API-Key nutzen (BYOK)
         </DialogTitle>
         <DialogDescription className="text-xs text-gray-500 dark:text-gray-400">
-          Nutze deinen eigenen Google AI Studio API-Key. Dein Schlüssel wird ausschließlich für die aktuelle Sitzung im Arbeitsspeicher gehalten und niemals gespeichert. Bei Ausfall greift automatisch das Standby-Modell.
+          Ohne eigenen Key antwortet das Standardmodell (Llama 4 Scout). Mit deinem Google-AI-Studio-Key antwortet Gemini. Der Key bleibt nur in diesem Tab im Arbeitsspeicher und wird nie gespeichert. Lehnt Google ihn ab, antwortet das Standardmodell, und unter der Antwort steht, warum.
         </DialogDescription>
       </DialogHeader>
 
@@ -227,11 +222,9 @@ function ByokDialogContent({
             }}
             className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
           >
-            <option value="gemini-3.8-flash">Gemini 3.8 Flash (Neueste Generation, extrem schnell)</option>
-            <option value="gemini-2.5-flash">Gemini 2.5 Flash (Empfohlen, stabil)</option>
-            <option value="gemini-2.5-pro">Gemini 2.5 Pro (Präzise & ausführlich)</option>
-            <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
-            <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+            {BYOK_MODELS.map((model) => (
+              <option key={model.id} value={model.id}>{model.label}</option>
+            ))}
             <option value="custom">Anderes Modell eingeben…</option>
           </select>
           {isCustom && (
@@ -239,7 +232,7 @@ function ByokDialogContent({
               type="text"
               value={customModel}
               onChange={(e) => setCustomModel(e.target.value)}
-              placeholder="z.B. gemini-3.8-flash"
+              placeholder="z. B. gemini-3.6-flash"
               className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
             />
           )}
@@ -272,7 +265,7 @@ function ByokDialogContent({
             type="button"
             size="sm"
             onClick={() => {
-              const finalModel = isCustom ? (customModel.trim() || 'gemini-3.8-flash') : tempModel;
+              const finalModel = isCustom ? (customModel.trim() || BYOK_MODELS[0].id) : tempModel;
               onSave(tempApiKey.trim() || null, finalModel);
             }}
             className="text-xs rounded-xl bg-brand-500 text-white hover:bg-brand-600"
@@ -594,7 +587,7 @@ export function ChatInterface() {
                     : getUncitedSources(messageSources, citedSources);
                   const renderedContent = isUser
                     ? message.content
-                    : linkifyCitations(message.content, messageSources);
+                    : linkifyCitations(message.isStreaming ? streamingMarkdown(message.content) : message.content, messageSources);
                   const metadata = !isUser && !message.isStreaming ? message.metadata : undefined;
                   const metaParts = answerMetaParts(metadata, messageSources.length);
                   return (
@@ -625,7 +618,7 @@ export function ChatInterface() {
                                 <Cpu className="size-3" aria-hidden="true" />
                                 {formatModel(message.metadata.model_used)}
                                 {message.metadata.fallback && (
-                                  <span className="text-warning-600 dark:text-warning-400" title="Standby-Modell aktiv">(Standby)</span>
+                                  <span className="text-warning-600 dark:text-warning-400" title={fallbackNotice(message.metadata.fallback_reason)}>(Ersatz)</span>
                                 )}
                               </span>
                             </>
@@ -640,28 +633,14 @@ export function ChatInterface() {
                               Formuliere Antwort …
                             </span>
                           ) : (
-                            <div>
-                              <Response>{renderedContent}</Response>
-                              {message.isStreaming && (
-                                <span className="ml-1 inline-block h-4 w-0.5 animate-pulse rounded-full bg-brand-500 align-middle" aria-hidden="true" />
-                              )}
-                            </div>
+                            <Response>{renderedContent}</Response>
                           )}
 
                           {!isUser && (citedSources.length > 0 || (!message.isStreaming && uncitedSources.length > 0)) && (
                             <Sources>
-                              <SourcesTrigger count={citedSources.length} />
+                              <SourcesTrigger count={citedSources.length} hosts={sourceHosts(citedSources.map((entry) => entry.source.url))} />
                               <SourcesContent>
-                                {groupSourcesByDomain(citedSources).map((group) => (
-                                  <SourceGroup key={group.hostname} label={group.hostname} items={group.items} />
-                                ))}
-                                {uncitedSources.length > 0 && (
-                                  <SourceGroup
-                                    label={`Ebenfalls durchsucht, nicht zitiert (${uncitedSources.length})`}
-                                    items={uncitedSources}
-                                    muted
-                                  />
-                                )}
+                                <SourceList cited={citedSources} uncited={message.isStreaming ? [] : uncitedSources} />
                               </SourcesContent>
                             </Sources>
                           )}
@@ -709,7 +688,7 @@ export function ChatInterface() {
                             {metadata?.fallback && (
                               <span className="inline-flex items-center gap-1 rounded-md bg-warning-50 px-1.5 py-0.5 text-[11px] font-medium text-warning-700 dark:bg-warning-500/15 dark:text-warning-400">
                                 <AlertTriangle className="size-3" aria-hidden="true" />
-                                {FALLBACK_NOTICE}
+                                {fallbackNotice(metadata.fallback_reason)}
                               </span>
                             )}
                             {metaParts.length > 0 && (

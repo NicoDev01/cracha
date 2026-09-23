@@ -18,6 +18,8 @@ export interface Source {
   relevance_score: number
 }
 
+export type FallbackReason = 'byok_rejected' | 'byok_model' | 'byok_quota' | 'byok_unavailable' | 'primary_unavailable'
+
 export interface ChatResponse {
   message: string
   sources: Source[]
@@ -29,6 +31,8 @@ export interface ChatResponse {
     model_used: string
     /** The primary model failed and the standby answered instead. */
     fallback?: boolean
+    /** Why the user's own model did not answer; decides the notice shown. */
+    fallback_reason?: FallbackReason
     refunded?: boolean
     reference?: string
   }

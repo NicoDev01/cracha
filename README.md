@@ -9,7 +9,7 @@ CraCha crawlt öffentliche Websites, überführt bereinigtes Markdown in eine ma
 - `services/crawler/`: rekursiver Crawl4AI-Service auf Modal
 - `evals/`: reproduzierbare Retrieval-Smoke-Tests
 
-Der Crawler speichert bereinigte Seiten mit Quellenmetadaten. AI Search übernimmt Chunking, BGE-M3-Embeddings, Keyword-Index, Reciprocal Rank Fusion und BGE-Reranking. Eine Wissensbasis entspricht einer AI-Search-Instanz. Die belegte Antwort erzeugt Workers AI mit Llama 3.3 70B Fast.
+Der Crawler speichert bereinigte Seiten mit Quellenmetadaten. AI Search übernimmt Chunking, BGE-M3-Embeddings, Keyword-Index, Reciprocal Rank Fusion und BGE-Reranking. Eine Wissensbasis entspricht einer AI-Search-Instanz. Die belegte Antwort erzeugt Workers AI mit Llama 4 Scout; mit eigenem Google-AI-Studio-Key (BYOK) antwortet Gemini direkt.
 
 ## Lokal prüfen
 

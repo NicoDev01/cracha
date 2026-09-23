@@ -13,7 +13,7 @@ vi.mock('@/lib/server/credits', async (original) => ({
   admitRequest: mocks.admit, hasUnsettledCrawl: mocks.unsettled,
   spendChatCredits: mocks.spend, refundChatCredits: mocks.refund, getCreditState: mocks.state,
 }))
-vi.mock('@/lib/server/generation', () => ({ DEFAULT_GENERATION_MODEL: 'test', streamGroundedAnswer: mocks.generate }))
+vi.mock('@/lib/server/generation', () => ({ DEFAULT_GENERATION_MODEL: 'test', DEFAULT_BYOK_MODEL: 'gemini-3.8-flash', streamGroundedAnswer: mocks.generate }))
 
 import { POST } from './route'
 import { DuplicateRequestError } from '@/lib/server/credits'
@@ -190,5 +190,26 @@ describe('chat billing at the HTTP boundary', () => {
       model: 'gemini-2.5-pro',
       apiKey: 'AIzaSyTestUserKey',
     }))
+  })
+})
+
+describe('BYOK transport', () => {
+  it('ignores a key sent as a header, which logs would keep', async () => {
+    const req = new NextRequest('https://cracha-app.com/api/chat', {
+      method: 'POST',
+      headers: { 'x-byok-gemini-key': 'AIzaSyHeaderKey' },
+      body: JSON.stringify({ question: 'Q', tenant_id: 'kb' }),
+    })
+    await (await POST(req)).text()
+    expect(mocks.generate).toHaveBeenCalledWith(expect.objectContaining({ apiKey: undefined, model: 'test' }))
+  })
+  it('uses the default Gemini model when a key comes without one', async () => {
+    await (await POST(request({ question: 'Q', tenant_id: 'kb', api_key: 'AIzaSyTestUserKey' }))).text()
+    expect(mocks.generate).toHaveBeenCalledWith(expect.objectContaining({ model: 'gemini-3.8-flash' }))
+  })
+  it('does not check a content check against collection pages', async () => {
+    mocks.search.mockImplementation(async () => Response.json({ context: 'Beleg', blocks: [{ n: 1, title: 'T', url: 'https://ex.com', text: 'x', collection: true }], sources: [{ id: '1', title: 'Quelle', url: 'https://example.com', score: 1 }] }))
+    await (await POST(request({ question: 'Entwurf', tenant_id: 'kb', mode: 'verification' }))).text()
+    expect(mocks.generate).toHaveBeenCalledWith(expect.objectContaining({ blocks: [], mode: 'verification' }))
   })
 })

@@ -26,7 +26,7 @@
     "binding": "AI"
   },
   "vars": {
-    "GENERATION_MODEL": "google/gemini-3.5-flash-lite",
+    "GENERATION_MODEL": "@cf/meta/llama-4-scout-17b-16e-instruct",
     // The three credit packages, as one-off prices in EUR. A price id is not a
     // secret, and keeping them here means the tariff the code charges is
     // visible in the diff that changes it. The amounts they must match are in

@@ -1,6 +1,6 @@
 'use client'
 
-import type { ChatResponse, QueryRequest, Source } from '@/types/chat'
+import type { ChatResponse, FallbackReason, QueryRequest, Source } from '@/types/chat'
 import { apiFetch } from '@/lib/api/request'
 
 interface RawSource {
@@ -31,18 +31,20 @@ interface StreamMeta {
   sources?: RawSource[]
   model?: string
   fallback?: boolean
+  fallbackReason?: FallbackReason
 }
 
 interface StreamDone {
   usage?: Usage
   model?: string
   fallback?: boolean
+  fallbackReason?: FallbackReason
   refunded?: boolean
   reference?: string
 }
 
 export interface ChatStreamHandlers {
-  onStart: (data: { sources: Source[]; model: string; fallback?: boolean }) => void
+  onStart: (data: { sources: Source[]; model: string; fallback?: boolean; fallbackReason?: FallbackReason }) => void
   onDelta: (text: string) => void
   onDone: (metadata: ChatResponse['metadata']) => void
 }
@@ -72,14 +74,11 @@ function requestBody(request: QueryRequest) {
 
 class ChatAPIClient {
   async streamChatQuery(request: QueryRequest, handlers: ChatStreamHandlers, signal?: AbortSignal): Promise<void> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    if (request.api_key) headers['x-byok-gemini-key'] = request.api_key
-    if (request.model) headers['x-byok-model'] = request.model
-
+    // The key travels in the body only: headers are what logs and proxies keep.
     const response = await apiFetch('/api/chat', {
       method: 'POST',
       signal,
-      headers,
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(requestBody(request)),
     })
 
@@ -122,6 +121,7 @@ class ChatAPIClient {
     let finished = false
     let currentModel = headerModel
     let usedFallback = headerFallback
+    let fallbackReason: FallbackReason | undefined
 
     const processFrame = (frame: string) => {
       const lines = frame.split(/\r?\n/)
@@ -136,12 +136,14 @@ class ChatAPIClient {
       if (event === 'meta') {
         currentModel = data.model ?? currentModel
         usedFallback = data.fallback === true
-        handlers.onStart({ sources: mapSources(data.sources), model: currentModel, fallback: usedFallback })
+        fallbackReason = data.fallbackReason
+        handlers.onStart({ sources: mapSources(data.sources), model: currentModel, fallback: usedFallback, fallbackReason })
       } else if (event === 'delta' && typeof data.text === 'string') {
         handlers.onDelta(data.text)
       } else if (event === 'done') {
         currentModel = data.model ?? currentModel
         usedFallback = data.fallback ?? usedFallback
+        fallbackReason = data.fallbackReason ?? fallbackReason
         finished = true
         handlers.onDone({
           query_time: data.usage?.latency_ms ?? 0,
@@ -149,6 +151,7 @@ class ChatAPIClient {
           retrieval_cached: data.usage?.retrieval_cached === true,
           model_used: currentModel,
           fallback: usedFallback,
+          fallback_reason: usedFallback ? fallbackReason : undefined,
           refunded: data.refunded,
           reference: data.reference,
         })

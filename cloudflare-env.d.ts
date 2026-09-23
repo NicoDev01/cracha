@@ -4,7 +4,7 @@ interface __BaseEnv_CloudflareEnv {
 	DATABASE_REGISTRY: KVNamespace;
 	AI: Ai;
 	ASSETS: Fetcher;
-	GENERATION_MODEL: "google/gemini-3.5-flash-lite";
+	GENERATION_MODEL: "@cf/meta/llama-4-scout-17b-16e-instruct";
 	RAG_API: Fetcher /* cracha-worker-rag */;
 }
 declare namespace Cloudflare {

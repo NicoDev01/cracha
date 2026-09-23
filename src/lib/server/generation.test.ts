@@ -512,3 +512,90 @@ describe('BYOK custom API key', () => {
     expect(init.headers['x-goog-api-key']).toBe('test-key-38')
   })
 })
+
+describe('streaming without holding text back', () => {
+  async function collect(deltas: string[], blocks: ContextBlock[]): Promise<string[]> {
+    async function* source() { yield* deltas }
+    const out: string[] = []
+    for await (const piece of groundListEntries(source(), blocks)) out.push(piece)
+    return out
+  }
+  const overview: ContextBlock = { n: 1, title: 'Team', url: 'https://ex.com/team', text: 'Stephan Müller\nKlaus Becker', collection: true, authoritative: true }
+  const englishDocs: ContextBlock = { n: 2, title: 'SEO Starter Guide', url: 'https://ex.com/seo', text: 'Use descriptive titles and meta descriptions for every page.' }
+
+  it('passes an answer without a collection page through piece by piece', async () => {
+    const pieces = ['Die ', 'Antwort ', 'kommt [2]', '.\n- **Titel', ' beschreibend** [2]\n']
+    expect(await collect(pieces, [englishDocs])).toEqual(pieces)
+  })
+
+  it('never strips the citation from a bullet written in another language than its source', async () => {
+    const text = (await collect(['- Aussagekräftige Seitentitel verwenden [2]\n'], [englishDocs])).join('')
+    expect(text).toBe('- Aussagekräftige Seitentitel verwenden [2]\n')
+  })
+
+  it('streams prose before its line ends even when a collection page is checked', async () => {
+    const out = await collect(['Das Team ', 'besteht aus:', '\n- Klaus ', 'Becker [9]\n'], [overview])
+    expect(out.slice(0, 2)).toEqual(['Das Team ', 'besteht aus:'])
+    expect(out.join('')).toBe('Das Team besteht aus:\n- Klaus Becker [1]\n')
+  })
+
+  it('releases a list entry as soon as its own line is complete', async () => {
+    const out = await collect(['1. Stephan Müller [1]\n', '2. Klaus Becker [1]\n'], [overview])
+    expect(out).toEqual(['1. Stephan Müller [1]\n', '2. Klaus Becker [1]\n'])
+  })
+
+  it('leaves code blocks alone', async () => {
+    const code = '```js\n- arr[1]\n```\n'
+    expect((await collect([code], [overview])).join('')).toBe(code)
+  })
+})
+
+describe('prompt layout', () => {
+  it('puts the question after the sources', () => {
+    const [turn] = formatGeminiContents([], 'Was kostet der Tarif?', '[1] Preise\n19 €')
+    const text = turn.parts[0].text
+    expect(text.indexOf('Quellenkontext:')).toBeLessThan(text.indexOf('Frage:\nWas kostet der Tarif?'))
+  })
+})
+
+describe('BYOK request and fallback reasons', () => {
+  afterEach(() => vi.unstubAllGlobals())
+  const okBody = () => new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode('data: {"candidates":[{"content":{"parts":[{"text":"Ok [1]."}]},"finishReason":"STOP"}]}\n\n'))
+      controller.close()
+    },
+  })
+  const fallbackRun = () => vi.fn().mockResolvedValue(new ReadableStream<string>({
+    start(controller) { controller.enqueue('data: {"response":"Ersatz [1]."}\n\ndata: [DONE]\n\n'); controller.close() },
+  }))
+
+  it('asks Gemini 3 for low thinking effort and keeps its default temperature', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(okBody(), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    await streamGroundedAnswer({ model: 'gemini-3.8-flash', question: 'Q', history: [], context: 'K', apiKey: 'k' })
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body.generationConfig.thinkingConfig).toEqual({ thinkingLevel: 'low' })
+    expect(body.generationConfig.temperature).toBeUndefined()
+    expect(body.generationConfig.maxOutputTokens).toBeGreaterThanOrEqual(8_000)
+  })
+
+  it.each([
+    [400, 'byok_rejected'],
+    [403, 'byok_rejected'],
+    [404, 'byok_model'],
+    [429, 'byok_quota'],
+    [503, 'byok_unavailable'],
+  ])('names why the key failed (%i)', async (status, reason) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{"error":"echo of the prompt"}', { status })))
+    const run = fallbackRun()
+    const result = await streamGroundedAnswer({ ai: { run } as unknown as CloudflareEnv['AI'], model: 'gemini-3.8-flash', question: 'Q', history: [], context: 'K', apiKey: 'k' })
+    expect(result).toMatchObject({ fallback: true, fallbackReason: reason, usedModel: '@cf/meta/llama-4-scout-17b-16e-instruct' })
+  })
+
+  it('does not try a second model when the platform model itself fails', async () => {
+    const run = vi.fn().mockRejectedValue(new Error('down'))
+    await expect(streamGroundedAnswer({ ai: { run } as unknown as CloudflareEnv['AI'], model: '@cf/meta/llama-4-scout-17b-16e-instruct', question: 'Q', history: [], context: 'K' })).rejects.toBeInstanceOf(GenerationError)
+    expect(run).toHaveBeenCalledTimes(1)
+  })
+})

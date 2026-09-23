@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 
 import { getWorkerEnv } from '@/lib/server/cloudflare'
-import { DEFAULT_GENERATION_MODEL, streamGroundedAnswer } from '@/lib/server/generation'
+import { DEFAULT_BYOK_MODEL, DEFAULT_GENERATION_MODEL, streamGroundedAnswer } from '@/lib/server/generation'
 import { CreditError, getCreditState, spendChatCredits, refundChatCredits, CREDITS, admitRequest, hasUnsettledCrawl, DuplicateRequestError } from '@/lib/server/credits'
 import { getOwnedDatabase } from '@/lib/server/database-registry'
 import { getAuthenticatedUser } from '@/lib/supabase/server'
@@ -171,12 +171,11 @@ export async function POST(request: NextRequest) {
   const cancellation = new AbortController()
   const signal = AbortSignal.any([request.signal, cancellation.signal])
 
-  const rawKey = parsed.data.api_key || request.headers.get('x-byok-gemini-key') || undefined
-  const byokKey = typeof rawKey === 'string' && rawKey.trim().length > 0 && rawKey.trim().length <= 500 ? rawKey.trim() : undefined
-  const rawModel = parsed.data.model || request.headers.get('x-byok-model') || undefined
-  const clientModel = typeof rawModel === 'string' && rawModel.trim().length > 0 && rawModel.trim().length <= 100 ? rawModel.trim() : undefined
+  // The key is read from the body only. It used to be accepted as a header as
+  // well, and request headers are what platform logs and proxies record.
+  const byokKey = parsed.data.api_key || undefined
   const configuredModel = env.GENERATION_MODEL || DEFAULT_GENERATION_MODEL
-  const selectedModel = byokKey ? (clientModel || configuredModel) : configuredModel
+  const selectedModel = byokKey ? (parsed.data.model || DEFAULT_BYOK_MODEL) : configuredModel
   const gatewayId = (env as unknown as { AI_GATEWAY_ID?: string }).AI_GATEWAY_ID || process.env.CF_AI_GATEWAY_ID || process.env.AI_GATEWAY_ID
   const mode = parsed.data.mode
 
@@ -189,7 +188,9 @@ export async function POST(request: NextRequest) {
       question,
       history: messages,
       context: retrieval.context as string,
-      blocks: retrieval.blocks ?? [],
+      // A content check quotes the draft, not a collection page; checking its
+      // findings against the sources as list entries stripped their citations.
+      blocks: mode === 'verification' ? [] : retrieval.blocks ?? [],
       apiKey: byokKey,
       gatewayId,
       mode,
@@ -214,13 +215,14 @@ export async function POST(request: NextRequest) {
   const model = generated.model
   const usedModel = generated.usedModel || generated.model
   const fallback = generated.fallback
+  const fallbackReason = generated.fallbackReason
 
   return streamResponse(new ReadableStream({
     cancel() { cancellation.abort() },
     async start(controller) {
       let hasText = false
       try {
-        controller.enqueue(encodeEvent('meta', { sources, model, usedModel, fallback, mode }))
+        controller.enqueue(encodeEvent('meta', { sources, model, usedModel, fallback, fallbackReason, mode }))
 
         for await (const text of generated.text) {
           signal.throwIfAborted()
@@ -239,6 +241,7 @@ export async function POST(request: NextRequest) {
           model,
           usedModel,
           fallback,
+          fallbackReason,
           mode,
           reference,
           refunded: false,

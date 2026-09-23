@@ -1,4 +1,4 @@
-import type { ChatResponse } from '@/types/chat'
+import type { ChatResponse, FallbackReason } from '@/types/chat'
 
 type Metadata = ChatResponse['metadata']
 
@@ -20,7 +20,24 @@ export function formatDuration(ms: number): string {
  * a reader saw whenever a question found no relevant sources.
  */
 export function formatModel(model: string): string {
-  return model.replace(/(^|\s)(@?[\w.-]+\/)+/g, '$1')
+  const name = model.replace(/(^|\s)(@?[\w.-]+\/)+/g, '$1')
+  // "llama-4-scout-17b-16e-instruct" is an id, not a name a reader knows.
+  const llama = /^llama-(\d+(?:\.\d+)?)-(scout|maverick|\d+b)(?![a-z])/i.exec(name)
+  if (llama) {
+    const variant = /^\d+b$/i.test(llama[2]) ? llama[2].toUpperCase() : `${llama[2][0].toUpperCase()}${llama[2].slice(1)}`
+    return `Llama ${llama[1]} ${variant}`
+  }
+  const gemini = /^gemini-(\d+(?:\.\d+)?)-([a-z-]+)$/i.exec(name)
+  if (gemini) {
+    const variant = gemini[2]
+      .replace(/flash-lite/i, 'Flash-Lite')
+      .split('-')
+      .map((part) => (part === 'Flash-Lite' ? part : `${part[0].toUpperCase()}${part.slice(1)}`))
+      .join(' ')
+      .replace('Flash Lite', 'Flash-Lite')
+    return `Gemini ${gemini[1]} ${variant}`
+  }
+  return name
 }
 
 /**
@@ -48,8 +65,19 @@ export function answerMetaParts(metadata: Metadata | undefined, sourceCount: num
 }
 
 /**
- * A failed primary model is not a detail. Its standby writes noticeably weaker
- * answers — shorter enumerations above all — so the reader has to be able to
- * tell the two apart, and a grey run-on line does not do that.
+ * The platform model is the default, so an answer from it is not a fallback.
+ * The notice only appears when the reader's own Gemini key was supposed to
+ * answer and did not, and it says why, because each cause asks for something
+ * different: a new key, another model name, or waiting for the quota.
  */
-export const FALLBACK_NOTICE = 'Ersatzmodell — das primäre Modell war nicht erreichbar'
+const FALLBACK_NOTICES: Record<FallbackReason, string> = {
+  byok_rejected: 'Dein API-Key wurde abgelehnt – das Standardmodell hat geantwortet',
+  byok_model: 'Das gewählte Gemini-Modell gibt es nicht – das Standardmodell hat geantwortet',
+  byok_quota: 'Das Kontingent deines API-Keys ist erschöpft – das Standardmodell hat geantwortet',
+  byok_unavailable: 'Gemini war nicht erreichbar – das Standardmodell hat geantwortet',
+  primary_unavailable: 'Ersatzmodell – das primäre Modell war nicht erreichbar',
+}
+
+export function fallbackNotice(reason: FallbackReason | undefined): string {
+  return FALLBACK_NOTICES[reason ?? 'byok_unavailable'] ?? FALLBACK_NOTICES.byok_unavailable
+}
