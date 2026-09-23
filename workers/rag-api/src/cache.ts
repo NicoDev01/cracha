@@ -37,11 +37,15 @@ export async function retrievalCacheKey(
   question: string,
   topK: number,
   messages: ConversationMessage[],
+  options: { rerank?: boolean } = {},
 ): Promise<string> {
   const shape = JSON.stringify([
     question.trim(),
     topK,
     messages.map((message) => [message.role, message.content]),
+    // Only a non-default setting joins the key, so switching the option in
+    // keeps every entry cached before it valid.
+    ...(options.rerank === false ? [{ rerank: false }] : []),
   ])
   return `qcache:${cachePrefix(database.id)}${await digest(`${indexVersion(database)}|${shape}`)}`
 }

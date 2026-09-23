@@ -407,6 +407,21 @@ describe('database lifecycle & deletion protection', () => {
     expect(db.pages_count).toBe(5)
   })
 
+  it('rejects a rerank override that is not a boolean', async () => {
+    const env = mockEnv()
+    env.store.set('kb-query', JSON.stringify(record('kb-query', ANNA, 'active')))
+
+    const res = await worker.fetch(
+      new Request('https://cracha-rag.internal/query', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${env.QUERY_SECRET}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenant_id: 'kb-query', user_id: ANNA, question: 'Preise?', rerank: 'off' }),
+      }),
+      env,
+    )
+    expect(res.status).toBe(400)
+  })
+
   describe('stale item pruning on complete', () => {
     async function completeWith(extra: Record<string, unknown>) {
       const env = mockEnv()

@@ -4,6 +4,12 @@ export interface Env {
   INGEST_SECRET: string
   QUERY_SECRET: string
   COORDINATOR?: DurableObjectNamespace
+  /**
+   * `off` disables reranking of the hybrid search path, `on` (or unset) keeps
+   * it. A switch for measuring bge-reranker-base on German content, not a
+   * tuning knob: it stays on until an eval run says otherwise.
+   */
+  RERANKING?: string
 }
 
 export interface DatabaseRecord {
@@ -59,6 +65,8 @@ export interface QueryBody {
   user_id: string
   top_k?: number
   messages?: ConversationMessage[]
+  /** Overrides RERANKING for this request, so an eval can compare both. */
+  rerank?: boolean
 }
 
 export interface ConversationMessage {

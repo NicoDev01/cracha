@@ -92,6 +92,13 @@ describe('retrievalCacheKey', () => {
       .not.toBe(await retrievalCacheKey(database, 'Wer ist im Team?', 8, []))
   })
 
+  it('separates results retrieved without reranking, and only those', async () => {
+    const plain = await retrievalCacheKey(database, 'Wer ist im Team?', 8, [])
+    // Reranking on is the default, so its entries keep the keys they had.
+    expect(await retrievalCacheKey(database, 'Wer ist im Team?', 8, [], { rerank: true })).toBe(plain)
+    expect(await retrievalCacheKey(database, 'Wer ist im Team?', 8, [], { rerank: false })).not.toBe(plain)
+  })
+
   it('keeps one knowledge base out of another', async () => {
     expect(await retrievalCacheKey({ ...database, id: 'laravel-1' }, 'Wer ist im Team?', 8, []))
       .not.toBe(await retrievalCacheKey(database, 'Wer ist im Team?', 8, []))

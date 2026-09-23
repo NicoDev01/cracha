@@ -693,11 +693,28 @@ async function resolveHubPage(
   return null
 }
 
+export interface RetrievalOptions {
+  /** Rerank the hybrid path with bge-reranker-base. Default: on. */
+  rerank?: boolean
+}
+
+/**
+ * The reranker AI Search offers is bge-reranker-base, trained mostly on English
+ * and Chinese. Whether it helps German sites is an open measurement, so it is
+ * switchable per deployment (`RERANKING=off`) and per request (`rerank`), and
+ * the default stays what it was until an eval run shows otherwise.
+ */
+export function resolveReranking(requested: unknown, configured: string | undefined): boolean {
+  if (typeof requested === 'boolean') return requested
+  return configured?.trim().toLowerCase() !== 'off'
+}
+
 export async function retrieve(
   instance: RetrievalInstance,
   question: string,
   topK: number,
   history: ConversationMessage[] = [],
+  options: RetrievalOptions = {},
 ): Promise<{ context: string; blocks: ContextBlock[]; sources: Source[]; searchQuery: string }> {
   const intent = classifyQuestion(question)
   const messages: AiSearchMessage[] = [
@@ -737,7 +754,7 @@ export async function retrieve(
   // supplies keyword precision. Local rank fusion keeps either path from
   // discarding a useful result solely because one model assigned a low score.
   const [hybridResult, vectorResult] = await Promise.allSettled([
-    search('hybrid', true, true),
+    search('hybrid', options.rerank ?? true, true),
     search('vector', false, false),
   ])
   // One path failing is survivable and stays survivable — but it silently halves

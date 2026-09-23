@@ -38,13 +38,16 @@ python evals/evaluate.py --endpoint https://<rag-api> --token <RAG_QUERY_SECRET>
 ```
 
 Achtung: `/query` cached Retrieval-Ergebnisse je Indexstand. Ein Fall mit
-`"cached": true` misst den Stand vom ersten Aufruf, nicht eine geänderte
-Einstellung. `--rerank on|off` gehört deshalb zum Cache-Schlüssel.
+`"cached": true` misst den Stand vom ersten Aufruf. Ergebnisse ohne Reranking
+haben eigene Cache-Einträge, `--rerank on` teilt sie mit dem Standard.
 
 ### Reranking vergleichen (A/B)
 
-`--rerank on` bzw. `--rerank off` erzwingt das Reranking des Hybrid-Pfads für
-diesen Lauf; ohne die Option gilt die Einstellung des Workers (Standard: an).
+AI Search bietet als Reranker nur `@cf/baai/bge-reranker-base`, überwiegend auf
+Englisch und Chinesisch trainiert. Ob er deutschen Seiten hilft, ist nicht
+gemessen. `--rerank on` bzw. `--rerank off` erzwingt das Reranking des
+Hybrid-Pfads für diesen Lauf; ohne die Option gilt die Worker-Variable
+`RERANKING` (`off` schaltet ab, alles andere oder nicht gesetzt: an, wie bisher).
 Zwei Läufe gegen denselben Index nacheinander, dann die `summary.retrieval`-Werte
 der beiden Dateien vergleichen:
 

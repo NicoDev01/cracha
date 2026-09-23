@@ -17,6 +17,7 @@ import {
   itemKeyFor,
   needsUpload,
   publishedAtRanking,
+  resolveReranking,
   retrieve,
   siblingMentions,
   stripSectionContext,
@@ -114,6 +115,37 @@ describe('retrieval mapping', () => {
     // Enabled on the very first turn as well, where there is no history to
     // resolve and a typo would otherwise reach the index verbatim.
     expect(requests).toHaveLength(2)
+  })
+
+  it('reranks the hybrid path by default and can switch it off', async () => {
+    const reranked = async (options?: { rerank?: boolean }) => {
+      const requests: AiSearchSearchRequest[] = []
+      const instance = {
+        search: async (request: AiSearchSearchRequest) => {
+          requests.push(request)
+          return { search_query: 'x', chunks: [] }
+        },
+      }
+      await retrieve(instance, 'Was kostet Pro?', 6, [], options)
+      return Object.fromEntries(requests.map((request) => [
+        request.ai_search_options?.retrieval?.retrieval_type,
+        request.ai_search_options?.reranking?.enabled,
+      ]))
+    }
+
+    expect(await reranked()).toEqual({ hybrid: true, vector: false })
+    expect(await reranked({ rerank: true })).toEqual({ hybrid: true, vector: false })
+    expect(await reranked({ rerank: false })).toEqual({ hybrid: false, vector: false })
+  })
+
+  it('resolves reranking from the request first, then the deployment', () => {
+    expect(resolveReranking(undefined, undefined)).toBe(true)
+    expect(resolveReranking(undefined, 'on')).toBe(true)
+    expect(resolveReranking(undefined, ' OFF ')).toBe(false)
+    expect(resolveReranking(true, 'off')).toBe(true)
+    expect(resolveReranking(false, undefined)).toBe(false)
+    // Anything that is not a boolean is not a request to change the default.
+    expect(resolveReranking('off', undefined)).toBe(true)
   })
 
   it('reports the rewritten query, not the question as typed', async () => {
