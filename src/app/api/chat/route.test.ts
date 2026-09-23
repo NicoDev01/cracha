@@ -95,7 +95,10 @@ describe('chat billing at the HTTP boundary', () => {
     if (failure === 'http') mocks.search.mockResolvedValue(Response.json({ error: 'down' }, { status: 503 }))
     if (failure === 'json') mocks.search.mockResolvedValue(new Response('not json'))
     if (failure === 'sources') mocks.search.mockResolvedValue(Response.json({ context: 'text', sources: [null] }))
-    expect((await POST(request())).status).toBeGreaterThanOrEqual(500)
+    // Retrieval runs inside the stream now, so a failure is an error event.
+    const text = await (await POST(request())).text()
+    expect(text).toContain('event: error')
+    expect(text).toContain('"refunded":true')
     expect(mocks.refund).toHaveBeenCalledExactlyOnceWith('user', mocks.spend.mock.calls[0][1])
     expect(mocks.generate).not.toHaveBeenCalled()
   })
@@ -125,23 +128,42 @@ describe('chat billing at the HTTP boundary', () => {
   it('reports an unsuccessful refund honestly', async () => {
     mocks.search.mockRejectedValue(new Error('offline'))
     mocks.refund.mockRejectedValue(new Error('db unavailable'))
-    const body = await (await POST(request())).json() as { refunded: boolean; reference: string }
-    expect(body.refunded).toBe(false)
-    expect(body.reference).toBe(mocks.spend.mock.calls[0][1])
+    const text = await (await POST(request())).text()
+    expect(text).toContain('"refunded":false')
+    expect(text).toContain(`"reference":"${mocks.spend.mock.calls[0][1]}"`)
+    expect(text).not.toContain('Credits wurden erstattet')
   })
   it('still accepts long previous answers and bounds history before retrieval', async () => {
     await (await POST(request({ question: 'Q', tenant_id: 'kb', messages: [{ role: 'assistant', content: 'x'.repeat(5000) }] }))).text()
     const sent = JSON.parse(mocks.search.mock.calls[0][1].body)
     expect(sent.messages[0].content).toHaveLength(2000)
   })
-  it('returns x-generation-model and x-byok-fallback headers on successful generation', async () => {
+  it('names the model in the stream, not in headers sent before it ran', async () => {
     mocks.generate.mockResolvedValue({ model: 'gemini-3.8-flash', usedModel: 'gemini-3.8-flash', fallback: false, text: (async function* () { yield 'OK' })() })
-    const res = await POST(request({ question: 'Q', tenant_id: 'kb' }))
-    expect(res.headers.get('x-generation-model')).toBe('gemini-3.8-flash')
-    expect(res.headers.get('x-used-model')).toBe('gemini-3.8-flash')
-    expect(res.headers.get('x-byok-fallback')).toBe('false')
-    const text = await res.text()
+    const text = await (await POST(request({ question: 'Q', tenant_id: 'kb' }))).text()
     expect(text).toContain('"usedModel":"gemini-3.8-flash"')
+    expect(text).toContain('"fallback":false')
+  })
+  it('forwards search progress before the answer', async () => {
+    const lines = [
+      { type: 'progress', stage: 'found', pages: 4, passages: 9, search_query: 'seo kosten', internal: 'x' },
+      { type: 'progress', stage: 'selected', sources: 3, pages: 7 },
+      { type: 'result', context: 'Beleg', sources: [{ id: '1', title: 'Quelle', url: 'https://example.com', score: 1 }] },
+    ].map((line) => JSON.stringify(line)).join('\n')
+    mocks.search.mockResolvedValue(new Response(lines, { headers: { 'Content-Type': 'application/x-ndjson' } }))
+    const text = await (await POST(request())).text()
+    expect(mocks.search.mock.calls[0][1].headers.Accept).toBe('application/x-ndjson')
+    expect(text.indexOf('event: progress')).toBeLessThan(text.indexOf('event: meta'))
+    expect(text).toContain('"pages":4')
+    expect(text).not.toContain('internal')
+    expect(text).toContain('Antwort [1]')
+  })
+  it('refunds when the search service reports an error line', async () => {
+    mocks.search.mockResolvedValue(new Response(JSON.stringify({ type: 'error', status: 409, error: 'Die Wissensbasis wird noch indexiert.' }), { headers: { 'Content-Type': 'application/x-ndjson' } }))
+    const text = await (await POST(request())).text()
+    expect(text).toContain('noch indexiert')
+    expect(mocks.refund).toHaveBeenCalledOnce()
+    expect(mocks.generate).not.toHaveBeenCalled()
   })
   it('passes verification mode to generation stream', async () => {
     await (await POST(request({ question: 'Entwurf prüfen', tenant_id: 'kb', mode: 'verification' }))).text()

@@ -1,6 +1,6 @@
 'use client'
 
-import type { ChatResponse, FallbackReason, QueryRequest, Source } from '@/types/chat'
+import type { ChatResponse, FallbackReason, QueryRequest, RetrievalProgress, Source } from '@/types/chat'
 import { apiFetch } from '@/lib/api/request'
 
 interface RawSource {
@@ -44,6 +44,7 @@ interface StreamDone {
 }
 
 export interface ChatStreamHandlers {
+  onProgress?: (progress: RetrievalProgress) => void
   onStart: (data: { sources: Source[]; model: string; fallback?: boolean; fallbackReason?: FallbackReason }) => void
   onDelta: (text: string) => void
   onDone: (metadata: ChatResponse['metadata']) => void
@@ -133,7 +134,9 @@ class ChatAPIClient {
       if (!event || !rawData) return
 
       const data = JSON.parse(rawData) as StreamMeta & StreamDone & { text?: string; message?: string }
-      if (event === 'meta') {
+      if (event === 'progress') {
+        handlers.onProgress?.(data as unknown as RetrievalProgress)
+      } else if (event === 'meta') {
         currentModel = data.model ?? currentModel
         usedFallback = data.fallback === true
         fallbackReason = data.fallbackReason

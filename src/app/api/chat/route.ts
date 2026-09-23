@@ -42,17 +42,18 @@ interface RetrievalResponse {
 
 const encoder = new TextEncoder()
 
-function encodeEvent(event: 'meta' | 'delta' | 'done' | 'error', data: unknown): Uint8Array {
+type StreamEvent = 'progress' | 'meta' | 'delta' | 'done' | 'error'
+
+function encodeEvent(event: StreamEvent, data: unknown): Uint8Array {
   return encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
 }
 
-function streamResponse(stream: ReadableStream<Uint8Array>, customHeaders?: Record<string, string>): Response {
+function streamResponse(stream: ReadableStream<Uint8Array>): Response {
   return new Response(stream, {
     headers: {
       'Cache-Control': 'no-cache, no-transform',
       'Content-Type': 'text/event-stream; charset=utf-8',
       'X-Accel-Buffering': 'no',
-      ...customHeaders,
     },
   })
 }
@@ -111,165 +112,198 @@ export async function POST(request: NextRequest) {
       return false
     }
   }
-  let env: CloudflareEnv
-  let retrievalResponse: Response
-  let retrieval: RetrievalResponse
-  try {
-    env = getWorkerEnv()
-    retrievalResponse = await env.RAG_API.fetch('https://cracha-rag.internal/query', {
-      method: 'POST',
-      signal: AbortSignal.any([request.signal, AbortSignal.timeout(30_000)]),
-      headers: { Authorization: `Bearer ${env.RAG_QUERY_SECRET}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question, tenant_id: tenantId, user_id: user.id, top_k, messages }),
-    })
-    retrieval = await retrievalResponse.json() as RetrievalResponse
-    if (!retrieval || typeof retrieval !== 'object') throw new Error('Invalid retrieval response')
-    if (retrieval.context !== undefined && typeof retrieval.context !== 'string') throw new Error('Invalid context')
-    if (retrieval.sources !== undefined && (!Array.isArray(retrieval.sources) || retrieval.sources.some((source) =>
-      !source || typeof source.id !== 'string' || typeof source.title !== 'string' || typeof source.url !== 'string'
-    ))) throw new Error('Invalid sources')
-  } catch {
-    const refunded = await refund()
-    return NextResponse.json({ error: 'Suche vorübergehend nicht verfügbar.', refunded, reference }, { status: 502 })
-  }
-  if (!retrievalResponse.ok) {
-    const refunded = await refund()
-    return NextResponse.json({ error: retrieval.error ?? 'Suche in der Wissensbasis fehlgeschlagen.', refunded, reference }, { status: retrievalResponse.status })
-  }
-
-  const sources: Source[] = (retrieval.sources ?? []).map((source) => ({
-    id: source.id,
-    title: source.title,
-    url: source.url,
-    snippet: source.snippet,
-    relevance_score: source.score,
-  }))
-  if (!retrieval.context || sources.length === 0) {
-    const refunded = await refund()
-    return streamResponse(new ReadableStream({
-      start(controller) {
-        // No model ran, so the answer line names none. It used to carry the
-        // search service, which is the one place the reader saw it.
-        const model = ''
-        controller.enqueue(encodeEvent('meta', { sources: [], model }))
-        controller.enqueue(encodeEvent('delta', { text: 'Ich konnte in dieser Wissensbasis keine ausreichend relevanten Informationen finden.' }))
-        controller.enqueue(encodeEvent('done', {
-          usage: {
-            latency_ms: Date.now() - started,
-            retrieval_ms: retrieval.usage?.latency_ms ?? 0,
-            retrieval_cached: retrieval.usage?.cached === true,
-          },
-          model,
-          refunded,
-          reference,
-        }))
-        controller.close()
-      },
-    }))
-  }
-
+  // From here on the reply is a stream, so the reader can watch the search
+  // work. Every later failure is an `error` event carrying the refund state,
+  // which the client shows exactly like the HTTP errors it replaced.
   const cancellation = new AbortController()
   const signal = AbortSignal.any([request.signal, cancellation.signal])
-
-  // The key is read from the body only. It used to be accepted as a header as
-  // well, and request headers are what platform logs and proxies record.
-  const byokKey = parsed.data.api_key || undefined
-  const configuredModel = env.GENERATION_MODEL || DEFAULT_GENERATION_MODEL
-  const selectedModel = byokKey ? (parsed.data.model || DEFAULT_BYOK_MODEL) : configuredModel
-  const gatewayId = (env as unknown as { AI_GATEWAY_ID?: string }).AI_GATEWAY_ID || process.env.CF_AI_GATEWAY_ID || process.env.AI_GATEWAY_ID
   const mode = parsed.data.mode
-
-  let generated: Awaited<ReturnType<typeof streamGroundedAnswer>>
-  try {
-    generated = await streamGroundedAnswer({
-      ai: env.AI,
-      signal,
-      model: selectedModel,
-      question,
-      history: messages,
-      context: retrieval.context as string,
-      // A content check quotes the draft, not a collection page; checking its
-      // findings against the sources as list entries stripped their citations.
-      blocks: mode === 'verification' ? [] : retrieval.blocks ?? [],
-      apiKey: byokKey,
-      gatewayId,
-      mode,
-    })
-  } catch (error) {
-    const refunded = await refund()
-    console.error(JSON.stringify({ event: 'chat_generation_failed', reason: error instanceof Error ? error.name : 'unknown' }))
-    return streamResponse(new ReadableStream({
-      start(controller) {
-        controller.enqueue(encodeEvent('error', {
-          message: refunded
-            ? 'Die Antwort konnte nicht erzeugt werden. Credits wurden erstattet.'
-            : `Die Antwort konnte nicht erzeugt werden. Guthaben bitte mit Referenz ${reference} prüfen lassen.`,
-          refunded,
-          reference,
-        }))
-        controller.close()
-      },
-    }))
-  }
-
-  const model = generated.model
-  const usedModel = generated.usedModel || generated.model
-  const fallback = generated.fallback
-  const fallbackReason = generated.fallbackReason
 
   return streamResponse(new ReadableStream({
     cancel() { cancellation.abort() },
     async start(controller) {
-      let hasText = false
-      try {
-        controller.enqueue(encodeEvent('meta', { sources, model, usedModel, fallback, fallbackReason, mode }))
-
-        for await (const text of generated.text) {
-          signal.throwIfAborted()
-          hasText ||= Boolean(text.trim())
-          controller.enqueue(encodeEvent('delta', { text }))
-        }
-        signal.throwIfAborted()
-        if (!hasText) throw new Error('Empty generation')
-
-        controller.enqueue(encodeEvent('done', {
-          usage: {
-            latency_ms: Date.now() - started,
-            retrieval_ms: retrieval.usage?.latency_ms ?? 0,
-            retrieval_cached: retrieval.usage?.cached === true,
-          },
-          model,
-          usedModel,
-          fallback,
-          fallbackReason,
-          mode,
+      const send = (event: StreamEvent, data: unknown) => {
+        try { controller.enqueue(encodeEvent(event, data)) } catch { /* The reader has gone. */ }
+      }
+      const fail = async (message: string) => {
+        const refunded = await refund()
+        send('error', {
+          message: refunded ? `${message} Credits wurden erstattet.` : `${message} Guthaben bitte mit Referenz ${reference} prüfen lassen.`,
+          refunded,
           reference,
-          refunded: false,
-        }))
-      } catch (error) {
-        // Deliberately stopping after receiving text must not permit unlimited
-        // free generation by cancelling just before the final event.
-        const stoppedAfterText = signal.aborted && hasText
-        const refunded = stoppedAfterText ? false : await refund()
-        console.error(JSON.stringify({ event: 'chat_generation_failed', reason: error instanceof Error ? error.name : 'unknown' }))
+        })
+      }
+      try {
+        let env: CloudflareEnv
+        let retrieval: RetrievalResponse & { context: string }
         try {
-          controller.enqueue(encodeEvent('error', {
-            message: stoppedAfterText
-              ? 'Die begonnene Antwort wurde gestoppt und berechnet.'
-              : refunded
-                ? 'Die Antwort konnte nicht erzeugt werden. Credits wurden erstattet.'
-                : `Die Antwort konnte nicht erzeugt werden. Guthaben bitte mit Referenz ${reference} prüfen lassen.`,
-            refunded,
-            reference,
-          }))
-        } catch { /* The reader may already have disconnected. */ }
+          env = getWorkerEnv()
+          retrieval = await searchKnowledgeBase(env, {
+            signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
+            body: { question, tenant_id: tenantId, user_id: user.id, top_k, messages },
+            onProgress: (progress) => send('progress', progress),
+          })
+        } catch (error) {
+          await fail(error instanceof RetrievalError ? error.message : 'Suche vorübergehend nicht verfügbar.')
+          return
+        }
+
+        const sources: Source[] = (retrieval.sources ?? []).map((source) => ({
+          id: source.id,
+          title: source.title,
+          url: source.url,
+          snippet: source.snippet,
+          relevance_score: source.score,
+        }))
+        const usage = () => ({
+          latency_ms: Date.now() - started,
+          retrieval_ms: retrieval.usage?.latency_ms ?? 0,
+          retrieval_cached: retrieval.usage?.cached === true,
+        })
+        if (!retrieval.context || sources.length === 0) {
+          const refunded = await refund()
+          // No model ran, so the answer line names none. It used to carry the
+          // search service, which is the one place the reader saw it.
+          const model = ''
+          send('meta', { sources: [], model })
+          send('delta', { text: 'Ich konnte in dieser Wissensbasis keine ausreichend relevanten Informationen finden.' })
+          send('done', { usage: usage(), model, refunded, reference })
+          return
+        }
+
+        // The key is read from the body only. It used to be accepted as a header as
+        // well, and request headers are what platform logs and proxies record.
+        const byokKey = parsed.data.api_key || undefined
+        const configuredModel = env.GENERATION_MODEL || DEFAULT_GENERATION_MODEL
+        const selectedModel = byokKey ? (parsed.data.model || DEFAULT_BYOK_MODEL) : configuredModel
+        const gatewayId = (env as unknown as { AI_GATEWAY_ID?: string }).AI_GATEWAY_ID || process.env.CF_AI_GATEWAY_ID || process.env.AI_GATEWAY_ID
+
+        let generated: Awaited<ReturnType<typeof streamGroundedAnswer>>
+        try {
+          generated = await streamGroundedAnswer({
+            ai: env.AI,
+            signal,
+            model: selectedModel,
+            question,
+            history: messages,
+            context: retrieval.context,
+            // A content check quotes the draft, not a collection page; checking its
+            // findings against the sources as list entries stripped their citations.
+            blocks: mode === 'verification' ? [] : retrieval.blocks ?? [],
+            apiKey: byokKey,
+            gatewayId,
+            mode,
+          })
+        } catch (error) {
+          console.error(JSON.stringify({ event: 'chat_generation_failed', reason: error instanceof Error ? error.name : 'unknown' }))
+          await fail('Die Antwort konnte nicht erzeugt werden.')
+          return
+        }
+
+        const model = generated.model
+        const usedModel = generated.usedModel || generated.model
+        const fallback = generated.fallback
+        const fallbackReason = generated.fallbackReason
+        let hasText = false
+        try {
+          send('meta', { sources, model, usedModel, fallback, fallbackReason, mode })
+          for await (const text of generated.text) {
+            signal.throwIfAborted()
+            hasText ||= Boolean(text.trim())
+            send('delta', { text })
+          }
+          signal.throwIfAborted()
+          if (!hasText) throw new Error('Empty generation')
+          send('done', { usage: usage(), model, usedModel, fallback, fallbackReason, mode, reference, refunded: false })
+        } catch (error) {
+          console.error(JSON.stringify({ event: 'chat_generation_failed', reason: error instanceof Error ? error.name : 'unknown' }))
+          // Deliberately stopping after receiving text must not permit unlimited
+          // free generation by cancelling just before the final event.
+          if (signal.aborted && hasText) {
+            send('error', { message: 'Die begonnene Antwort wurde gestoppt und berechnet.', refunded: false, reference })
+          } else {
+            await fail('Die Antwort konnte nicht erzeugt werden.')
+          }
+        }
       } finally {
         try { controller.close() } catch { /* Already cancelled by the reader. */ }
       }
     },
-  }), {
-    'x-generation-model': model,
-    'x-used-model': usedModel,
-    'x-byok-fallback': String(fallback),
+  }))
+}
+
+/** A failure the search service explained; its message is safe to show. */
+class RetrievalError extends Error {}
+
+const NDJSON = 'application/x-ndjson'
+
+type RetrievalLine =
+  | ({ type: 'progress' } & Record<string, unknown>)
+  | ({ type: 'result' } & RetrievalResponse)
+  | { type: 'error'; status?: number; error?: string }
+
+/** Only the fields the reader is shown, so nothing else of the service leaks. */
+function progressOf(data: Record<string, unknown>) {
+  const count = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : undefined)
+  return {
+    stage: typeof data.stage === 'string' ? data.stage : 'found',
+    pages: count(data.pages),
+    passages: count(data.passages),
+    sources: count(data.sources),
+    search_query: typeof data.search_query === 'string' ? data.search_query.slice(0, 200) : undefined,
+    title: typeof data.title === 'string' ? data.title.slice(0, 160) : undefined,
+  }
+}
+
+/**
+ * Asks the search service for progress lines and forwards each one; the last
+ * line carries the result. A service that answers with plain JSON (an error
+ * before the search started, or a version without progress) is read as before.
+ */
+async function searchKnowledgeBase(env: CloudflareEnv, options: {
+  signal: AbortSignal
+  body: Record<string, unknown>
+  onProgress: (progress: ReturnType<typeof progressOf>) => void
+}): Promise<RetrievalResponse & { context: string }> {
+  const response = await env.RAG_API.fetch('https://cracha-rag.internal/query', {
+    method: 'POST',
+    signal: options.signal,
+    headers: { Authorization: `Bearer ${env.RAG_QUERY_SECRET}`, 'Content-Type': 'application/json', Accept: NDJSON },
+    body: JSON.stringify(options.body),
   })
+  let result: RetrievalResponse | undefined
+  if ((response.headers.get('Content-Type') ?? '').includes(NDJSON) && response.body) {
+    const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
+    let buffer = ''
+    const readLine = (line: string) => {
+      if (!line.trim()) return
+      const data = JSON.parse(line) as RetrievalLine
+      if (data.type === 'progress') options.onProgress(progressOf(data))
+      else if (data.type === 'result') result = data
+      else if (data.type === 'error') throw new RetrievalError(data.error || 'Suche in der Wissensbasis fehlgeschlagen.')
+    }
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += value
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+        lines.forEach(readLine)
+      }
+      readLine(buffer)
+    } finally {
+      reader.releaseLock()
+    }
+  } else {
+    const data = await response.json() as RetrievalResponse
+    if (!response.ok) throw new RetrievalError(data?.error ?? 'Suche in der Wissensbasis fehlgeschlagen.')
+    result = data
+  }
+  if (!result || typeof result !== 'object') throw new Error('Invalid retrieval response')
+  if (result.context !== undefined && typeof result.context !== 'string') throw new Error('Invalid context')
+  if (result.sources !== undefined && (!Array.isArray(result.sources) || result.sources.some((source) =>
+    !source || typeof source.id !== 'string' || typeof source.title !== 'string' || typeof source.url !== 'string'
+  ))) throw new Error('Invalid sources')
+  return { ...result, context: result.context ?? '' }
 }

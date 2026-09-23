@@ -59,6 +59,7 @@ import {
   PromptInputTextarea,
 } from './prompt-input';
 import { Response } from './response';
+import { SearchProgress } from './search-progress';
 import { Source, Sources, SourcesContent, SourcesTrigger } from './source';
 
 // Answers are written in the language of the question, so the starter questions
@@ -126,7 +127,8 @@ const SourceList = ({ cited, uncited }: { cited: IndexedSource[]; uncited: Index
   <>
     {cited.length > 0 && (
       <div className="grid gap-0.5">
-        {cited.map((entry) => (
+        {/* By number, so [1] is found first whatever the answer cited first. */}
+        {[...cited].sort((left, right) => left.index - right.index).map((entry) => (
           <SourceRow key={entry.source.id} index={entry.index} source={entry.source} />
         ))}
       </div>
@@ -288,6 +290,7 @@ export function ChatInterface() {
     sendMessage,
     isLoading,
     isStreaming,
+    retrievalProgress,
     byokApiKey,
     byokModel,
     setByokApiKey,
@@ -456,7 +459,7 @@ export function ChatInterface() {
             variant="outline"
             size="sm"
             onClick={() => setChatMode(chatMode === 'verification' ? 'default' : 'verification')}
-            className={`h-9 rounded-xl border text-xs font-medium gap-1.5 transition-colors ${
+            className={`h-9 rounded-full border px-3.5 text-xs font-medium gap-1.5 transition-colors ${
               chatMode === 'verification'
                 ? 'border-brand-500 bg-brand-50 text-brand-700 hover:bg-brand-100 dark:border-brand-400 dark:bg-brand-950/40 dark:text-brand-300 shadow-theme-xs'
                 : 'border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300'
@@ -474,7 +477,7 @@ export function ChatInterface() {
                 type="button"
                 variant="outline"
                 size="sm"
-                className={`h-9 rounded-xl border text-xs font-medium gap-1.5 ${
+                className={`h-9 rounded-full border px-3.5 text-xs font-medium gap-1.5 ${
                   byokApiKey
                     ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'
                     : 'border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300'
@@ -511,7 +514,7 @@ export function ChatInterface() {
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="rounded-xl text-gray-500 hover:bg-error-50 hover:text-error-600 dark:text-gray-400 dark:hover:bg-error-500/10"
+                  className="rounded-full text-gray-500 hover:bg-error-50 hover:text-error-600 dark:text-gray-400 dark:hover:bg-error-500/10"
                   aria-label="Unterhaltung löschen"
                   title="Unterhaltung löschen"
                 >
@@ -554,7 +557,7 @@ export function ChatInterface() {
                  * starter chips are the message. Tapping one fills the input,
                  * so the first answer is two taps away.
                  */
-                <div className="m-auto grid w-full max-w-xl gap-2 py-8 sm:grid-cols-3">
+                <div className="m-auto flex w-full max-w-2xl flex-wrap justify-center gap-2 py-8">
                   {starters.map((question) => (
                     <button
                       key={question}
@@ -563,7 +566,7 @@ export function ChatInterface() {
                         setInput(question);
                         inputRef.current?.focus();
                       }}
-                      className="rounded-2xl border border-gray-200 bg-white px-4 py-4 text-left text-xs leading-5 text-gray-600 shadow-theme-xs transition-all hover:-translate-y-0.5 hover:border-brand-200 hover:text-brand-600 hover:shadow-theme-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-brand-700 dark:hover:text-brand-400"
+                      className="rounded-full border border-gray-200 bg-white px-4 py-2.5 text-left text-[13px] leading-5 text-gray-600 shadow-theme-xs transition-all hover:-translate-y-0.5 hover:border-brand-200 hover:text-brand-600 hover:shadow-theme-sm active:translate-y-0 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-brand-700 dark:hover:text-brand-400"
                     >
                       {question}
                     </button>
@@ -624,13 +627,15 @@ export function ChatInterface() {
                             </>
                           )}
                         </div>
-                        <MessageContent className={message.isError ? 'rounded-xl border border-error-200 bg-error-50 p-4 text-error-700 dark:border-error-800 dark:bg-error-500/10 dark:text-error-300' : undefined}>
+                        <MessageContent className={message.isError ? 'rounded-2xl border border-error-200 bg-error-50 p-4 text-error-700 dark:border-error-800 dark:bg-error-500/10 dark:text-error-300' : undefined}>
                           {isUser ? (
                             <p className="whitespace-pre-wrap leading-6">{message.content}</p>
                           ) : message.isStreaming && !message.content ? (
                             <span className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
                               <Loader className="text-brand-500" />
-                              Formuliere Antwort …
+                              {messageSources.length > 0
+                                ? `Formuliere Antwort aus ${messageSources.length} ${messageSources.length === 1 ? 'Quelle' : 'Quellen'} …`
+                                : 'Formuliere Antwort …'}
                             </span>
                           ) : (
                             <Response>{renderedContent}</Response>
@@ -713,9 +718,8 @@ export function ChatInterface() {
                     </div>
                     <div className="w-full max-w-3xl">
                       <div className="mb-1.5 text-xs font-medium text-gray-600 dark:text-gray-300">CraCha</div>
-                      <MessageContent className="flex-row items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 text-gray-500 shadow-theme-xs dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-300">
-                        <Loader className="text-brand-500" />
-                        <span>Durchsuche die Wissensbasis und prüfe Quellen …</span>
+                      <MessageContent className="rounded-3xl border border-gray-200 bg-white px-4 py-3.5 shadow-theme-xs dark:border-gray-700 dark:bg-gray-800/60">
+                        <SearchProgress progress={retrievalProgress} />
                       </MessageContent>
                     </div>
                   </Message>
@@ -729,7 +733,7 @@ export function ChatInterface() {
         <div className="shrink-0 border-t border-gray-200 bg-white/95 px-3 py-3 backdrop-blur sm:px-5 dark:border-gray-800 dark:bg-gray-900/95">
           <div className="mx-auto w-full max-w-5xl">
             {chatMode === 'verification' && (
-              <div className="mb-2 flex items-center justify-between gap-2 rounded-xl border border-brand-200 bg-brand-50/80 px-3 py-2 text-xs text-brand-900 dark:border-brand-800/60 dark:bg-brand-950/40 dark:text-brand-200">
+              <div className="mb-2 flex items-center justify-between gap-2 rounded-2xl border border-brand-200 bg-brand-50/80 px-3 py-2 text-xs text-brand-900 dark:border-brand-800/60 dark:bg-brand-950/40 dark:text-brand-200">
                 <div className="flex items-center gap-2">
                   <FileCheck className="size-4 shrink-0 text-brand-600 dark:text-brand-400" />
                   <span>
@@ -745,7 +749,7 @@ export function ChatInterface() {
                 </button>
               </div>
             )}
-            <PromptInput onSubmit={handleSubmit} className="relative flex items-end px-4 py-3 pr-14">
+            <PromptInput onSubmit={handleSubmit} className="relative flex items-end py-2.5 pl-5 pr-14">
               <PromptInputTextarea
                 ref={inputRef}
                 value={input}
@@ -758,11 +762,11 @@ export function ChatInterface() {
                       : 'Frage etwas zu deiner Wissensbasis …'
                 }
                 disabled={!selectedDatabase}
-                className="min-h-7 px-0 py-0 pr-2"
+                className="min-h-7 px-0 py-1 pr-2"
                 aria-label={chatMode === 'verification' ? 'Zu prüfender Text' : 'Nachricht'}
               />
               <PromptInputSubmit
-                className="absolute bottom-2 right-2"
+                className="absolute bottom-1.5 right-1.5 size-10"
                 disabled={!input.trim() || !selectedDatabase || isLoading || isStreaming}
                 status={isLoading || isStreaming ? 'submitted' : undefined}
                 aria-label="Nachricht senden"

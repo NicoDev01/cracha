@@ -39,7 +39,7 @@ function flushQueuedWrite() {
 }
 
 if (typeof window !== 'undefined') window.addEventListener('pagehide', flushQueuedWrite)
-const empty = { messages: [] as Message[], conversations: {} as Record<string, ChatConversation>, selectedDatabase: null, selectedConversation: null, isLoading: false, isStreaming: false, error: null, byokApiKey: null as string | null, byokModel: null as string | null, chatMode: 'default' as 'default' | 'verification' }
+const empty = { messages: [] as Message[], conversations: {} as Record<string, ChatConversation>, selectedDatabase: null, selectedConversation: null, isLoading: false, isStreaming: false, retrievalProgress: null, error: null, byokApiKey: null as string | null, byokModel: null as string | null, chatMode: 'default' as 'default' | 'verification' }
 export function restoreConversations(value: unknown): Record<string, ChatConversation> {
   if (!value || typeof value !== 'object') return {}
   const restored: Record<string, ChatConversation> = {}
@@ -105,7 +105,7 @@ export const useChatStore = create<ChatState>()(persist((set, get) => ({
     const request = { controller: new AbortController(), owner: state.ownerId, conversation: key }
     active = request
     const conversation: ChatConversation = { id: key, databaseId: state.selectedDatabase, title: state.conversations[key]?.title ?? question.slice(0, 70), messages: [...state.messages, { id: crypto.randomUUID(), type: 'user', content: question, timestamp: new Date() }] }
-    set({ selectedConversation: key, messages: conversation.messages, conversations: { ...state.conversations, [key]: conversation }, isLoading: true, isStreaming: false, error: null })
+    set({ selectedConversation: key, messages: conversation.messages, conversations: { ...state.conversations, [key]: conversation }, isLoading: true, isStreaming: false, retrievalProgress: null, error: null })
     const update = (transform: (messages: Message[]) => Message[]) => {
       if (get().ownerId !== request.owner || !get().conversations[key]) return
       set(current => {
@@ -127,6 +127,10 @@ export const useChatStore = create<ChatState>()(persist((set, get) => ({
         model: state.byokModel || undefined,
         mode: state.chatMode,
       }, {
+        onProgress(progress) {
+          // Merged, because a later step does not repeat what an earlier one said.
+          if (active === request && get().ownerId === request.owner) set({ retrievalProgress: { ...get().retrievalProgress, ...progress } })
+        },
         onStart({ sources, model, fallback, fallbackReason }) {
           update(messages => [...messages, { id: assistantId, type: 'assistant', content: '', timestamp: new Date(), sources, isStreaming: true, metadata: { query_time: 0, model_used: model, fallback, fallback_reason: fallbackReason } }])
           if (active === request && get().ownerId === request.owner) set({ isLoading: false, isStreaming: true })
@@ -146,7 +150,7 @@ export const useChatStore = create<ChatState>()(persist((set, get) => ({
         : [...messages, { id: assistantId, type: 'assistant', content: detail, timestamp: new Date(), isError: true }])
       return false
     } finally {
-      if (active === request) { active = null; set({ isLoading: false, isStreaming: false }) }
+      if (active === request) { active = null; set({ isLoading: false, isStreaming: false, retrievalProgress: null }) }
       if (typeof window !== 'undefined') window.dispatchEvent(new Event('cracha:credits-changed'))
     }
   },

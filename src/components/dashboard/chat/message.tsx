@@ -27,7 +27,7 @@ export const MessageContent = ({
   <div
     className={cn(
       'flex max-w-full flex-col gap-2 overflow-hidden text-sm sm:text-[15px]',
-      'group-[.is-user]:ml-auto group-[.is-user]:max-w-[85%] group-[.is-user]:rounded-2xl group-[.is-user]:rounded-br-md group-[.is-user]:bg-brand-500 group-[.is-user]:px-4 group-[.is-user]:py-3 group-[.is-user]:text-white sm:group-[.is-user]:max-w-[72%]',
+      'group-[.is-user]:ml-auto group-[.is-user]:max-w-[85%] group-[.is-user]:rounded-3xl group-[.is-user]:bg-brand-500 group-[.is-user]:px-5 group-[.is-user]:py-2.5 group-[.is-user]:text-white sm:group-[.is-user]:max-w-[72%]',
       'group-[.is-assistant]:w-full group-[.is-assistant]:max-w-3xl group-[.is-assistant]:text-gray-800 dark:group-[.is-assistant]:text-gray-100',
       className
     )}

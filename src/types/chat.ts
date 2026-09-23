@@ -20,6 +20,20 @@ export interface Source {
 
 export type FallbackReason = 'byok_rejected' | 'byok_model' | 'byok_quota' | 'byok_unavailable' | 'primary_unavailable'
 
+/** What the search has done so far; every number is a real count. */
+export interface RetrievalProgress {
+  stage: 'found' | 'collection' | 'selected'
+  /** Distinct pages the search returned so far. */
+  pages?: number
+  /** Distinct text passages behind those pages. */
+  passages?: number
+  /** Sources picked for the answer, once selection is done. */
+  sources?: number
+  search_query?: string
+  /** The overview page being read in full. */
+  title?: string
+}
+
 export interface ChatResponse {
   message: string
   sources: Source[]
@@ -58,6 +72,8 @@ export interface ChatState {
   selectedDatabase: string | null
   isLoading: boolean
   isStreaming: boolean
+  /** Live search progress of the request in flight; null otherwise. */
+  retrievalProgress: RetrievalProgress | null
   error: string | null
   byokApiKey: string | null
   byokModel: string | null

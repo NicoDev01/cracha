@@ -693,9 +693,20 @@ async function resolveHubPage(
   return null
 }
 
+/**
+ * What the search has done so far, reported while it runs so the reader sees
+ * real work instead of a spinner. Every number is a count of what retrieval
+ * actually returned; nothing is estimated.
+ */
+export type RetrievalProgress =
+  | { stage: 'found'; pages: number; passages: number; search_query?: string }
+  | { stage: 'collection'; title: string }
+  | { stage: 'selected'; sources: number; pages: number }
+
 export interface RetrievalOptions {
   /** Rerank the hybrid path with bge-reranker-base. Default: on. */
   rerank?: boolean
+  onProgress?: (progress: RetrievalProgress) => void
 }
 
 /**
@@ -750,12 +761,35 @@ export async function retrieve(
     },
   })
 
+  // Both paths report as they land, so the count rises twice instead of
+  // appearing once when the slower one is done.
+  const seenPages = new Set<string>()
+  const seenPassages = new Set<string>()
+  const report = (result: AiSearchSearchResponse, rewritten: boolean) => {
+    for (const chunk of result.chunks) {
+      seenPages.add(chunkSourceKey(chunk))
+      seenPassages.add(`${chunk.item.key}:${chunk.id}`)
+    }
+    options.onProgress?.({
+      stage: 'found',
+      pages: seenPages.size,
+      passages: seenPassages.size,
+      ...(rewritten && result.search_query ? { search_query: result.search_query } : {}),
+    })
+    return result
+  }
+  const timings: Record<string, number> = {}
+  const timed = <T>(name: string, work: Promise<T>): Promise<T> => {
+    const started = Date.now()
+    return work.finally(() => { timings[name] = Date.now() - started })
+  }
+
   // Vector search protects semantic recall and typo tolerance. Hybrid + reranking
   // supplies keyword precision. Local rank fusion keeps either path from
   // discarding a useful result solely because one model assigned a low score.
   const [hybridResult, vectorResult] = await Promise.allSettled([
-    search('hybrid', options.rerank ?? true, true),
-    search('vector', false, false),
+    timed('hybrid_ms', search('hybrid', options.rerank ?? true, true)).then((result) => report(result, true)),
+    timed('vector_ms', search('vector', false, false)).then((result) => report(result, false)),
   ])
   // One path failing is survivable and stays survivable — but it silently halves
   // recall, and nothing said so. The gateway log showed two query rewrites and
@@ -794,8 +828,9 @@ export async function retrieve(
     ? intent
     : { ...intent, list: evidence.some((candidate) => candidate.namesQuery) }
   const hub = effectiveIntent.list
-    ? await resolveHubPage(instance, rankedChunks, queryTokens, !intent.explicitList)
+    ? await timed('hub_ms', resolveHubPage(instance, rankedChunks, queryTokens, !intent.explicitList))
     : null
+  if (hub) options.onProgress?.({ stage: 'collection', title: hub.title })
   // Only the hybrid path rewrites, so its query is the one a reader can act on.
   // The vector path now reports the question as typed, and printing both would
   // read as two searches having disagreed rather than as one having been cleaned.
@@ -803,7 +838,11 @@ export async function retrieve(
     || successfulResults.map((result) => result.search_query).find(Boolean)
     || question
 
-  return { ...packContext(rankedChunks, hub, effectiveIntent, topK), searchQuery }
+  const packed = packContext(rankedChunks, hub, effectiveIntent, topK)
+  options.onProgress?.({ stage: 'selected', sources: packed.sources.length, pages: seenPages.size })
+  // Where a slow search spends its time; the request log only has the total.
+  console.log(JSON.stringify({ event: 'retrieval_timing', ...timings, pages: seenPages.size, list: effectiveIntent.list }))
+  return { ...packed, searchQuery }
 }
 
 export function packContext(
