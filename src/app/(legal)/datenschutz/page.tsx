@@ -267,11 +267,38 @@ export default function DatenschutzPage() {
           items={[
             <>
               <strong className="text-foreground">Konto- und Nutzungsdaten</strong>{" "}
-              werden gespeichert, solange dein Konto besteht.
+              werden gespeichert, solange dein Konto besteht. Du kannst dein Konto
+              jederzeit unter „Mein Konto“ selbst löschen. Dabei brechen wir
+              laufende Abrufe ab und löschen sofort deine Zugangsdaten (E-Mail-Adresse,
+              Name, Passwort-Hash, Google-Verknüpfung), alle Wissensbasen mit den
+              abgerufenen Inhalten und dem Suchindex, zwischengespeicherte
+              Suchergebnisse, dein Guthaben und deine Credit-Buchungen. Restguthaben,
+              auch gekauftes, verfällt dabei ohne Erstattung. Chat- und Abrufverläufe
+              werden in dem Browser entfernt, in dem du die Löschung auslöst; auf
+              anderen Geräten liegen sie nur lokal und lassen sich dort im Browser
+              löschen.
             </>,
             <>
               <strong className="text-foreground">Wissensbasen und Inhalte</strong>{" "}
-              werden bei Löschung der Wissensbasis bzw. nach Bearbeitung deiner Kontolöschungsanfrage entfernt. Zahlungs- und Vertragsnachweise bewahren wir auf, soweit gesetzlich erforderlich.
+              werden bei Löschung der Wissensbasis oder deines Kontos entfernt.
+            </>,
+            <>
+              <strong className="text-foreground">Zahlungsnachweise</strong> zu
+              gekauften Credit-Paketen (Betrag, Credits, Zahlungsreferenz, Stand von
+              Erstattungen und Rückbuchungen, dokumentierte Erklärung zum sofortigen
+              Leistungsbeginn) bewahren wir für die gesetzlichen Fristen auf (§ 147
+              AO, § 257 HGB). Nach einer Kontolöschung geschieht das ohne Zuordnung
+              zu deinem Konto. Über die Zahlungsreferenz bleibt eine Zuordnung bei
+              Stripe möglich; Stripe speichert Zahlungs- und Kundendaten in eigener
+              Verantwortung nach eigenen Fristen.
+            </>,
+            <>
+              <strong className="text-foreground">Statusdaten von Abrufen</strong>{" "}
+              beim Crawler-Dienst (Modal) enthalten eine Auftragskennung, den
+              Fortschritt, die zuletzt abgerufene Seitenadresse und gegebenenfalls
+              eine Fehlermeldung, aber keine Nutzerkennung. Sie werden automatisch
+              entfernt, sobald ihre letzte Aktualisierung sieben Tage zurückliegt
+              und der Abruf abgerechnet ist.
             </>,
             <>
               <strong className="text-foreground">Zwischengespeicherte Suchergebnisse</strong>{" "}
