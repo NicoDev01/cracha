@@ -123,7 +123,7 @@ describe('POST /api/account/delete', () => {
   })
 
   it('accepts the phrase typed with a decomposed umlaut', async () => {
-    const res = await POST(request({ confirm: ' LÖSCHEN ' }))
+    const res = await POST(request({ confirm: ' LO\u0308SCHEN ' }))
     expect(res.status).toBe(200)
   })
 
@@ -157,7 +157,7 @@ describe('POST /api/account/delete', () => {
     mocks.cancelJob.mockResolvedValue({ ok: false, stage: 'crawler' })
     const res = await POST(request())
     expect(res.status).toBe(503)
-    expect((await res.json()).error).toMatch(/Crawl konnte nicht sicher abgebrochen werden/)
+    expect(((await res.json()) as { error: string }).error).toMatch(/Crawl konnte nicht sicher abgebrochen werden/)
     expect(mocks.deleteDatabase).not.toHaveBeenCalled()
     expect(mocks.deleteUser).not.toHaveBeenCalled()
   })
@@ -167,7 +167,7 @@ describe('POST /api/account/delete', () => {
       id === 'kb-b' ? { ok: false, status: 502, error: 'AI Search nicht erreichbar.' } : { ok: true })
     const res = await POST(request())
     expect(res.status).toBe(503)
-    expect((await res.json()).error).toMatch(/Dein Konto wurde nicht gelöscht/)
+    expect(((await res.json()) as { error: string }).error).toMatch(/Dein Konto wurde nicht gelöscht/)
     expect(mocks.deleteUser).not.toHaveBeenCalled()
     // Stops at the failure instead of carrying on with the next one.
     expect(mocks.deleteDatabase).toHaveBeenCalledTimes(2)
@@ -201,7 +201,7 @@ describe('POST /api/account/delete', () => {
     mocks.deleteUser.mockResolvedValue({ data: { user: null }, error: { status: 500, code: 'unexpected_failure' } })
     const res = await POST(request())
     expect(res.status).toBe(503)
-    expect((await res.json()).success).toBe(false)
+    expect(((await res.json()) as { success: boolean }).success).toBe(false)
   })
 
   it('refuses while a payment dispute is open', async () => {
