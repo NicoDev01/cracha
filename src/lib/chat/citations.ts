@@ -12,12 +12,15 @@ export function getCitationNumbers(content: string, sourceCount: number): number
   return [...new Set(numbers)]
 }
 
-export function getCitedSources(content: string, sources: Source[], fallbackToAll = true): IndexedSource[] {
-  const citationNumbers = getCitationNumbers(content, sources.length)
-  const selected = citationNumbers.length > 0
-    ? citationNumbers
-    : fallbackToAll ? sources.map((_, index) => index + 1) : []
-  return selected.map((index) => ({ index, source: sources[index - 1] }))
+/**
+ * The sources the answer actually cites, in citation order. An answer without
+ * markers cites nothing: presenting every retrieved source as "used" would
+ * claim support the answer never showed. Those sources remain visible through
+ * `getUncitedSources` as searched, not cited.
+ */
+export function getCitedSources(content: string, sources: Source[]): IndexedSource[] {
+  return getCitationNumbers(content, sources.length)
+    .map((index) => ({ index, source: sources[index - 1] }))
 }
 
 /**

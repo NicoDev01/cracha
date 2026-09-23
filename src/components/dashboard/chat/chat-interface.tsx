@@ -392,7 +392,7 @@ export function ChatInterface() {
 
   const formatAnswerWithSources = (content: string, sources: ChatSource[] = []): string => {
     if (!sources || sources.length === 0) return content;
-    const citedSources = getCitedSources(content, sources, true);
+    const citedSources = getCitedSources(content, sources);
     const activeSources = citedSources.length > 0
       ? citedSources
       : sources.map((source, index) => ({ index: index + 1, source }));
@@ -575,7 +575,7 @@ export function ChatInterface() {
                   const messageSources = message.sources ?? [];
                   const citedSources = isUser
                     ? []
-                    : getCitedSources(message.content, messageSources, !message.isStreaming);
+                    : getCitedSources(message.content, messageSources);
                   const uncitedSources = isUser
                     ? []
                     : getUncitedSources(messageSources, citedSources);
@@ -635,7 +635,7 @@ export function ChatInterface() {
                             </div>
                           )}
 
-                          {!isUser && citedSources.length > 0 && (
+                          {!isUser && (citedSources.length > 0 || (!message.isStreaming && uncitedSources.length > 0)) && (
                             <Sources>
                               <SourcesTrigger count={citedSources.length} />
                               <SourcesContent>
