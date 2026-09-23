@@ -26,6 +26,13 @@ export default function WebsiteGuide() {
         <p className="leading-7 text-muted-foreground">Wenn du wiederholt Informationen aus mehreren Seiten einer Website zusammentragen musst. Zum Beispiel, wenn du für eine Beratung Produkteigenschaften recherchierst oder regelmäßig eine umfangreiche Hilfedokumentation nutzt. Für eine einzelne bekannte Textstelle ist die Suche im Browser oft schon ausreichend.</p>
         <p className="leading-7 text-muted-foreground">CraCha ist eine Rechercheanwendung. Du baust damit derzeit keinen öffentlich eingebetteten Supportbot und durchsuchst auch nicht automatisch das gesamte Internet.</p>
       </section>
+      <section className="space-y-4">
+        <h2 className="text-2xl font-semibold">Zwei typische Anwendungsfälle</h2>
+        <ul className="list-disc space-y-3 pl-5 leading-7 text-muted-foreground">
+          <li><Link href="/kundenwebsite-durchsuchen" className="font-medium text-foreground underline underline-offset-4">Kundenwebsite durchsuchen</Link>: für Agenturen und Marketing-Teams, die sich schnell in die Website eines Kunden einarbeiten wollen.</li>
+          <li><Link href="/dokumentation-durchsuchen" className="font-medium text-foreground underline underline-offset-4">Dokumentation durchsuchen</Link>: für Entwicklerinnen und Entwickler, die große Docs gezielt befragen wollen.</li>
+        </ul>
+      </section>
       <section className="space-y-5">
         <h2 className="text-2xl font-semibold">Von der Website zur ersten prüfbaren Antwort</h2>
         <ol className="list-decimal space-y-5 pl-6 leading-7 text-muted-foreground">

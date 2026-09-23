@@ -164,6 +164,22 @@ export function NavMobile() {
                         >
                             Anleitung
                         </Link>
+                        {[
+                            { href: "/kundenwebsite-durchsuchen", title: "Für Agenturen" },
+                            { href: "/dokumentation-durchsuchen", title: "Für Entwickler" },
+                        ].map((item) => (
+                            <Link
+                                key={item.href}
+                                href={item.href}
+                                className={cn(
+                                    "py-2 font-semibold transition-colors hover:text-foreground/80",
+                                    pathname === item.href ? "text-foreground" : "text-foreground/60"
+                                )}
+                                onClick={() => setOpen(false)}
+                            >
+                                {item.title}
+                            </Link>
+                        ))}
                     </div>
                 </div>
             </SheetContent>
