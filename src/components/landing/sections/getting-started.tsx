@@ -1,15 +1,8 @@
 import Link from "next/link";
 import { CREDITS, CREDIT_PACKAGES } from "@/lib/credit-tariff";
 import MaxWidthWrapper from "@/components/shared/max-width-wrapper";
-
-const questions = [
-  ["Für wen ist CraCha gedacht?", "Für Menschen, die regelmäßig in öffentlichen Websites recherchieren: etwa in Produktdokumentationen, Hilfecentern oder umfangreichen Angebotsseiten. Du stellst Fragen in deinem eigenen CraCha-Konto. Ein Chatwidget zum Einbetten auf einer Kundenwebsite ist derzeit nicht enthalten."],
-  ["Was unterscheidet CraCha von Suchmaschinen wie Perplexity?", "Statt bei jeder einzelnen Frage eine flüchtige Websuche nach Schlagwörtern neu zu starten, liest CraCha Websites und Dokumentationen rekursiv mit bis zu hunderten Unterseiten ein und sichert sie als dauerhafte Wissensbasis. So können beispielsweise Marketing-Teams den gesamten Internetauftritt von Kunden zur Content-Verifikation und zum Faktenabgleich nutzen, während Entwickler ganze API- und Framework-Docs dauerhaft als Coding-Referenz parat haben."],
-  ["Welche Inhalte kann ich verwenden?", "Öffentliche, zugängliche HTML-Seiten, die du einlesen darfst. Login-Bereiche, Paywalls, PDF-Uploads und jede beliebige Website werden nicht unterstützt oder garantiert. Umfang, Verlinkung und technische Sperren beeinflussen, welche Seiten erreicht werden."],
-  ["Sind die Antworten immer richtig?", "Nein. Auch Antworten mit Quellen können unvollständig oder falsch sein. Prüfe wichtige Aussagen im Original. CraCha arbeitet mit den eingelesenen Inhalten; spätere Änderungen einer Website erfordern ein erneutes Einlesen."],
-  ["Was passiert nach dem Startguthaben?", "Zum Weiterarbeiten brauchst du ausreichend Credits. Zusätzliche Credit-Pakete kannst du bei Bedarf im Dashboard kaufen. Vor einer Bestellung siehst du den Preis im Checkout. Durch das Aufbrauchen des Startguthabens wird kein Kauf ausgelöst."],
-  ["Muss ich Software installieren?", "Nein. CraCha läuft im Browser. Nach der Registrierung bestätigst du deine E-Mail-Adresse und kannst im Dashboard eine Website einlesen."],
-];
+import { FaqList } from "@/components/landing/faq-list";
+import { landingFaq } from "@/lib/marketing/faq";
 
 export default function GettingStarted() {
   return (
@@ -51,12 +44,7 @@ export default function GettingStarted() {
         </div>
         <div id="fragen" className="mx-auto mt-14 max-w-3xl scroll-mt-24">
           <h2 className="mb-6 text-2xl font-semibold">Gut zu wissen, bevor du startest</h2>
-          {questions.map(([question, answer]) => (
-            <details key={question} className="border-b py-4">
-              <summary className="cursor-pointer py-2 font-medium focus-visible:outline-2 focus-visible:outline-offset-4">{question}</summary>
-              <p className="pb-2 pt-3 leading-7 text-muted-foreground">{answer}</p>
-            </details>
-          ))}
+          <FaqList items={landingFaq} />
           <Link href="/website-mit-ki-durchsuchen" className="mt-6 inline-block py-2 font-medium underline underline-offset-4">Website mit KI durchsuchen: Anleitung und Beispielfragen</Link>
         </div>
       </MaxWidthWrapper>

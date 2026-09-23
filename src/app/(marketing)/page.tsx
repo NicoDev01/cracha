@@ -6,6 +6,9 @@ import PreviewLanding from "@/components/landing/sections/preview-landing";
 import ProductShowcase from "@/components/landing/sections/product-showcase";
 import CanvasSection from "@/components/landing/sections/canvas";
 import { SectionWrapper } from "@/components/landing/ui/section-wrapper";
+import { JsonLd } from "@/components/landing/json-ld";
+import { landingFaq } from "@/lib/marketing/faq";
+import { faqPageJsonLd } from "@/lib/marketing/structured-data";
 
 /**
  * The landing page is served at "/" itself. It used to sit at /home behind a
@@ -16,6 +19,8 @@ import { SectionWrapper } from "@/components/landing/ui/section-wrapper";
 export default function IndexPage() {
   return (
     <>
+      {/* Same array as the FAQ rendered in GettingStarted. */}
+      <JsonLd data={faqPageJsonLd(landingFaq)} />
       <HeroLanding />
       <SectionWrapper>
         <PreviewLanding />

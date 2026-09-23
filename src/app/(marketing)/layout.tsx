@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 
 import { SiteShell } from "@/components/landing/layout/site-shell";
+import { JsonLd } from "@/components/landing/json-ld";
 import { siteConfig } from "@/config/site";
+import { organizationJsonLd, softwareApplicationJsonLd } from "@/lib/marketing/structured-data";
 
 /**
  * The landing page had a title and a description and nothing else. Shared in
@@ -42,28 +44,13 @@ export const metadata: Metadata = {
   },
 };
 
-/**
- * Tells a search engine what kind of thing this page is about. Static, so it
- * costs a few hundred bytes of HTML and no runtime.
- */
-const structuredData = {
-  "@context": "https://schema.org",
-  "@type": "SoftwareApplication",
-  name: siteConfig.name,
-  url: siteConfig.url,
-  applicationCategory: "BusinessApplication",
-  operatingSystem: "Web",
-  inLanguage: "de",
-  description: siteConfig.description,
-};
-
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
-      />
+      {/* Site-wide: who runs CraCha and what it costs. Page-specific FAQPage
+          markup is rendered by the page that shows the questions. */}
+      <JsonLd data={organizationJsonLd} />
+      <JsonLd data={softwareApplicationJsonLd} />
       <SiteShell>{children}</SiteShell>
     </>
   );
