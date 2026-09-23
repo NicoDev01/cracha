@@ -6,7 +6,7 @@ import { InfiniteSlider } from "@/components/landing/ui/infinite-slider";
 
 const logos = [
   {
-    title: "Next.js 15",
+    title: "Next.js",
     href: "https://nextjs.org/",
     icon: (
       <svg role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" className="h-6 w-auto sm:h-[32px]">
@@ -68,24 +68,6 @@ const logos = [
           fill="currentColor"
         />
       </svg>
-    ),
-  },
-  {
-    title: "Auth.js",
-    href: "https://authjs.dev/",
-    icon: (
-      <div className="flex items-center gap-x-1.5">
-        <svg
-          viewBox="0 0 24 24"
-          fill="currentColor"
-          stroke="currentColor"
-          strokeWidth="1"
-          className="size-6 sm:size-[32px]"
-        >
-          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-        </svg>
-        <span className="text-[16px] font-bold tracking-tight sm:text-[20px]">Auth.js</span>
-      </div>
     ),
   },
   {
