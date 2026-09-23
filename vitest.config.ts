@@ -14,6 +14,7 @@ export default defineConfig({
     // React Server Component. The package ships an empty build for exactly this.
     server: { deps: { inline: ['server-only'] } },
     // The Worker in workers/rag-api ships its own vitest project.
-    include: ['src/**/*.test.ts', 'scripts/**/*.test.ts'],
+    // Component tests (*.test.tsx) opt into jsdom per file.
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'scripts/**/*.test.ts'],
   },
 })
