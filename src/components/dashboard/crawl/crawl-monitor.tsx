@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { chatHref } from "@/lib/databases"
 import { cn } from "@/lib/utils"
 import { useCrawlStore, type CrawlJob, type CrawlPhase } from "@/stores/crawl-store"
+import { crawlProgressLabel } from "./crawl-progress"
 
 const phaseOrder: CrawlPhase[] = ["queued", "crawling", "indexing", "completed"]
 const phases = [
@@ -87,15 +88,7 @@ export function CrawlMonitor() {
   const determinate = !terminal && currentJob.phase === "indexing" && percent > 0
   // The reader pays for a product, not for an architecture: no service names,
   // no pipeline stages, only what their own website is doing in plain words.
-  const progressLabel = currentJob.phase === "queued"
-    ? "Wird gestartet"
-    : currentJob.phase === "indexing"
-      ? (progress?.current ?? 0) === 0
-        ? "Seiten werden aufbereitet"
-        : `${progress?.current ?? 0} von ${progress?.total ?? currentJob.pages_crawled} Seiten bereit`
-      : (progress?.current ?? 0) === 0
-        ? "Seiten werden gesucht"
-        : `${progress?.current ?? 0} Seiten erfasst`
+  const progressLabel = crawlProgressLabel(currentJob)
 
   const handleCancel = async () => {
     try {
