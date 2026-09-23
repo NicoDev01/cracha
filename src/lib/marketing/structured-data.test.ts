@@ -5,7 +5,7 @@ import { landingFaq } from '@/lib/marketing/faq'
 import { faqPageJsonLd, serializeJsonLd, softwareApplicationJsonLd } from '@/lib/marketing/structured-data'
 
 describe('structured data', () => {
-  it('offers exactly the credit packs the pricing section shows', () => {
+  it('offers exactly the credit packs of the tariff', () => {
     expect(softwareApplicationJsonLd.offers).toHaveLength(CREDIT_PACKAGES.length)
     expect(softwareApplicationJsonLd.offers.map((offer) => [offer.price, offer.priceCurrency])).toEqual([
       ['10.00', 'EUR'],
@@ -22,6 +22,13 @@ describe('structured data', () => {
       name: landingFaq[0].question,
       acceptedAnswer: { '@type': 'Answer', text: landingFaq[0].answer },
     })
+  })
+
+  it('states the price in one FAQ answer', () => {
+    const cost = landingFaq.filter((item) => item.answer.includes('kein Abo'))
+    expect(cost).toHaveLength(1)
+    expect(cost[0].answer).toContain('100 Start-Credits gratis')
+    expect(cost[0].answer).toMatch(/ab 10\s€/)
   })
 
   it('cannot close the script tag it is embedded in', () => {

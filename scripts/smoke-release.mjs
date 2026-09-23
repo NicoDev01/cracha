@@ -6,11 +6,11 @@ async function check() {
   const response = await fetch(new URL('/api/version', origin), { cache: 'no-store', signal: AbortSignal.timeout(15000) });
   const version = await response.json();
   if (!response.ok || !version.release || (expected && version.release !== expected)) throw new Error('Wrong release is serving the public domain');
-  for (const path of ['/', '/register', '/widerrufsbelehrung', '/nutzungsbedingungen']) {
+  for (const path of ['/', '/beispiele', '/register', '/widerrufsbelehrung', '/nutzungsbedingungen']) {
     const response = await fetch(new URL(path, origin), { cache: 'no-store', signal: AbortSignal.timeout(15000) });
     const html = await response.text();
     if (!response.ok || !html.includes('<title>')) throw new Error(`Page unavailable: ${path}`);
-    if (path === '/' && (!html.includes('1.250') || !html.includes('25,00') || !html.includes('kein Abonnement'))) throw new Error('Landing page does not contain the current credit tariff');
+    if (path === '/' && (!html.includes('Verwandle jede Website') || !html.includes('kein Abo'))) throw new Error('Landing page does not show the current headline and pricing FAQ');
   }
   return version.release;
 }

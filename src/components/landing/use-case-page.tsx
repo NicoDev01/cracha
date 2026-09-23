@@ -39,7 +39,7 @@ export function UseCasePage({ content }: { content: UseCaseContent }) {
           <AppEntryLink signedOutHref="/register" className={ctaClass}>Kostenlos starten</AppEntryLink>
           <Link href="#so-gehts" className="inline-flex min-h-11 items-center rounded-full border px-6 py-3 font-medium hover:bg-muted">So geht’s</Link>
         </div>
-        <p className="mt-4 text-sm text-muted-foreground">100 Start-Credits gratis · Keine Kreditkarte nötig · Auf Deutsch</p>
+        <p className="mt-4 text-sm text-muted-foreground">100 Start-Credits gratis · Keine Kreditkarte nötig</p>
       </header>
 
       <section className="grid gap-4 sm:grid-cols-2">
@@ -79,7 +79,7 @@ export function UseCasePage({ content }: { content: UseCaseContent }) {
         <h2 className="mb-4 text-2xl font-semibold">Häufige Fragen</h2>
         <FaqList items={content.faq} />
         <p className="mt-6 leading-7 text-muted-foreground">
-          Mehr zu Kosten und Ablauf: <Link href="/#kosten" className="underline underline-offset-4">Kosten und häufige Fragen</Link> ·{" "}
+          Mehr zu Kosten und Ablauf: <Link href="/#fragen" className="underline underline-offset-4">Kosten und häufige Fragen</Link> ·{" "}
           <Link href="/website-mit-ki-durchsuchen" className="underline underline-offset-4">Anleitung mit Beispielfragen</Link>
         </p>
       </section>

@@ -3,7 +3,7 @@ import ExamplesTeaser from "@/components/landing/sections/examples-teaser";
 import Features from "@/components/landing/sections/features";
 import HeroLanding from "@/components/landing/sections/hero-landing";
 import Powered from "@/components/landing/sections/powered";
-import GettingStarted from "@/components/landing/sections/getting-started";
+import FaqSection from "@/components/landing/sections/faq-section";
 import PreviewLanding from "@/components/landing/sections/preview-landing";
 import ProductShowcase from "@/components/landing/sections/product-showcase";
 import CanvasSection from "@/components/landing/sections/canvas";
@@ -21,7 +21,7 @@ import { faqPageJsonLd } from "@/lib/marketing/structured-data";
 export default function IndexPage() {
   return (
     <>
-      {/* Same array as the FAQ rendered in GettingStarted. */}
+      {/* Same array as the FAQ rendered in FaqSection. */}
       <JsonLd data={faqPageJsonLd(landingFaq)} />
       <HeroLanding />
       <SectionWrapper>
@@ -43,7 +43,7 @@ export default function IndexPage() {
         <Features />
       </SectionWrapper>
       <SectionWrapper>
-        <GettingStarted />
+        <FaqSection />
       </SectionWrapper>
       <SectionWrapper>
         <CanvasSection />

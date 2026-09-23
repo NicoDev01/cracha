@@ -57,7 +57,7 @@ export default function WebsiteGuide() {
       <section className="space-y-4">
         <h2 className="text-2xl font-semibold">Das Startguthaben für den ganzen Ablauf nutzen</h2>
         <p className="leading-7 text-muted-foreground">100 Start-Credits reichen beispielsweise für 20 indexierte Seiten und danach bis zu 16 Antworten: 20 × 1 Credit + 16 × 5 Credits = 100 Credits. Wer zuerst 100 Seiten einliest, hat dagegen kein Startguthaben mehr für Fragen. Ein erneutes Einlesen verbraucht ebenfalls Credits.</p>
-        <Link href="/#kosten" className="inline-block underline underline-offset-4">Kosten und häufige Fragen ansehen</Link>
+        <Link href="/#fragen" className="inline-block underline underline-offset-4">Kosten und häufige Fragen ansehen</Link>
       </section>
       <section className="space-y-4">
         <h2 className="text-2xl font-semibold">Grenzen bewusst prüfen</h2>

@@ -50,8 +50,8 @@ export function NavBar({ scroll = false }: NavBarProps) {
       href: "/#why-cracha",
     },
     {
-      title: "Kosten & Fragen",
-      href: "/#kosten",
+      title: "Fragen & Kosten",
+      href: "/#fragen",
     },
     {
       title: "Anleitung",

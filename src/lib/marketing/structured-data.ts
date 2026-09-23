@@ -35,7 +35,7 @@ export const softwareApplicationJsonLd = {
     name: `${pack.label}: ${pack.credits.toLocaleString("de-DE")} Credits`,
     price: (pack.priceCents / 100).toFixed(2),
     priceCurrency: "EUR",
-    url: `${siteConfig.url}/#kosten`,
+    url: `${siteConfig.url}/#fragen`,
   })),
 };
 
