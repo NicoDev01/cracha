@@ -42,6 +42,10 @@ export function NavBar({ scroll = false }: NavBarProps) {
       href: "/#how-to-use",
     },
     {
+      title: "Beispiele",
+      href: "/beispiele",
+    },
+    {
       title: "Warum CraCha?",
       href: "/#why-cracha",
     },

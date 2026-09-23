@@ -51,6 +51,11 @@ export function SiteFooter({ className }: React.HTMLAttributes<HTMLElement>) {
               </Link>
             </li>
             <li>
+              <Link href="/beispiele" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+                Beispiele
+              </Link>
+            </li>
+            <li>
               <Link href="/#why-cracha" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
                 Warum CraCha?
               </Link>
@@ -63,16 +68,6 @@ export function SiteFooter({ className }: React.HTMLAttributes<HTMLElement>) {
             <li>
               <Link href="/website-mit-ki-durchsuchen" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
                 Anleitung
-              </Link>
-            </li>
-            <li>
-              <Link href="/kundenwebsite-durchsuchen" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-                Für Agenturen
-              </Link>
-            </li>
-            <li>
-              <Link href="/dokumentation-durchsuchen" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-                Für Entwickler
               </Link>
             </li>
           </ul>

@@ -32,6 +32,7 @@ export default function WebsiteGuide() {
           <li><Link href="/kundenwebsite-durchsuchen" className="font-medium text-foreground underline underline-offset-4">Kundenwebsite durchsuchen</Link>: für Agenturen und Marketing-Teams, die sich schnell in die Website eines Kunden einarbeiten wollen.</li>
           <li><Link href="/dokumentation-durchsuchen" className="font-medium text-foreground underline underline-offset-4">Dokumentation durchsuchen</Link>: für Entwicklerinnen und Entwickler, die große Docs gezielt befragen wollen.</li>
         </ul>
+        <p className="leading-7 text-muted-foreground">Weitere Anregungen – vom Hilfe-Center bis zur Hochschul-Website – findest du unter <Link href="/beispiele" className="underline underline-offset-4">Beispiele zur Nutzung</Link>.</p>
       </section>
       <section className="space-y-5">
         <h2 className="text-2xl font-semibold">Von der Website zur ersten prüfbaren Antwort</h2>

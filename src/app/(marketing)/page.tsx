@@ -1,4 +1,5 @@
 import BentoGrid from "@/components/landing/sections/bentogrid";
+import ExamplesTeaser from "@/components/landing/sections/examples-teaser";
 import Features from "@/components/landing/sections/features";
 import HeroLanding from "@/components/landing/sections/hero-landing";
 import Powered from "@/components/landing/sections/powered";
@@ -6,7 +7,6 @@ import GettingStarted from "@/components/landing/sections/getting-started";
 import PreviewLanding from "@/components/landing/sections/preview-landing";
 import ProductShowcase from "@/components/landing/sections/product-showcase";
 import CanvasSection from "@/components/landing/sections/canvas";
-import UseCases from "@/components/landing/sections/use-cases";
 import { SectionWrapper } from "@/components/landing/ui/section-wrapper";
 import { JsonLd } from "@/components/landing/json-ld";
 import { landingFaq } from "@/lib/marketing/faq";
@@ -31,10 +31,10 @@ export default function IndexPage() {
         <Powered />
       </SectionWrapper>
       <SectionWrapper>
-        <UseCases />
+        <BentoGrid />
       </SectionWrapper>
       <SectionWrapper>
-        <BentoGrid />
+        <ExamplesTeaser />
       </SectionWrapper>
       <SectionWrapper>
         <ProductShowcase />

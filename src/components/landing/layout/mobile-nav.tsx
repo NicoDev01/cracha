@@ -165,8 +165,7 @@ export function NavMobile() {
                             Anleitung
                         </Link>
                         {[
-                            { href: "/kundenwebsite-durchsuchen", title: "Für Agenturen" },
-                            { href: "/dokumentation-durchsuchen", title: "Für Entwickler" },
+                            { href: "/beispiele", title: "Beispiele" },
                         ].map((item) => (
                             <Link
                                 key={item.href}
