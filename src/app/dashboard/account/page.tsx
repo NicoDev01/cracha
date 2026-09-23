@@ -7,6 +7,8 @@ import { Input } from '@/components/ui/input'
 import { useAuthStore } from '@/stores/auth-store'
 import { createClient } from '@/lib/supabase/client'
 import { siteConfig } from '@/config/site'
+import { DeleteAccountDialog } from '@/components/dashboard/account/delete-account-dialog'
+import { finishAccountDeletion } from '@/lib/account/finish-account-deletion'
 
 function AccountForm({ user }: { user: ReturnType<typeof useAuthStore.getState>['user'] }) {
   const [name, setName] = useState<string | null>(null)
@@ -73,10 +75,15 @@ export default function AccountPage() {
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Hilfe & Kontolöschung</h2>
+        <h2 className="text-lg font-semibold">Hilfe</h2>
         <a href={`mailto:${siteConfig.mailSupport}`} className="block underline">Support kontaktieren</a>
-        <p className="text-sm">Für eine Datenkopie oder die Löschung deines Kontos schreibe uns von deiner Konto-E-Mail-Adresse. Gesetzlich aufzubewahrende Zahlungsbelege bleiben davon ausgenommen. Die Anfrage öffnet dein E-Mail-Programm; dein Konto wird dadurch noch nicht gelöscht.</p>
-        <a href={`mailto:${siteConfig.mailSupport}?subject=${encodeURIComponent('CraCha: Kontolöschung anfragen')}`} className="inline-block text-red-600 underline">Kontolöschung anfragen</a>
+        <p className="text-sm">Für eine Kopie deiner Daten schreibe uns von deiner Konto-E-Mail-Adresse.</p>
+      </section>
+
+      <section className="space-y-3 rounded-2xl border border-error-600/40 p-6">
+        <h2 className="text-lg font-semibold">Konto löschen</h2>
+        <p className="text-sm">Löscht dein Konto mit allen Wissensbasen, deinem Verlauf und deinem restlichen Guthaben sofort und endgültig. Gesetzlich aufzubewahrende Zahlungsbelege bleiben ohne Bezug zu deinem Konto erhalten.</p>
+        <DeleteAccountDialog onDeleted={finishAccountDeletion} />
       </section>
     </div>
   )

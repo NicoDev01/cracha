@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import "./home/globals.css";
+import { AccountDeletedNotice } from "@/components/account-deleted-notice";
 import { siteConfig } from "@/config/site";
 
 /**
@@ -51,6 +53,9 @@ export default function RootLayout({ children }: RootLayoutProps) {
       </head>
       <body suppressHydrationWarning>
         {children}
+        <Suspense fallback={null}>
+          <AccountDeletedNotice />
+        </Suspense>
       </body>
     </html>
   );

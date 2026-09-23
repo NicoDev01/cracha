@@ -39,7 +39,9 @@ for path in [
     "supabase/migrations/20260920090000_billing_guards.sql",
     "supabase/migrations/20260920091000_signup_email_guard.sql",
     "supabase/migrations/20260920100000_database_quota_guards.sql",
+    "supabase/migrations/20260923120000_account_self_deletion.sql",
     "supabase/tests/billing-assertions.sql",
+    "supabase/tests/account-deletion-assertions.sql",
 ]:
     sql(Path(path).read_text(encoding="utf-8"))
 
