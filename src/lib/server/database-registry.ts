@@ -21,7 +21,7 @@ export const DEFAULT_CRAWL_SETTINGS: CrawlSettings = {
   limit: 100,
   include_patterns: [],
   exclude_patterns: [],
-  respect_robots_txt: true,
+  respect_robots_txt: false,
 }
 
 export interface DatabaseRecord {
@@ -77,7 +77,7 @@ export function normalizeCrawlSettings(value: unknown): CrawlSettings | undefine
     limit: Number.isFinite(limit) ? Math.min(Math.max(Math.floor(limit), 1), 500) : 100,
     include_patterns: patternList(raw.include_patterns),
     exclude_patterns: patternList(raw.exclude_patterns),
-    respect_robots_txt: raw.respect_robots_txt !== false,
+    respect_robots_txt: raw.respect_robots_txt === true,
   }
 }
 

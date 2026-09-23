@@ -245,7 +245,7 @@ export default function DatenschutzPage() {
             </>,
             <>
               Die Angaben der Datei <code className="rounded bg-foreground/10 px-1 py-0.5 text-sm">robots.txt</code>{" "}
-              werden standardmäßig beachtet.
+              werden auf Wunsch beachtet (Einstellung beim Einlesen).
             </>,
             <>
               Wähle nur Inhalte, die du rechtmäßig abrufen und auswerten darfst. Die datenschutzrechtlichen Pflichten hängen vom Inhalt und deinem Nutzungszweck ab. Näheres regeln die{" "}

@@ -38,16 +38,16 @@ describe('re-crawl settings', () => {
         limit: 100,
         include_patterns: [],
         exclude_patterns: [],
-        respect_robots_txt: true,
+        respect_robots_txt: false,
       })
   })
 
-  it('keeps a deliberate false for robots.txt instead of reading it as absent', () => {
+  it('keeps a deliberate true for robots.txt instead of reading it as absent', () => {
     const resolved = resolveCrawlSettings(
-      { url: 'https://example.com', database_id: 'kb', respect_robots_txt: false },
+      { url: 'https://example.com', database_id: 'kb', respect_robots_txt: true },
       undefined,
     )
-    expect(resolved.respect_robots_txt).toBe(false)
+    expect(resolved.respect_robots_txt).toBe(true)
   })
 })
 

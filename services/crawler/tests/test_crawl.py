@@ -632,3 +632,49 @@ def test_the_http_path_files_a_page_under_its_canonical_url() -> None:
 
     assert page is not None
     assert page.url == "https://example.com/preise-2026"
+
+
+def test_links_in_the_article_come_before_the_menus_around_it() -> None:
+    # A Wikipedia crawl with a 20-page limit spent all of it on the sidebar,
+    # because the sidebar comes first in the markup.
+    document = """
+    <html><body>
+      <div id="sidebar"><a href="/wiki/Hauptseite">Hauptseite</a><a href="/wiki/Xbox">Xbox</a></div>
+      <main>
+        <nav><a href="/wiki/Diskussion:Halo">Diskussion</a></nav>
+        <p>Die Reihe umfasst <a href="/wiki/Publisher">Publisher</a>,
+        <a href="/wiki/Halo_2">Halo 2</a> und <a href="/wiki/Halo:_Reach">Halo: Reach</a>.</p>
+      </main>
+    </body></html>
+    """
+    request = CrawlRequest(
+        url="https://de.wikipedia.org/wiki/Halo_(Computerspielreihe)", tenant_id="t", user_id="u"
+    )
+    _page, links = crawl._html_page(document.encode(), str(request.url), 0, request)
+
+    assert links == [
+        "https://de.wikipedia.org/wiki/Halo_2",
+        "https://de.wikipedia.org/wiki/Halo:_Reach",
+        "https://de.wikipedia.org/wiki/Publisher",
+        "https://de.wikipedia.org/wiki/Hauptseite",
+        "https://de.wikipedia.org/wiki/Xbox",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("url", "meta"),
+    [
+        ("https://de.wikipedia.org/wiki/Spezial:Suche", True),
+        ("https://de.wikipedia.org/wiki/Hilfe:%C3%9Cbersicht", True),
+        ("https://de.wikipedia.org/wiki/Benutzer_Diskussion:Beispiel", True),
+        ("https://en.wikipedia.org/wiki/User_talk:Example", True),
+        ("https://de.wikipedia.org/w/index.php?title=Halo&action=edit", True),
+        ("https://de.wikipedia.org/wiki/Halo:_Campaign?action=edit&redlink=1", True),
+        ("https://halo.fandom.com/de/wiki/Spezial:Alle_Seiten", True),
+        ("https://de.wikipedia.org/wiki/Halo:_Reach", False),
+        ("https://de.wikipedia.org/wiki/Halo_2", False),
+        ("https://example.com/help:center", False),
+    ],
+)
+def test_wiki_housekeeping_pages_are_recognised(url: str, meta: bool) -> None:
+    assert crawl._wiki_meta_page(url) is meta

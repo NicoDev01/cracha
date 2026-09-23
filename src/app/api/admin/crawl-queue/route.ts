@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
         ...stringList(body.exclude_patterns),
         ...stringList(body.exclude_domains).map((domain) => `*://${domain}/*`),
       ].slice(0, 20),
-      respect_robots_txt: body.respect_robots_txt !== false,
+      respect_robots_txt: body.respect_robots_txt === true,
     }
     const result = await enqueueCrawl(input, user.id)
     return NextResponse.json({

@@ -20,7 +20,7 @@ class CrawlRequest(BaseModel):
     limit: int = Field(default=100, ge=1, le=500)
     include_patterns: list[str] = Field(default_factory=list, max_length=20)
     exclude_patterns: list[str] = Field(default_factory=list, max_length=20)
-    respect_robots_txt: bool = True
+    respect_robots_txt: bool = False
 
     @field_validator("tenant_id", "user_id")
     @classmethod

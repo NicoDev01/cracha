@@ -88,7 +88,7 @@ export function CrawlConfigForm({
       limit: initialValues?.limit ?? 20,
       include_patterns: initialValues?.include_patterns ?? "",
       exclude_domains: initialValues?.exclude_domains ?? "",
-      respect_robots_txt: initialValues?.respect_robots_txt ?? true,
+      respect_robots_txt: initialValues?.respect_robots_txt ?? false,
       crawl_all: initialValues?.crawl_all ?? false,
     },
   })

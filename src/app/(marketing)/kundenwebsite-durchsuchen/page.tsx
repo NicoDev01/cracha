@@ -67,7 +67,7 @@ const content: UseCaseContent = {
   ],
   limits: [
     "CraCha liest nur öffentlich erreichbare HTML-Seiten ein. Login-Bereiche, Paywalls und PDF-Dateien gehören nicht dazu.",
-    "Die robots.txt der Website wird standardmäßig beachtet; dort gesperrte Bereiche fehlen dann in der Wissensbasis.",
+    "Die robots.txt der Website kannst du beim Einlesen beachten lassen; dort gesperrte Bereiche fehlen dann in der Wissensbasis.",
     "Pro Einlesevorgang sind bis zu 500 Seiten möglich, sofern sie erreichbar sind und dein Guthaben reicht.",
     "CraCha arbeitet mit dem Stand des Einlesens. Ändert der Kunde seine Website, liest du sie erneut ein; das verbraucht wieder Credits.",
     "Ein Chatwidget, das du auf der Kundenwebsite einbinden kannst, ist nicht enthalten.",
@@ -77,7 +77,7 @@ const content: UseCaseContent = {
     {
       question: "Darf ich die Website eines Kunden mit CraCha einlesen?",
       answer:
-        "CraCha ruft nur öffentlich erreichbare Seiten ab und beachtet standardmäßig die robots.txt. Ob du die Inhalte für deinen Zweck auswerten darfst, hängt von deinem Auftrag und den Inhalten ab; im Zweifel sprich es mit deinem Kunden ab. Näheres regeln die Nutzungsbedingungen.",
+        "CraCha ruft nur öffentlich erreichbare Seiten ab und beachtet auf Wunsch die robots.txt. Ob du die Inhalte für deinen Zweck auswerten darfst, hängt von deinem Auftrag und den Inhalten ab; im Zweifel sprich es mit deinem Kunden ab. Näheres regeln die Nutzungsbedingungen.",
     },
     {
       question: "Was kostet das für eine typische Kundenwebsite?",

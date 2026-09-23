@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from urllib import robotparser
-from urllib.parse import urljoin, urlsplit, urlunsplit
+from urllib.parse import parse_qs, unquote, urljoin, urlsplit, urlunsplit
 
 import httpx
 from defusedxml import ElementTree as ET
@@ -112,6 +112,94 @@ def _fetch_failed(error: Exception) -> bool:
 
 def _wanted(url: str, request: CrawlRequest) -> bool:
     return matches_patterns(url, request.include_patterns, request.exclude_patterns)
+
+
+# Wiki pages about the wiki rather than about the topic. A crawl of the Halo
+# article on de.wikipedia.org spent its whole 20-page limit on these, because
+# the sidebar and the page tools come before the article in the markup.
+WIKI_META_NAMESPACES = frozenset(
+    {
+        "spezial", "special", "hilfe", "help", "wikipedia", "portal", "project",
+        "diskussion", "talk", "benutzer", "user", "benutzerin", "datei", "file",
+        "vorlage", "template", "kategorie", "category", "mediawiki", "modul",
+        "module", "medium", "media",
+    }
+)
+WIKI_META_QUERY_KEYS = frozenset(
+    {"action", "veaction", "oldid", "diff", "printable", "redlink"}
+)
+
+
+def _wiki_meta_page(url: str) -> bool:
+    parts = urlsplit(url)
+    path = unquote(parts.path)
+    query = parse_qs(parts.query)
+    wiki = path.endswith("/index.php") or "/wiki/" in path
+    # Edit forms, old revisions and red links to articles that do not exist.
+    if wiki and WIKI_META_QUERY_KEYS & query.keys():
+        return True
+    if path.endswith("/index.php"):
+        title = (query.get("title") or [""])[0]
+    elif wiki:
+        title = path.split("/wiki/", 1)[1]
+    else:
+        return False
+    if ":" not in title:
+        return False
+    prefix = title.split(":", 1)[0].replace("_", " ").strip().lower()
+    return prefix in WIKI_META_NAMESPACES or prefix.endswith((" diskussion", " talk"))
+
+
+def _content_links(html_text: str | bytes, base_url: str) -> list[str]:
+    """Links inside the page's main content, in document order.
+
+    A page's own links say what it is about; the menus around it say what the
+    site has. Breadth-first crawling takes links in document order, so menus
+    that come first in the markup used to fill the page limit before the first
+    link in the text was reached.
+    """
+    from lxml import etree, html
+
+    try:
+        document = html.fromstring(
+            html_text.encode("utf-8") if isinstance(html_text, str) else html_text
+        )
+    except (etree.ParserError, ValueError):
+        return []
+    roots = (
+        document.xpath("//main[1]")
+        or document.xpath("//*[@role='main'][1]")
+        or document.xpath("//article[1]")
+    )
+    if not roots:
+        return []
+    hrefs = roots[0].xpath(
+        ".//a[@href][not(ancestor::nav or ancestor::header or ancestor::footer"
+        " or ancestor::aside)]/@href"
+    )
+    return [canonical_url(urljoin(base_url, href)) for href in hrefs]
+
+
+def _slug_words(url: str) -> set[str]:
+    slug = unquote(urlsplit(url).path.rstrip("/").rsplit("/", 1)[-1]).lower()
+    return set(re.findall(r"[^\W_]{3,}", slug))
+
+
+def _discovery_order(
+    content_links: list[str], links: list[str], topic_url: str | None = None
+) -> list[str]:
+    """Content links first, then the rest, without wiki housekeeping pages.
+
+    Within the content, links that share a word with the start page's address
+    lead: from "Halo_(Computerspielreihe)" the Halo games come before the
+    infobox's "Publisher" and "Xbox". The sort is stable, so everything else
+    keeps its document order.
+    """
+    topic = _slug_words(topic_url) if topic_url else set()
+    content = sorted(
+        dict.fromkeys(content_links), key=lambda link: not (topic & _slug_words(link))
+    )
+    return [link for link in dict.fromkeys(content + links) if not _wiki_meta_page(link)]
 
 
 async def _sitemap_targets(
@@ -474,7 +562,11 @@ def _html_page(
 
     document = html.fromstring(content, base_url=url)
     title = " ".join(document.xpath("//title[1]//text()") or [url]).strip()[:500]
-    links = [canonical_url(urljoin(url, href)) for href in document.xpath("//a[@href]/@href")]
+    links = _discovery_order(
+        _content_links(content, url),
+        [canonical_url(urljoin(url, href)) for href in document.xpath("//a[@href]/@href")],
+        str(request.url),
+    )
     # Read before the JSON-LD script tags are dropped below.
     source = content.decode("utf-8", errors="ignore")
     published_at = extract_published_at(source)
@@ -886,7 +978,14 @@ async def _crawl4ai_pages(
                 filename = urlsplit(link_url).path.rsplit("/", 1)[-1]
                 if filename.lower().endswith(".html"):
                     rewritten_links.append(canonical_url(urljoin(prefix_url, filename)))
-        return rewritten_links + dom_links + discovered_links, embedded_links
+        return (
+            _discovery_order(
+                rewritten_links + _content_links(html, result_url or start_url),
+                dom_links + discovered_links,
+                start_url,
+            ),
+            embedded_links,
+        )
 
     async def consume(results, depth: int = 0) -> tuple[list[str], list[str]]:
         discovered_links: list[str] = []

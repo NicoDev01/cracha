@@ -132,7 +132,10 @@ export async function enqueueCrawl(input: CrawlInput, userId: string) {
 
   const env = getWorkerEnv()
   if (!env.MODAL_CRAWLER_URL || !env.CRAWLER_API_SECRET) throw new Error('Crawler-Service ist nicht konfiguriert.')
-  const healthResponse = await fetch(`${env.MODAL_CRAWLER_URL.replace(/\/$/, '')}/health`, { signal: AbortSignal.timeout(5000) })
+  // A cold crawler container takes longer than five seconds to answer, and that
+  // limit failed the crawl with a bare "The operation was aborted due to timeout".
+  const healthResponse = await fetch(`${env.MODAL_CRAWLER_URL.replace(/\/$/, '')}/health`, { signal: AbortSignal.timeout(30_000) })
+    .catch(() => { throw new Error('Der Crawler ist gerade nicht erreichbar. Bitte versuche es in einer Minute erneut.') })
   const health = await healthResponse.json() as { billing_protocol?: number; settlement_configured?: boolean }
   if (!healthResponse.ok || health?.billing_protocol !== 1 || health?.settlement_configured !== true) throw new Error('Der Crawler ist noch nicht für die Guthabenabrechnung eingerichtet. Bitte kontaktiere den Support.')
   const name = input.database_name?.trim()
