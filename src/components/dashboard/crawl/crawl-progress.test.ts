@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { CrawlJob } from '@/stores/crawl-store'
 
-import { crawlPageLimit, crawlProgressLabel } from './crawl-progress'
+import { crawlPageLimit, crawlProgressLabel, crawlResultLabel } from './crawl-progress'
 
 type Job = Pick<CrawlJob, 'phase' | 'page_limit' | 'progress' | 'pages_crawled'>
 const job = (overrides: Partial<Job>): Job => ({ phase: 'crawling', pages_crawled: 0, ...overrides })
@@ -33,5 +33,19 @@ describe('crawlProgressLabel', () => {
   it('formats large numbers the German way', () => {
     expect(crawlProgressLabel(job({ page_limit: 1500, progress: { stage: 'crawling', current: 1200, total: 1500, percent: 80 } })))
       .toBe('1.200 von max. 1.500 Seiten erfasst')
+  })
+})
+
+describe('crawlResultLabel', () => {
+  it('shows the pages in the knowledge base', () => {
+    expect(crawlResultLabel({ indexed_pages: 13, pages_crawled: 13, pages_skipped: 0 })).toBe('13 Seiten in der Wissensbasis')
+  })
+
+  it('mentions skipped pages only when there are any', () => {
+    expect(crawlResultLabel({ indexed_pages: 1, pages_crawled: 1, pages_skipped: 2 })).toBe('1 Seite in der Wissensbasis · 2 übersprungen')
+  })
+
+  it('falls back to the fetched pages for jobs recorded with 0 indexed', () => {
+    expect(crawlResultLabel({ indexed_pages: 0, pages_crawled: 13, pages_skipped: 0 })).toBe('13 Seiten in der Wissensbasis')
   })
 })

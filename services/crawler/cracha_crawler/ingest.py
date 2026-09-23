@@ -321,7 +321,9 @@ class RagIngestClient:
             # half an hour of waiting for statuses that never flipped.
             if total > 0 and latest.searchable_count >= total:
                 if searchable_streak >= 1:
-                    return replace(latest, complete=True)
+                    # Every page counts as indexed here: the reported count is
+                    # what the crawl bills, and it must not read 0 of 13.
+                    return replace(latest, complete=True, indexed_count=total, pending_count=0)
                 searchable_streak += 1
                 # The confirming poll is the last thing between a finished
                 # index and the user, so it does not wait out a backoff that

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { useCrawlStore, type CrawlJob } from "@/stores/crawl-store"
+import { crawlResultLabel } from "./crawl-progress"
 
 const modeCopy = {
   single: { label: "Einzelseite", icon: File },
@@ -99,7 +100,7 @@ export function CrawlJobsList() {
                 <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">{hostname(job.url)}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-400">
                   <span>{mode.label}</span>
-                  {job.status === "completed" && <span>{job.pages_crawled} abgerufen · {job.indexed_pages ?? "–"} indexiert · {job.pages_skipped} übersprungen</span>}
+                  {job.status === "completed" && <span>{crawlResultLabel(job)}</span>}
                   <span>{formatDuration(job)}</span>
                   <span>{formatDate(job.created_at)}</span>
                 </div>

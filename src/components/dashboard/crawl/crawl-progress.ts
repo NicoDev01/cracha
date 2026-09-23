@@ -32,3 +32,15 @@ export function crawlProgressLabel(job: Pick<CrawlJob, 'phase' | 'page_limit' | 
     ? `${number.format(current)} von max. ${number.format(limit)} Seiten erfasst`
     : `${number.format(current)} Seiten erfasst`
 }
+
+/**
+ * The one figure a finished crawl shows: how many pages the knowledge base
+ * holds. A completed crawl always has searchable pages, so a 0 can only come
+ * from a job recorded before the indexed count was fixed; it falls back to the
+ * pages that were handed to the index.
+ */
+export function crawlResultLabel(job: Pick<CrawlJob, 'indexed_pages' | 'pages_crawled' | 'pages_skipped'>): string {
+  const pages = job.indexed_pages || job.pages_crawled
+  const label = `${number.format(pages)} ${pages === 1 ? 'Seite' : 'Seiten'} in der Wissensbasis`
+  return job.pages_skipped > 0 ? `${label} · ${number.format(job.pages_skipped)} übersprungen` : label
+}

@@ -200,6 +200,9 @@ async def test_full_coverage_on_two_polls_finishes_without_status_flips(no_sleep
 
     assert result.complete is True
     assert result.searchable_count == 3
+    # The indexed count is what the crawl bills and what the reader sees.
+    assert result.indexed_count == 3
+    assert result.pending_count == 0
 
 
 @pytest.mark.asyncio
