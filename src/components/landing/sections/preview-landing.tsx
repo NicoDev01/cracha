@@ -1,42 +1,46 @@
 "use client";
 
-import Image from "next/image";
-
-import { useTheme } from "@/components/dashboard/context/ThemeContext";
+import { useEffect, useRef } from "react";
 
 /**
- * The screenshot of the product, in the theme the visitor is actually looking
- * at.
+ * The promo film from `video/` under the hero: crawl, knowledge base, chat in
+ * 33 seconds, which says more than the dashboard screenshot that sat here.
  *
- * This used to render both screenshots and hide one with `dark:hidden`. CSS
- * decides what is painted, not what is fetched, so every visitor downloaded
- * both — 324 KB of PNG to show one picture, and the visible one was the
- * largest contentful paint. One image, and as WebP at the width it is actually
- * displayed, it is 26 KB.
+ * The file in public/videos is a web encode of `video/out/cracha-promo.mp4`
+ * (H.264, CRF 26, faststart, no audio track), ~4 MB instead of 11 MB. The
+ * poster is its first frame, so nothing jumps when playback starts.
+ *
+ * It plays muted and in a loop like an animated image. Visitors who asked for
+ * reduced motion get the paused film with controls instead.
  */
 export default function PreviewLanding() {
-  const { theme } = useTheme();
-  const dark = theme === "dark";
+  const ref = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const video = ref.current;
+    if (video && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      video.pause();
+      video.controls = true;
+    }
+  }, []);
 
   return (
-    <div className="mx-auto max-w-7xl mb-3 [mask-image:linear-gradient(to_bottom,black_50%,transparent_100%)]">
-      <div className="[perspective:1200px] -mr-16 pl-16 lg:-mr-56 lg:pl-56">
-        <div className="[transform:rotateX(20deg);]">
-          <div className="lg:h-[44rem] relative skew-x-[.36rad] overflow-hidden rounded-3xl [mask-image:linear-gradient(to_right,black_30%,transparent_100%)]">
-            <Image
-              className="z-[2] relative"
-              src={dark ? "/images/hero/dashboard-dark.webp" : "/images/hero/dashboard-light.webp"}
-              alt="Das CraCha-Dashboard mit einer Wissensbasis und dem Chat"
-              width={1400}
-              height={dark ? 807 : 814}
-              priority
-              // The browser picks the source before layout, and this element is
-              // the LCP. Without it the fetch is queued behind the fonts.
-              fetchPriority="high"
-              sizes="(min-width: 1024px) 1400px, 100vw"
-            />
-          </div>
-        </div>
+    <div className="mx-auto mb-3 max-w-6xl px-4 sm:px-6 lg:px-8">
+      <div className="overflow-hidden rounded-2xl border bg-muted shadow-2xl shadow-indigo-500/10 sm:rounded-3xl">
+        <video
+          ref={ref}
+          className="block aspect-video w-full"
+          src="/videos/cracha-promo.mp4"
+          poster="/videos/cracha-promo-poster.webp"
+          width={1920}
+          height={1080}
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="auto"
+          aria-label="CraCha in 33 Sekunden: eine Website wird gecrawlt, zur Wissensbasis und im Chat mit Quellen befragt"
+        />
       </div>
     </div>
   );
