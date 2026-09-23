@@ -12,6 +12,7 @@ import {
   releaseCrawlCredits,
 } from './credits'
 import {
+  coordinatorCommand,
   createDatabase,
   DEFAULT_CRAWL_SETTINGS,
   getOwnedDatabase,
@@ -204,4 +205,57 @@ export async function enqueueCrawl(input: CrawlInput, userId: string) {
     database_id: database.id, page_limit: settings.limit,
     requested_page_limit: requested.limit, credits_held: crawlCost(settings.limit),
   }
+}
+
+export type CrawlCancellation = { ok: true } | { ok: false; stage: 'crawler' | 'settlement' }
+
+/**
+ * Stops a crawl at the crawler, lets the coordinator retire the job — it
+ * finishes every admitted index write first — and only then hands the hold
+ * back. The `crawl_job:` record stays in KV on any failure, so the same
+ * cancellation can simply be repeated.
+ *
+ * `finishedIsFine` accepts a crawler that says the job already ended (409).
+ * The cancel button treats that as a failure; deleting an account only needs
+ * the job to be no longer running.
+ */
+export async function cancelCrawlJob(
+  job: { jobId: string; databaseId?: string | null; holdReference?: string | null },
+  options: { finishedIsFine?: boolean; reason?: string } = {},
+): Promise<CrawlCancellation> {
+  const env = getWorkerEnv()
+  if (!env.MODAL_CRAWLER_URL || !env.CRAWLER_API_SECRET) return { ok: false, stage: 'crawler' }
+
+  let response: Response
+  try {
+    response = await fetch(`${env.MODAL_CRAWLER_URL.replace(/\/$/, '')}/cancel/${encodeURIComponent(job.jobId)}`, {
+      method: 'POST',
+      signal: AbortSignal.timeout(20_000),
+      headers: { Authorization: `Bearer ${env.CRAWLER_API_SECRET}` },
+    })
+  } catch {
+    return { ok: false, stage: 'crawler' }
+  }
+  const result = await response.json().catch(() => null) as { status?: unknown } | null
+  const stopped = (response.ok && result?.status === 'cancelled')
+    || response.status === 404
+    || (options.finishedIsFine === true && response.status === 409)
+  if (!stopped) return { ok: false, stage: 'crawler' }
+
+  try {
+    if (job.databaseId) {
+      await coordinatorCommand(job.databaseId, 'cancel-job', {
+        jobId: job.jobId,
+        reason: response.status === 404
+          ? 'Crawl-Auftrag wurde im Crawler nicht gefunden und storniert.'
+          : options.reason ?? 'Vom Benutzer abgebrochen.',
+      })
+    }
+    if (job.holdReference) await releaseCrawlCredits(job.holdReference)
+  } catch {
+    return { ok: false, stage: 'settlement' }
+  }
+
+  await env.DATABASE_REGISTRY.delete(`crawl_job:${job.jobId}`)
+  return { ok: true }
 }
