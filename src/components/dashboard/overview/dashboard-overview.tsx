@@ -1,15 +1,15 @@
 'use client'
 
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, ArrowRight, Loader2, MessageSquare, Plus, RefreshCw } from 'lucide-react'
+import { AlertTriangle, ArrowRight, Loader2, MessagesSquare, Plus, RefreshCw } from 'lucide-react'
 
 import { StatusBadge } from '@/components/dashboard/common/StatusBadge'
 import { CreditCard } from '@/components/dashboard/overview/credit-card'
 import { Button } from '@/components/ui/button'
 import {
   byLastCrawl,
+  chatHref,
   databaseName,
   databaseStatus,
   formatDate,
@@ -20,7 +20,7 @@ import {
 } from '@/lib/databases'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
-import { getDatabases, useChatStore } from '@/stores/chat-store'
+import { getDatabases } from '@/stores/chat-store'
 import type { Database } from '@/types/chat'
 
 const VISIBLE_DATABASES = 5
@@ -48,9 +48,7 @@ function Notice({ href, tone, children }: {
 }
 
 export function DashboardOverview() {
-  const router = useRouter()
   const { user } = useAuthStore()
-  const selectDatabase = useChatStore((state) => state.selectDatabase)
   const [databases, setDatabases] = useState<Database[]>([])
   const [isLoading, setIsLoading] = useState(() => Boolean(user))
   const [error, setError] = useState<string | null>(null)
@@ -110,11 +108,6 @@ export function DashboardOverview() {
   const crawling = databases.filter((database) => databaseStatus(database) === 'crawling').length
   const failed = databases.filter((database) => databaseStatus(database) === 'failed').length
   const recent = useMemo(() => [...databases].sort(byLastCrawl).slice(0, VISIBLE_DATABASES), [databases])
-
-  const openInChat = (database: Database) => {
-    selectDatabase(database.id)
-    router.push('/dashboard/chat')
-  }
 
   return (
     <div className="space-y-4">
@@ -234,18 +227,26 @@ export function DashboardOverview() {
                           {hostname(url)} · {formatNumber(pageCount(database))} Seiten · {formatDate(database.last_crawl)}
                         </p>
                       </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => openInChat(database)}
-                        disabled={status !== 'active'}
-                        className="h-9 shrink-0 gap-2 rounded-full px-4"
-                        title={status === 'active' ? undefined : 'Diese Wissensbasis ist noch nicht durchsuchbar.'}
-                      >
-                        <MessageSquare className="size-4" />
-                        Fragen
-                      </Button>
+                      {status === 'active' ? (
+                        <Button asChild variant="outline" size="sm" className="h-9 shrink-0 gap-2 rounded-full px-4">
+                          <Link href={chatHref(database.id)} prefetch={false}>
+                            <MessagesSquare className="size-4" />
+                            Fragen
+                          </Link>
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled
+                          className="h-9 shrink-0 gap-2 rounded-full px-4"
+                          title="Diese Wissensbasis ist noch nicht durchsuchbar."
+                        >
+                          <MessagesSquare className="size-4" />
+                          Fragen
+                        </Button>
+                      )}
                     </li>
                   )
                 })}

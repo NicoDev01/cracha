@@ -44,6 +44,7 @@ import {
   type IndexedSource,
 } from '@/lib/chat/citations';
 import { answerMetaParts, FALLBACK_NOTICE, formatModel } from '@/lib/chat/metadata';
+import { databaseFromChatQuery } from '@/lib/databases';
 import type { Message as ChatMessage, Source as ChatSource } from '@/types/chat';
 import { Conversation, ConversationContent, ConversationScrollButton } from './conversation';
 import { DatabasePicker } from './database-picker';
@@ -300,6 +301,8 @@ export function ChatInterface() {
     setByokModel,
     chatMode,
     setChatMode,
+    selectDatabase,
+    ready,
   } = useHydratedChatStore();
   const [input, setInput] = useState('');
   const [byokOpen, setByokOpen] = useState(false);
@@ -327,6 +330,17 @@ export function ChatInterface() {
   useEffect(() => {
     setError(null);
   }, [setError]);
+
+  // "Fragen" and "Zum Chat" link here with the knowledge base in the URL. It is
+  // applied once the store is ready, then dropped from the address bar so a
+  // reload does not undo a base the user picked afterwards.
+  useEffect(() => {
+    if (!ready) return;
+    const requested = databaseFromChatQuery(window.location.search);
+    if (!requested) return;
+    selectDatabase(requested);
+    window.history.replaceState(null, '', window.location.pathname);
+  }, [ready, selectDatabase]);
 
   useEffect(() => {
     if (!isLoading && !isStreaming && selectedDatabase) inputRef.current?.focus();

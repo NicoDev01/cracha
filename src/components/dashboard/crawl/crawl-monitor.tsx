@@ -2,10 +2,11 @@
 
 import Link from "next/link"
 import { useEffect, useState } from "react"
-import { Check, CheckCircle2, Circle, Clock3, Database, ExternalLink, FileText, Loader2, OctagonX, XCircle } from "lucide-react"
+import { Check, CheckCircle2, Circle, Clock3, Database, ExternalLink, Loader2, MessagesSquare, OctagonX, XCircle } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
+import { chatHref } from "@/lib/databases"
 import { cn } from "@/lib/utils"
 import { useCrawlStore, type CrawlJob, type CrawlPhase } from "@/stores/crawl-store"
 
@@ -228,7 +229,7 @@ export function CrawlMonitor() {
           )}
           {successful && (
             <Button asChild size="sm" className="gap-2 rounded-lg bg-brand-500 !text-white hover:bg-brand-600">
-              <Link href="/dashboard/chat"><FileText className="size-4" />Zum Chat</Link>
+              <Link href={chatHref(currentJob.tenant_id)}><MessagesSquare className="size-4" />Fragen stellen</Link>
             </Button>
           )}
         </div>

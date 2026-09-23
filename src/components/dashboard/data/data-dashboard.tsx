@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { DatabaseIcon, ExternalLink, Loader2, Plus, RefreshCw, Search, Trash2 } from "lucide-react"
+import { ExternalLink, Library, Loader2, MessagesSquare, Plus, RefreshCw, Search, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
 import {
@@ -29,6 +29,7 @@ import { StatusBadge } from "@/components/dashboard/common/StatusBadge"
 import { deleteDatabase } from "@/lib/api/database-api"
 import { apiFetch } from "@/lib/api/request"
 import {
+  chatHref,
   databaseName,
   databaseStatus,
   formatDateTime,
@@ -237,7 +238,7 @@ export function DataDashboard() {
           </div>
         ) : !error && filteredDatabases.length === 0 ? (
           <div className="flex min-h-64 flex-col items-center justify-center px-6 text-center">
-            <DatabaseIcon className="size-8 text-gray-300 dark:text-gray-600" />
+            <Library className="size-8 text-gray-300 dark:text-gray-600" />
             <h2 className="mt-3 text-sm font-semibold text-gray-900 dark:text-white">{searchQuery ? "Keine Treffer" : "Noch keine Wissensbasis"}</h2>
             <p className="mt-1 text-xs text-gray-500">{searchQuery ? "Passe deine Suche an." : "Starte einen Crawl, um Inhalte hinzuzufügen."}</p>
           </div>
@@ -261,7 +262,7 @@ export function DataDashboard() {
                 <TableHead className="text-right">Seiten</TableHead>
                 <TableHead className="text-right">Abschnitte</TableHead>
                 <TableHead>Letzter Crawl</TableHead>
-                <TableHead className="w-24 text-right">Aktionen</TableHead>
+                <TableHead className="w-32 text-right">Aktionen</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -297,6 +298,30 @@ export function DataDashboard() {
                     <TableCell className="whitespace-nowrap text-gray-500 dark:text-gray-400">{formatDateTime(database.last_crawl)}</TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-1">
+                        {databaseStatus(database) === "active" ? (
+                          <Button asChild variant="ghost" size="icon" className="size-8 rounded-lg text-gray-500 hover:text-brand-600">
+                            <Link
+                              href={chatHref(database.id)}
+                              prefetch={false}
+                              aria-label={`${databaseName(database)} im Chat fragen`}
+                              title="Fragen"
+                            >
+                              <MessagesSquare className="size-4" />
+                            </Link>
+                          </Button>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            disabled
+                            className="size-8 rounded-lg text-gray-500"
+                            aria-label={`${databaseName(database)} ist noch nicht durchsuchbar`}
+                            title="Noch nicht durchsuchbar"
+                          >
+                            <MessagesSquare className="size-4" />
+                          </Button>
+                        )}
                         <Button
                           type="button"
                           variant="ghost"
