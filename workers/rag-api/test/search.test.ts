@@ -7,6 +7,8 @@ import {
   classifyQuestion,
   deleteInstanceIfExists,
   deleteStaleItems,
+  documentChecksum,
+  documentContent,
   hubCandidates,
   INSTANCE_CONFIG,
   instanceConfigMatches,
@@ -17,6 +19,7 @@ import {
   publishedAtRanking,
   retrieve,
   siblingMentions,
+  stripSectionContext,
   uploadPages,
 } from '../src/search'
 import type { IngestPage } from '../src/types'
@@ -668,7 +671,7 @@ describe('unchanged page upload', () => {
     crawled_at: '2026-08-06T12:00:00Z',
     ...overrides,
   })
-  const indexed = { checksum: 'abc', title: 'Unser Team', status: 'completed', chunks: 2 }
+  const indexed = { checksum: documentChecksum({ checksum: 'abc' }), title: 'Unser Team', status: 'completed', chunks: 2 }
 
   it('skips a page that is already indexed unchanged', () => {
     expect(needsUpload(page(), indexed)).toBe(false)
@@ -696,7 +699,7 @@ describe('unchanged page upload', () => {
       items: {
         list: async () => ({
           result: [
-            { id: '1', key: await itemKeyFor(unchanged.url), status: 'completed' as const, chunks_count: 2, metadata: { checksum: 'abc', title: 'Unser Team' } },
+            { id: '1', key: await itemKeyFor(unchanged.url), status: 'completed' as const, chunks_count: 2, metadata: { checksum: documentChecksum(unchanged), title: 'Unser Team' } },
             { id: '2', key: await itemKeyFor(changed.url), status: 'completed' as const, chunks_count: 3, metadata: { checksum: 'old', title: 'Blog' } },
           ],
           result_info: { count: 2, page: 1, per_page: 50, total_count: 2 },
@@ -725,7 +728,7 @@ describe('unchanged page upload', () => {
       },
     } as unknown as Pick<AiSearchInstance, 'items'>
 
-    const known = { [await itemKeyFor(unchanged.url)]: { checksum: 'abc', title: 'Unser Team', status: 'completed', chunks: 2 } }
+    const known = { [await itemKeyFor(unchanged.url)]: { checksum: documentChecksum(unchanged), title: 'Unser Team', status: 'completed', chunks: 2 } }
     const { keys, known_items } = await uploadPages(instance, [unchanged, changed], known)
     expect(keys).toEqual([await itemKeyFor(unchanged.url), await itemKeyFor(changed.url)])
     expect(uploaded).toEqual([await itemKeyFor(changed.url)])
@@ -739,7 +742,7 @@ describe('unchanged page upload', () => {
       items: {
         list: async () => ({
           result: [
-            { id: '1', key: await itemKeyFor(unchanged.url), status: 'completed' as const, chunks_count: 2, metadata: { checksum: 'abc', title: 'Unser Team' } },
+            { id: '1', key: await itemKeyFor(unchanged.url), status: 'completed' as const, chunks_count: 2, metadata: { checksum: documentChecksum(unchanged), title: 'Unser Team' } },
           ],
           result_info: { count: 1, page: 1, per_page: 50, total_count: 1 },
         }),
@@ -825,5 +828,69 @@ describe('instance cleanup', () => {
 
     expect(await deleteInstanceIfExists(namespace, 'kb-legacy')).toBe(false)
     expect(deleted).toEqual([])
+  })
+})
+
+describe('section context in uploaded documents', () => {
+  const long = (label: string) => `${label} `.repeat(60).trim()
+
+  it('puts title and parent heading above every long H2/H3 section', () => {
+    const markdown = [
+      'Einleitung.',
+      '',
+      '## Tarife',
+      '',
+      long('Tarifbeschreibung'),
+      '',
+      '### Pro',
+      '',
+      long('Pro-Tarif'),
+      '',
+      '### Kurz',
+      '',
+      'Nur ein Satz.',
+    ].join('\n')
+
+    const content = documentContent({ title: 'Acme Preise', url: 'https://acme.example/preise', markdown })
+
+    expect(content.startsWith('# Acme Preise\n\nQuelle: https://acme.example/preise\n\n')).toBe(true)
+    expect(content).toContain('> Acme Preise › Tarife\n## Tarife')
+    expect(content).toContain('> Acme Preise › Tarife › Pro\n### Pro')
+    // Too short to be chunked on its own: no line, no noise.
+    expect(content).not.toContain('› Kurz')
+  })
+
+  it('leaves a collection page of short entries exactly as it was', () => {
+    // The team page's list signal is the share of list-like lines. A context
+    // line per member would halve it and hide the overview.
+    const markdown = Array.from({ length: 34 }, (_, index) => `## Person ${index}\nBeraterin`).join('\n\n')
+    const page = { title: 'Team', url: 'https://acme.example/team', markdown }
+
+    expect(documentContent(page)).toBe(`# Team\n\nQuelle: https://acme.example/team\n\n${markdown}`)
+  })
+
+  it('never touches headings inside fenced code', () => {
+    const markdown = ['```bash', '## not a heading', long('echo'), '```', '', '## Echt', '', long('Inhalt')].join('\n')
+    const content = documentContent({ title: 'Doku', url: 'https://acme.example/doku', markdown })
+
+    expect(content).not.toContain('› not a heading')
+    expect(content).toContain('> Doku › Echt\n## Echt')
+  })
+
+  it('is removed again when a page is read whole', () => {
+    const markdown = ['## Tarife', '', long('Tarif')].join('\n')
+    const content = documentContent({ title: 'Acme', url: 'https://acme.example/p', markdown })
+
+    expect(stripSectionContext(content)).toBe(`# Acme\n\nQuelle: https://acme.example/p\n\n${markdown}`)
+  })
+
+  it('re-uploads pages stored in the earlier document layout once', () => {
+    const page: IngestPage = {
+      url: 'https://acme.example/p', title: 'Acme', markdown: '## A', checksum: 'abc', crawled_at: 'now',
+    }
+    const legacy = { checksum: 'abc', title: 'Acme', status: 'completed', chunks: 3 }
+
+    expect(needsUpload(page, legacy)).toBe(true)
+    expect(needsUpload(page, { ...legacy, checksum: documentChecksum(page) })).toBe(false)
   })
 })

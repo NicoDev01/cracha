@@ -175,6 +175,29 @@ describe('pricing and comparison tables', () => {
   })
 })
 
+describe('collection page with section context lines', () => {
+  it('reads the overview whole without the per-section context lines', async () => {
+    const entries = Array.from({ length: 12 }, (_, index) => `## Kurs ${index + 1}\nDauer: ${index + 2} Wochen`)
+    const text = ['> Kurse › Einführung', '## Einführung', 'Alle Kurse im Überblick.', '', ...entries].join('\n')
+    const result = await retrieve(
+      instanceOf(
+        [
+          { id: 'courses', url: 'https://uni.example/kurse', title: 'Kurse', text: entries.slice(0, 3).join('\n') },
+          { id: 'one', url: 'https://uni.example/kurse/kurs-1', title: 'Kurs 1', text: 'Kurs 1 dauert zwei Wochen.' },
+        ],
+        [{ url: 'https://uni.example/kurse', title: 'Kurse', text }],
+      ),
+      'Welche Kurse gibt es?',
+      6,
+    )
+
+    const collection = result.blocks.find((block) => block.collection)
+    expect(collection?.url).toBe('https://uni.example/kurse')
+    expect(collection?.text).toContain('## Kurs 12')
+    expect(collection?.text).not.toContain('› Einführung')
+  })
+})
+
 describe('blog with publication dates', () => {
   const chunks: FixtureChunk[] = [
     {
