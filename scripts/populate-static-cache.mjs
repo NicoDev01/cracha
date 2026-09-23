@@ -3,6 +3,12 @@
 // reads them. `opennextjs-cloudflare deploy` does this itself; CI deploys the
 // built artifact with `wrangler deploy`, so the copy has to be part of the build.
 //
+// `opennextjs-cloudflare populateCache local` would do the same copy, but it
+// first starts a Wrangler platform proxy for every binding in wrangler.jsonc,
+// and the `ai` binding only exists remotely: without CLOUDFLARE_API_TOKEN the
+// command aborts before copying anything. The build job has no token, and
+// handing it one just to copy files is not worth it.
+//
 // Fails loudly on an empty cache: the site would still work, but every page
 // would silently go back to being rendered on each request.
 import fs from 'node:fs'
