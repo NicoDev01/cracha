@@ -1,8 +1,6 @@
 'use client';
 import { cn } from '@/lib/utils';
-import { useMotionValue, animate, motion } from 'motion/react';
-import { useState, useEffect } from 'react';
-import useMeasure from 'react-use-measure';
+import { useEffect, useRef } from 'react';
 
 export type InfiniteSliderProps = {
   children: React.ReactNode;
@@ -14,6 +12,16 @@ export type InfiniteSliderProps = {
   className?: string;
 };
 
+/**
+ * An endless strip: the children twice in a row, moved by exactly one copy and
+ * started over.
+ *
+ * This used to drive the offset through motion's `animate` and measure the
+ * strip with react-use-measure, which made it the reason the landing page
+ * shipped framer-motion — some 60 KB compressed for one linear loop. The Web
+ * Animations API does the same on the compositor, and `playbackRate` changes
+ * speed on hover without a jump.
+ */
 export function InfiniteSlider({
   children,
   gap = 16,
@@ -23,90 +31,68 @@ export function InfiniteSlider({
   reverse = false,
   className,
 }: InfiniteSliderProps) {
-  const [currentSpeed, setCurrentSpeed] = useState(speed);
-  const [ref, { width, height }] = useMeasure();
-  const translation = useMotionValue(0);
-  const [isTransitioning, setIsTransitioning] = useState(false);
-  const [key, setKey] = useState(0);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const animationRef = useRef<Animation | null>(null);
 
   useEffect(() => {
-    let controls;
-    const size = direction === 'horizontal' ? width : height;
-    const contentSize = size + gap;
-    const from = reverse ? -contentSize / 2 : 0;
-    const to = reverse ? 0 : -contentSize / 2;
+    const track = trackRef.current;
+    if (!track || typeof track.animate !== 'function') return;
 
-    const distanceToTravel = Math.abs(to - from);
-    const duration = distanceToTravel / currentSpeed;
+    const start = () => {
+      const size = direction === 'horizontal' ? track.offsetWidth : track.offsetHeight;
+      // Two copies with `gap` between every item, the seam included: one copy
+      // plus its trailing gap is half of (size + gap).
+      const distance = (size + gap) / 2;
+      if (distance <= 0) return;
 
-    if (isTransitioning) {
-      const remainingDistance = Math.abs(translation.get() - to);
-      const transitionDuration = remainingDistance / currentSpeed;
+      const axis = direction === 'horizontal' ? 'X' : 'Y';
+      const from = reverse ? -distance : 0;
+      const to = reverse ? 0 : -distance;
+      const playbackRate = animationRef.current?.playbackRate ?? 1;
+      animationRef.current?.cancel();
+      animationRef.current = track.animate(
+        [
+          { transform: `translate${axis}(${from}px)` },
+          { transform: `translate${axis}(${to}px)` },
+        ],
+        { duration: (distance / speed) * 1000, iterations: Infinity, easing: 'linear' },
+      );
+      animationRef.current.playbackRate = playbackRate;
+    };
 
-      controls = animate(translation, [translation.get(), to], {
-        ease: 'linear',
-        duration: transitionDuration,
-        onComplete: () => {
-          setIsTransitioning(false);
-          setKey((prevKey) => prevKey + 1);
-        },
-      });
-    } else {
-      controls = animate(translation, [from, to], {
-        ease: 'linear',
-        duration: duration,
-        repeat: Infinity,
-        repeatType: 'loop',
-        repeatDelay: 0,
-        onRepeat: () => {
-          translation.set(from);
-        },
-      });
-    }
-
-    return controls?.stop;
-  }, [
-    key,
-    translation,
-    currentSpeed,
-    width,
-    height,
-    gap,
-    isTransitioning,
-    direction,
-    reverse,
-  ]);
+    // The observer also reports the first size, which starts the loop; after
+    // that it restarts it when a font swap or a resize changes the distance.
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(start);
+    if (observer) observer.observe(track);
+    else start();
+    return () => {
+      observer?.disconnect();
+      animationRef.current?.cancel();
+      animationRef.current = null;
+    };
+  }, [gap, speed, direction, reverse]);
 
   const hoverProps = speedOnHover
     ? {
-        onHoverStart: () => {
-          setIsTransitioning(true);
-          setCurrentSpeed(speedOnHover);
-        },
-        onHoverEnd: () => {
-          setIsTransitioning(true);
-          setCurrentSpeed(speed);
-        },
+        onPointerEnter: () => animationRef.current?.updatePlaybackRate(speedOnHover / speed),
+        onPointerLeave: () => animationRef.current?.updatePlaybackRate(1),
       }
     : {};
 
   return (
     <div className={cn('overflow-hidden', className)}>
-      <motion.div
+      <div
+        ref={trackRef}
         className='flex w-max'
         style={{
-          ...(direction === 'horizontal'
-            ? { x: translation }
-            : { y: translation }),
           gap: `${gap}px`,
           flexDirection: direction === 'horizontal' ? 'row' : 'column',
         }}
-        ref={ref}
         {...hoverProps}
       >
         {children}
         {children}
-      </motion.div>
+      </div>
     </div>
   );
 }

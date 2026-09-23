@@ -2,7 +2,23 @@
 
 import { memo, useCallback, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
-import { animate } from "motion/react";
+
+/**
+ * The glow's angle eases towards the pointer through a CSS transition on a
+ * registered custom property, not through motion's `animate`: that import was
+ * one of the two reasons every landing page visitor downloaded framer-motion.
+ * A browser without `CSS.registerProperty` moves the glow without easing.
+ */
+let angleRegistered = false;
+function registerAngleProperty() {
+  if (angleRegistered || typeof CSS === "undefined" || !CSS.registerProperty) return;
+  angleRegistered = true;
+  try {
+    CSS.registerProperty({ name: "--start", syntax: "<number>", inherits: true, initialValue: "0" });
+  } catch {
+    // Already registered, e.g. after a hot reload.
+  }
+}
 
 interface GlowingEffectProps {
   blur?: number;
@@ -85,20 +101,15 @@ const GlowingEffect = memo(
           const angleDiff = ((targetAngle - currentAngle + 180) % 360) - 180;
           const newAngle = currentAngle + angleDiff;
 
-          animate(currentAngle, newAngle, {
-            duration: movementDuration,
-            ease: [0.16, 1, 0.3, 1],
-            onUpdate: (value) => {
-              element.style.setProperty("--start", String(value));
-            },
-          });
+          element.style.setProperty("--start", String(newAngle));
         });
       },
-      [inactiveZone, proximity, movementDuration]
+      [inactiveZone, proximity]
     );
 
     useEffect(() => {
       if (disabled) return;
+      registerAngleProperty();
 
       const handleScroll = () => handleMove();
       const handlePointerMove = (e: PointerEvent) => handleMove(e);
@@ -135,6 +146,7 @@ const GlowingEffect = memo(
               "--spread": spread,
               "--start": "0",
               "--active": "0",
+              transition: `--start ${movementDuration}s cubic-bezier(0.16, 1, 0.3, 1)`,
               "--glowingeffect-border-width": `${borderWidth}px`,
               "--repeating-conic-gradient-times": "5",
               "--gradient":

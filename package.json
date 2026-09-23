@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
-    "build:cf": "next build && opennextjs-cloudflare build",
+    "build:cf": "opennextjs-cloudflare build && node scripts/populate-static-cache.mjs",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "cf:dev": "wrangler dev",

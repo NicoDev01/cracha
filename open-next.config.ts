@@ -1,18 +1,33 @@
 import { defineCloudflareConfig } from "@opennextjs/cloudflare";
+import staticAssetsIncrementalCache from "@opennextjs/cloudflare/overrides/incremental-cache/static-assets-incremental-cache";
 
 /**
- * No incremental cache on purpose.
+ * Prerendered pages come out of Workers static assets.
  *
- * The obvious reading of `x-nextjs-cache: MISS` on every request is that a
- * cache is missing, but every page here is fully prerendered and nothing
- * revalidates, so OpenNext writes no cache entries at all — the build produces
- * an empty `cdn-cgi/_next_cache`. A cache override would be a no-op today and a
- * trap the day a page wants ISR, because the static-assets cache cannot write.
+ * Without an incremental cache OpenNext has nowhere to look up the HTML that
+ * `next build` prerendered, so it rendered every page again on every request
+ * — `x-nextjs-cache: MISS` on the landing page, and most of its 0.5–1 s first
+ * byte was the Worker building the same HTML it had built at deploy time.
  *
- * The ~500 ms first byte is the Worker itself, and the reason the CDN does not
- * absorb it is the `Vary: rsc, next-router-state-tree, …` header Next sends for
- * React Server Components: Cloudflare declines to cache a response that varies
- * on anything but Accept-Encoding. Fixing that needs a Cache Rule with a custom
- * cache key on the zone, which lives in the dashboard, not in this file.
+ * The build does write those pages: one `.cache` file per route in
+ * `.open-next/cache`. This cache reads them from `cdn-cgi/_next_cache` in the
+ * static assets, where `scripts/populate-static-cache.mjs` copies them as part
+ * of `build:cf` (`opennextjs-cloudflare deploy` would do the same, but CI
+ * deploys the artifact with plain `wrangler deploy`).
+ *
+ * It is read-only, which fits: every page here is fully prerendered and
+ * nothing revalidates. The day a page wants ISR or `revalidateTag`, this has
+ * to become the R2 or KV cache — the static-assets cache cannot write.
+ *
+ * What remains of the first byte is the Worker starting up. The CDN does not
+ * absorb it because the Worker answers before the cache does, and the
+ * `Vary: rsc, next-router-state-tree, …` header Next sends would keep
+ * Cloudflare from caching the response anyway.
  */
-export default defineCloudflareConfig();
+export default defineCloudflareConfig({
+  incrementalCache: staticAssetsIncrementalCache,
+  // Answers a prerendered page from the routing layer, after middleware,
+  // without loading the Next server and the page's code at all. Must be turned
+  // off again if the app ever adopts Partial Prerendering.
+  enableCacheInterception: true,
+});
