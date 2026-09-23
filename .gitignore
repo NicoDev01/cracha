@@ -136,3 +136,4 @@ workers/rag-api/wrangler.dev.jsonc
 
 # Supabase CLI local state
 supabase/.temp/
+.claude/worktrees/

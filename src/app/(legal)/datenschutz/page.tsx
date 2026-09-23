@@ -193,20 +193,24 @@ export default function DatenschutzPage() {
             <>
               <strong className="text-foreground">Cloudflare</strong> — Auslieferung
               der Website, Reichweiten- und Leistungsmessung (Web Analytics),
-              Speicherung der Wissensbasen und der abgerufenen Inhalte sowie
-              Betrieb der Sprachmodelle, die deine Fragen beantworten.
+              Speicherung der Wissensbasen und der abgerufenen Inhalte,
+              Betrieb der Sprachmodelle, die deine Fragen beantworten, sowie
+              Weiterleitung von E-Mails an hallo@cracha-app.com (Email Routing).
             </>,
             <>
               <strong className="text-foreground">Supabase</strong> — Verwaltung
-              der Benutzerkonten, Anmeldung und Versand der Bestätigungs- und
-              Passwort-E-Mails.
+              der Benutzerkonten und Anmeldung.
+            </>,
+            <>
+              <strong className="text-foreground">Resend</strong> — Versand der
+              Bestätigungs- und Passwort-E-Mails.
             </>,
             <>
               <strong className="text-foreground">Modal</strong> — Ausführung der
               Abrufe der von dir angegebenen Websites.
             </>,
             <>
-              <strong className="text-foreground">Google</strong> — für die Antworterzeugung mit Gemini über das Cloudflare AI Gateway sowie bei freiwilliger Anmeldung über Google. Zur Generierung erhält das Modell Fragen, begrenzten Gesprächsverlauf und relevante Quelltexte.
+              <strong className="text-foreground">Google</strong> — für die Antworterzeugung mit Gemini über das Cloudflare AI Gateway sowie bei freiwilliger Anmeldung über Google. Zur Generierung erhält das Modell Fragen, begrenzten Gesprächsverlauf und relevante Quelltexte. Außerdem landen E-Mails an hallo@cracha-app.com in einem Google-Mail-Postfach.
             </>,
           ]}
         />
