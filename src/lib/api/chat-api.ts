@@ -30,8 +30,10 @@ interface RAGWorkerResponse {
 interface StreamMeta {
   sources?: RawSource[]
   model?: string
+  usedModel?: string
   fallback?: boolean
   fallbackReason?: FallbackReason
+  fallbackDetail?: string
 }
 
 interface StreamDone {
@@ -39,13 +41,14 @@ interface StreamDone {
   model?: string
   fallback?: boolean
   fallbackReason?: FallbackReason
+  fallbackDetail?: string
   refunded?: boolean
   reference?: string
 }
 
 export interface ChatStreamHandlers {
   onProgress?: (progress: RetrievalProgress) => void
-  onStart: (data: { sources: Source[]; model: string; fallback?: boolean; fallbackReason?: FallbackReason }) => void
+  onStart: (data: { sources: Source[]; model: string; requestedModel?: string; fallback?: boolean; fallbackReason?: FallbackReason; fallbackDetail?: string }) => void
   onDelta: (text: string) => void
   onDone: (metadata: ChatResponse['metadata']) => void
 }
@@ -123,6 +126,8 @@ class ChatAPIClient {
     let currentModel = headerModel
     let usedFallback = headerFallback
     let fallbackReason: FallbackReason | undefined
+    let fallbackDetail: string | undefined
+    let requestedModel: string | undefined
 
     const processFrame = (frame: string) => {
       const lines = frame.split(/\r?\n/)
@@ -137,16 +142,20 @@ class ChatAPIClient {
       if (event === 'progress') {
         handlers.onProgress?.(data as unknown as RetrievalProgress)
       } else if (event === 'meta') {
-        currentModel = data.model ?? currentModel
+        // The line under the answer names who wrote it, not who was asked.
+        currentModel = data.usedModel ?? data.model ?? currentModel
+        requestedModel = data.model && data.model !== currentModel ? data.model : undefined
         usedFallback = data.fallback === true
         fallbackReason = data.fallbackReason
-        handlers.onStart({ sources: mapSources(data.sources), model: currentModel, fallback: usedFallback, fallbackReason })
+        fallbackDetail = data.fallbackDetail
+        handlers.onStart({ sources: mapSources(data.sources), model: currentModel, requestedModel, fallback: usedFallback, fallbackReason, fallbackDetail })
       } else if (event === 'delta' && typeof data.text === 'string') {
         handlers.onDelta(data.text)
       } else if (event === 'done') {
-        currentModel = data.model ?? currentModel
+        currentModel = data.usedModel ?? data.model ?? currentModel
         usedFallback = data.fallback ?? usedFallback
         fallbackReason = data.fallbackReason ?? fallbackReason
+        fallbackDetail = data.fallbackDetail ?? fallbackDetail
         finished = true
         handlers.onDone({
           query_time: data.usage?.latency_ms ?? 0,
@@ -155,6 +164,8 @@ class ChatAPIClient {
           model_used: currentModel,
           fallback: usedFallback,
           fallback_reason: usedFallback ? fallbackReason : undefined,
+          fallback_detail: usedFallback ? fallbackDetail : undefined,
+          requested_model: requestedModel,
           refunded: data.refunded,
           reference: data.reference,
         })

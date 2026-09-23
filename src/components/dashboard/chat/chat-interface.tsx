@@ -43,8 +43,9 @@ import {
   linkifyCitations,
   type IndexedSource,
 } from '@/lib/chat/citations';
-import { answerMetaParts, fallbackNotice, formatModel } from '@/lib/chat/metadata';
+import { answerMetaParts, fallbackNotice, formatModel, substituteNotice } from '@/lib/chat/metadata';
 import { cleanSnippet, cleanSourceTitle, sourceHosts, sourceLocation } from '@/lib/chat/source-display';
+import { checkGeminiKey, PREFERRED_GEMINI_MODELS, type GeminiModelOption } from '@/lib/chat/gemini-models';
 import { streamingMarkdown } from '@/lib/chat/streaming-markdown';
 import { databaseFromChatQuery } from '@/lib/databases';
 import type { Message as ChatMessage, Source as ChatSource } from '@/types/chat';
@@ -146,14 +147,11 @@ const SourceList = ({ cited, uncited }: { cited: IndexedSource[]; uncited: Index
   </>
 );
 
-// Checked against Google's model list on 2026-09-23. The 1.5 models are shut
-// down and 2.5 is only open to accounts that used it before, so neither is
-// offered; any other id can still be typed in.
-const BYOK_MODELS = [
-  { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash (empfohlen)' },
-  { id: 'gemini-3.7-flash', label: 'Gemini 3.7 Flash' },
-  { id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash-Lite (schnell, günstig)' },
-];
+type KeyStatus =
+  | { state: 'idle' }
+  | { state: 'checking' }
+  | { state: 'valid'; count: number }
+  | { state: 'invalid'; message: string; keyRejected: boolean };
 
 function ByokDialogContent({
   byokApiKey,
@@ -169,62 +167,126 @@ function ByokDialogContent({
   onCancel: () => void;
 }) {
   const [tempApiKey, setTempApiKey] = useState(byokApiKey ?? '');
-  const initialModel = byokModel || BYOK_MODELS[0].id;
-  const isPredefined = BYOK_MODELS.some((model) => model.id === initialModel);
-  const [tempModel, setTempModel] = useState(isPredefined ? initialModel : 'custom');
-  const [customModel, setCustomModel] = useState(isPredefined ? '' : initialModel);
-  const [isCustom, setIsCustom] = useState(!isPredefined);
+  const [models, setModels] = useState<GeminiModelOption[]>(PREFERRED_GEMINI_MODELS);
+  const initialModel = byokModel || PREFERRED_GEMINI_MODELS[0].id;
+  const [tempModel, setTempModel] = useState(initialModel);
+  const [customModel, setCustomModel] = useState('');
+  const [isCustom, setIsCustom] = useState(false);
+  const [status, setStatus] = useState<KeyStatus>({ state: 'idle' });
+  const checkedKey = useRef<string | null>(null);
+
+  const options = models.some((model) => model.id === tempModel)
+    ? models
+    : [{ id: tempModel, label: tempModel }, ...models];
+
+  // Asks Google directly from the browser, so the key is verified without
+  // passing through our server, and the list shows what this key can reach.
+  const check = async (key: string): Promise<boolean> => {
+    setStatus({ state: 'checking' });
+    const result = await checkGeminiKey(key);
+    checkedKey.current = key;
+    if (!result.ok) {
+      setStatus({ state: 'invalid', message: result.message, keyRejected: result.keyRejected });
+      return !result.keyRejected;
+    }
+    setModels(result.models);
+    if (!isCustom && !result.models.some((model) => model.id === tempModel)) setTempModel(result.models[0].id);
+    setStatus({ state: 'valid', count: result.models.length });
+    return true;
+  };
+
+  const save = async () => {
+    const key = tempApiKey.trim();
+    const model = isCustom ? (customModel.trim() || PREFERRED_GEMINI_MODELS[0].id) : tempModel;
+    // A key Google refuses is not saved: every answer would silently fall back.
+    if (key && checkedKey.current !== key && !(await check(key))) return;
+    if (key && status.state === 'invalid' && status.keyRejected && checkedKey.current === key) return;
+    onSave(key || null, model);
+  };
 
   return (
-    <DialogContent className="max-w-md rounded-2xl">
+    <DialogContent className="max-w-md rounded-3xl">
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
           <Key className="size-5 text-brand-500" />
           Eigenen API-Key nutzen (BYOK)
         </DialogTitle>
         <DialogDescription className="text-xs text-gray-500 dark:text-gray-400">
-          Ohne eigenen Key antwortet das Standardmodell (Llama 4 Scout). Mit deinem Google-AI-Studio-Key antwortet Gemini. Der Key bleibt nur in diesem Tab im Arbeitsspeicher und wird nie gespeichert. Lehnt Google ihn ab, antwortet das Standardmodell, und unter der Antwort steht, warum.
+          Ohne eigenen Key antwortet das Standardmodell (Llama 4 Scout). Mit deinem Google-AI-Studio-Key antwortet Gemini. Der Key bleibt nur in diesem Tab im Arbeitsspeicher und wird nie gespeichert. Die Prüfung läuft direkt zwischen deinem Browser und Google.
         </DialogDescription>
       </DialogHeader>
 
       <div className="space-y-4 py-2">
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-gray-700 dark:text-gray-300">
+          <label htmlFor="byok-key" className="text-xs font-medium text-gray-700 dark:text-gray-300">
             Google AI Studio API-Key
           </label>
-          <input
-            type="password"
-            value={tempApiKey}
-            onChange={(e) => setTempApiKey(e.target.value)}
-            placeholder="AIzaSy..."
-            className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-          />
-          <p className="text-[11px] text-gray-400">
-            Kostenlos erstellbar auf{' '}
-            <a
-              href="https://aistudio.google.com/apikey"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-brand-500 underline hover:text-brand-600"
+          <div className="flex gap-2">
+            <input
+              id="byok-key"
+              type="password"
+              autoComplete="off"
+              spellCheck={false}
+              value={tempApiKey}
+              onChange={(e) => {
+                setTempApiKey(e.target.value);
+                if (status.state !== 'idle') setStatus({ state: 'idle' });
+              }}
+              placeholder="AIza…"
+              className="min-w-0 flex-1 rounded-full border border-gray-200 bg-white px-4 py-2 text-sm focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!tempApiKey.trim() || status.state === 'checking'}
+              onClick={() => void check(tempApiKey.trim())}
+              className="h-auto rounded-full px-4 text-xs"
             >
-              aistudio.google.com
-            </a>
-          </p>
+              {status.state === 'checking' ? <Loader className="size-3.5" /> : 'Prüfen'}
+            </Button>
+          </div>
+          {status.state === 'valid' && (
+            <p className="flex items-center gap-1.5 text-[11px] font-medium text-success-600 dark:text-success-500" role="status">
+              <Check className="size-3.5" aria-hidden="true" />
+              Key gültig – {status.count} {status.count === 1 ? 'Modell' : 'Modelle'} verfügbar
+            </p>
+          )}
+          {status.state === 'invalid' && (
+            <p className="flex items-start gap-1.5 text-[11px] text-error-600 dark:text-error-400" role="alert">
+              <AlertTriangle className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+              {status.message}
+            </p>
+          )}
+          {status.state === 'idle' && (
+            <p className="text-[11px] text-gray-400">
+              Kostenlos erstellbar auf{' '}
+              <a
+                href="https://aistudio.google.com/apikey"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-brand-500 underline hover:text-brand-600"
+              >
+                aistudio.google.com
+              </a>
+            </p>
+          )}
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-gray-700 dark:text-gray-300">
+          <label htmlFor="byok-model" className="text-xs font-medium text-gray-700 dark:text-gray-300">
             Modell
           </label>
           <select
-            value={tempModel}
+            id="byok-model"
+            value={isCustom ? 'custom' : tempModel}
             onChange={(e) => {
-              setTempModel(e.target.value);
               setIsCustom(e.target.value === 'custom');
+              if (e.target.value !== 'custom') setTempModel(e.target.value);
             }}
-            className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+            className="w-full rounded-full border border-gray-200 bg-white px-4 py-2 text-sm focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
           >
-            {BYOK_MODELS.map((model) => (
+            {options.map((model) => (
               <option key={model.id} value={model.id}>{model.label}</option>
             ))}
             <option value="custom">Anderes Modell eingeben…</option>
@@ -235,9 +297,12 @@ function ByokDialogContent({
               value={customModel}
               onChange={(e) => setCustomModel(e.target.value)}
               placeholder="z. B. gemini-3.6-flash"
-              className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+              className="mt-2 w-full rounded-full border border-gray-200 bg-white px-4 py-2 text-sm focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
             />
           )}
+          <p className="text-[11px] text-gray-400">
+            Ist das Modell überlastet, antwortet ein anderes Gemini-Modell deines Keys.
+          </p>
         </div>
       </div>
 
@@ -248,7 +313,7 @@ function ByokDialogContent({
             variant="ghost"
             size="sm"
             onClick={onRemove}
-            className="text-xs text-error-600 hover:bg-error-50 hover:text-error-700"
+            className="rounded-full text-xs text-error-600 hover:bg-error-50 hover:text-error-700"
           >
             Key entfernen
           </Button>
@@ -259,18 +324,16 @@ function ByokDialogContent({
             variant="outline"
             size="sm"
             onClick={onCancel}
-            className="text-xs rounded-xl"
+            className="rounded-full text-xs"
           >
             Abbrechen
           </Button>
           <Button
             type="button"
             size="sm"
-            onClick={() => {
-              const finalModel = isCustom ? (customModel.trim() || BYOK_MODELS[0].id) : tempModel;
-              onSave(tempApiKey.trim() || null, finalModel);
-            }}
-            className="text-xs rounded-xl bg-brand-500 text-white hover:bg-brand-600"
+            disabled={status.state === 'checking'}
+            onClick={() => void save()}
+            className="rounded-full bg-brand-500 text-xs text-white hover:bg-brand-600"
           >
             Speichern
           </Button>
@@ -694,6 +757,14 @@ export function ChatInterface() {
                               <span className="inline-flex items-center gap-1 rounded-md bg-warning-50 px-1.5 py-0.5 text-[11px] font-medium text-warning-700 dark:bg-warning-500/15 dark:text-warning-400">
                                 <AlertTriangle className="size-3" aria-hidden="true" />
                                 {fallbackNotice(metadata.fallback_reason)}
+                                {metadata.fallback_detail && (
+                                  <span className="font-normal opacity-80">· Google: {metadata.fallback_detail}</span>
+                                )}
+                              </span>
+                            )}
+                            {substituteNotice(metadata) && (
+                              <span className="inline-flex items-center gap-1 rounded-md bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                                {substituteNotice(metadata)}
                               </span>
                             )}
                             {metaParts.length > 0 && (

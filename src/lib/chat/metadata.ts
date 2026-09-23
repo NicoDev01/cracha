@@ -74,10 +74,22 @@ const FALLBACK_NOTICES: Record<FallbackReason, string> = {
   byok_rejected: 'Dein API-Key wurde abgelehnt – das Standardmodell hat geantwortet',
   byok_model: 'Das gewählte Gemini-Modell gibt es nicht – das Standardmodell hat geantwortet',
   byok_quota: 'Das Kontingent deines API-Keys ist erschöpft – das Standardmodell hat geantwortet',
+  byok_region: 'Google lässt deinen Key hier nicht zu (Region oder Abrechnung) – das Standardmodell hat geantwortet',
+  byok_request: 'Google hat die Anfrage abgelehnt – das Standardmodell hat geantwortet',
   byok_unavailable: 'Gemini war nicht erreichbar – das Standardmodell hat geantwortet',
   primary_unavailable: 'Ersatzmodell – das primäre Modell war nicht erreichbar',
 }
 
 export function fallbackNotice(reason: FallbackReason | undefined): string {
   return FALLBACK_NOTICES[reason ?? 'byok_unavailable'] ?? FALLBACK_NOTICES.byok_unavailable
+}
+
+/**
+ * The chosen Gemini model was overloaded and another one on the same key
+ * answered. Not a fallback to our model, but the reader picked a model and
+ * should know it was not the one that wrote this.
+ */
+export function substituteNotice(metadata: Metadata | undefined): string | null {
+  if (!metadata?.requested_model || metadata.fallback) return null
+  return `${formatModel(metadata.requested_model)} war ausgelastet – ${formatModel(metadata.model_used)} hat geantwortet`
 }

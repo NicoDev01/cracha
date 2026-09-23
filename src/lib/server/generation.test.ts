@@ -580,17 +580,71 @@ describe('BYOK request and fallback reasons', () => {
     expect(body.generationConfig.maxOutputTokens).toBeGreaterThanOrEqual(8_000)
   })
 
+  const googleError = (status: number, providerStatus: string, message: string, reason?: string) =>
+    () => new Response(JSON.stringify({ error: { code: status, status: providerStatus, message, details: reason ? [{ reason }] : [] } }), { status })
+
   it.each([
-    [400, 'byok_rejected'],
-    [403, 'byok_rejected'],
-    [404, 'byok_model'],
-    [429, 'byok_quota'],
-    [503, 'byok_unavailable'],
-  ])('names why the key failed (%i)', async (status, reason) => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{"error":"echo of the prompt"}', { status })))
+    [googleError(400, 'INVALID_ARGUMENT', 'API key not valid. Please pass a valid API key.', 'API_KEY_INVALID'), 'byok_rejected'],
+    [googleError(403, 'PERMISSION_DENIED', 'Permission denied'), 'byok_rejected'],
+    [googleError(404, 'NOT_FOUND', 'models/gemini-x is not found'), 'byok_model'],
+    [googleError(400, 'FAILED_PRECONDITION', 'User location is not supported for the API use.'), 'byok_region'],
+    [googleError(429, 'RESOURCE_EXHAUSTED', 'Quota exceeded'), 'byok_quota'],
+    [googleError(503, 'UNAVAILABLE', 'The model is overloaded. Please try again later.'), 'byok_unavailable'],
+  ])('names why the key failed (%#)', async (response, reason) => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => response()))
+    const run = fallbackRun()
+    const pending = streamGroundedAnswer({ ai: { run } as unknown as CloudflareEnv['AI'], model: 'gemini-3.8-flash', question: 'Q', history: [], context: 'K', apiKey: 'k' })
+    await vi.runAllTimersAsync()
+    const result = await pending
+    vi.useRealTimers()
+    expect(result).toMatchObject({ fallback: true, fallbackReason: reason, usedModel: '@cf/meta/llama-4-scout-17b-16e-instruct' })
+  })
+
+  it('tells the reader what Google said', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => googleError(400, 'FAILED_PRECONDITION', 'User location is not supported for the API use.')()))
+    const result = await streamGroundedAnswer({ ai: { run: fallbackRun() } as unknown as CloudflareEnv['AI'], model: 'gemini-3.8-flash', question: 'Q', history: [], context: 'K', apiKey: 'k' })
+    expect(result.fallbackDetail).toBe('400 FAILED_PRECONDITION: User location is not supported for the API use.')
+  })
+
+  it('does not try other models for a key Google does not know', async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => googleError(400, 'INVALID_ARGUMENT', 'API key not valid.', 'API_KEY_INVALID')())
+    vi.stubGlobal('fetch', fetchMock)
+    await streamGroundedAnswer({ ai: { run: fallbackRun() } as unknown as CloudflareEnv['AI'], model: 'gemini-3.8-flash', question: 'Q', history: [], context: 'K', apiKey: 'k' })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('asks the same model again when it was overloaded once', async () => {
+    const fetchMock = vi.fn()
+      .mockImplementationOnce(async () => googleError(503, 'UNAVAILABLE', 'The model is overloaded.')())
+      .mockImplementation(async () => new Response(okBody(), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
     const run = fallbackRun()
     const result = await streamGroundedAnswer({ ai: { run } as unknown as CloudflareEnv['AI'], model: 'gemini-3.8-flash', question: 'Q', history: [], context: 'K', apiKey: 'k' })
-    expect(result).toMatchObject({ fallback: true, fallbackReason: reason, usedModel: '@cf/meta/llama-4-scout-17b-16e-instruct' })
+    expect(result).toMatchObject({ fallback: false, model: 'gemini-3.8-flash', usedModel: 'gemini-3.8-flash' })
+    expect(run).not.toHaveBeenCalled()
+  })
+
+  it('answers with another Gemini model of the same key before falling back to ours', async () => {
+    const fetchMock = vi.fn().mockImplementation(async (url: string) => url.includes('gemini-3.8-flash')
+      ? googleError(503, 'UNAVAILABLE', 'The model is overloaded.')()
+      : new Response(okBody(), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const run = fallbackRun()
+    const result = await streamGroundedAnswer({ ai: { run } as unknown as CloudflareEnv['AI'], model: 'gemini-3.8-flash', question: 'Q', history: [], context: 'K', apiKey: 'k' })
+    expect(result).toMatchObject({ fallback: false, model: 'gemini-3.8-flash', usedModel: 'gemini-3.7-flash' })
+    expect(fetchMock.mock.calls[2][1].headers['x-goog-api-key']).toBe('k')
+    expect(run).not.toHaveBeenCalled()
+  })
+
+  it('drops the thinking setting for a model that rejects it', async () => {
+    const fetchMock = vi.fn()
+      .mockImplementationOnce(async () => googleError(400, 'INVALID_ARGUMENT', 'Thinking level is not supported for this model.')())
+      .mockImplementation(async () => new Response(okBody(), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const result = await streamGroundedAnswer({ ai: { run: fallbackRun() } as unknown as CloudflareEnv['AI'], model: 'gemini-3.5-flash-lite', question: 'Q', history: [], context: 'K', apiKey: 'k' })
+    expect(result.fallback).toBe(false)
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).generationConfig.thinkingConfig).toBeUndefined()
   })
 
   it('does not try a second model when the platform model itself fails', async () => {

@@ -131,8 +131,8 @@ export const useChatStore = create<ChatState>()(persist((set, get) => ({
           // Merged, because a later step does not repeat what an earlier one said.
           if (active === request && get().ownerId === request.owner) set({ retrievalProgress: { ...get().retrievalProgress, ...progress } })
         },
-        onStart({ sources, model, fallback, fallbackReason }) {
-          update(messages => [...messages, { id: assistantId, type: 'assistant', content: '', timestamp: new Date(), sources, isStreaming: true, metadata: { query_time: 0, model_used: model, fallback, fallback_reason: fallbackReason } }])
+        onStart({ sources, model, requestedModel, fallback, fallbackReason, fallbackDetail }) {
+          update(messages => [...messages, { id: assistantId, type: 'assistant', content: '', timestamp: new Date(), sources, isStreaming: true, metadata: { query_time: 0, model_used: model, requested_model: requestedModel, fallback, fallback_reason: fallbackReason, fallback_detail: fallbackDetail } }])
           if (active === request && get().ownerId === request.owner) set({ isLoading: false, isStreaming: true })
         },
         onDelta(text) { smoother.push(text) },

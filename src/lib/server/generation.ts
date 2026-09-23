@@ -11,14 +11,25 @@ type GatewayAIStreamRun = (
  * something different — a new key, a different model name, waiting for quota —
  * so a single "the primary failed" notice left them guessing.
  */
-export type FallbackReason = 'byok_rejected' | 'byok_model' | 'byok_quota' | 'byok_unavailable' | 'primary_unavailable'
+export type FallbackReason =
+  | 'byok_rejected'
+  | 'byok_model'
+  | 'byok_quota'
+  | 'byok_region'
+  | 'byok_request'
+  | 'byok_unavailable'
+  | 'primary_unavailable'
 
 export interface StreamingGenerationResult {
+  /** The model that was asked for. */
   model: string
+  /** The model that wrote the answer; another Gemini model when the chosen one was overloaded. */
   usedModel: string
   /** The user's own model failed and the platform model answered instead. */
   fallback: boolean
   fallbackReason?: FallbackReason
+  /** What Google said, for the reader and the log. */
+  fallbackDetail?: string
   text: AsyncGenerator<string>
 }
 
@@ -40,20 +51,76 @@ const FALLBACK_MODEL = DEFAULT_GENERATION_MODEL
 /** Used when a BYOK request names no Gemini model or an unrecognisable one. */
 export const DEFAULT_BYOK_MODEL = 'gemini-3.8-flash'
 
+/**
+ * A refusal from the Gemini API, with what Google said about it. Google's
+ * error body names the cause ("API key not valid", "The model is overloaded",
+ * "User location is not supported"), and without it every failure looked the
+ * same: "Gemini war nicht erreichbar".
+ */
 export class ProviderError extends Error {
-  constructor(public readonly status: number) {
+  constructor(
+    public readonly status: number,
+    /** Google's status name, e.g. UNAVAILABLE or RESOURCE_EXHAUSTED. */
+    public readonly providerStatus = '',
+    /** Google's machine reason, e.g. API_KEY_INVALID. */
+    public readonly reason = '',
+    /** Google's own sentence, shortened; it never contains the prompt. */
+    public readonly detail = '',
+  ) {
     super(`Google AI Studio API-Fehler (${status})`)
     this.name = 'ProviderError'
   }
+
+  /** Worth another attempt, on the same model after a pause or on another. */
+  get transient(): boolean {
+    return this.status === 429 || this.status >= 500
+  }
+}
+
+async function providerErrorFrom(response: Response): Promise<ProviderError> {
+  let body: { error?: { status?: unknown; message?: unknown; details?: Array<{ reason?: unknown }> } } = {}
+  try {
+    body = await response.json()
+  } catch { /* Not JSON; the HTTP status has to do. */ }
+  const error = body.error ?? {}
+  const text = (value: unknown, max: number) => (typeof value === 'string' ? value.replace(/\s+/g, ' ').trim().slice(0, max) : '')
+  const reason = (error.details ?? []).map((entry) => text(entry?.reason, 60)).find(Boolean) ?? ''
+  return new ProviderError(response.status, text(error.status, 40), reason, text(error.message, 180))
 }
 
 function fallbackReasonFor(error: unknown): FallbackReason {
   if (!(error instanceof ProviderError)) return 'byok_unavailable'
-  // Google answers an invalid key with 400 API_KEY_INVALID, not only 401/403.
-  if (error.status === 400 || error.status === 401 || error.status === 403) return 'byok_rejected'
+  if (error.reason === 'API_KEY_INVALID' || error.status === 401 || error.status === 403) return 'byok_rejected'
   if (error.status === 404) return 'byok_model'
   if (error.status === 429) return 'byok_quota'
+  // Region and billing restrictions arrive as 400 FAILED_PRECONDITION.
+  if (error.providerStatus === 'FAILED_PRECONDITION') return 'byok_region'
+  if (error.status === 400) return 'byok_request'
   return 'byok_unavailable'
+}
+
+/** What the reader is told Google said, e.g. "503 UNAVAILABLE: The model is overloaded." */
+function fallbackDetailFor(error: unknown): string | undefined {
+  if (error instanceof ProviderError) {
+    const label = [error.status, error.providerStatus].filter(Boolean).join(' ')
+    return error.detail ? `${label}: ${error.detail}` : label
+  }
+  if (error instanceof GenerationError) return error.message
+  return undefined
+}
+
+/**
+ * Tried in this order, with the reader's own key, when the model they picked
+ * is overloaded or out of quota. Each Gemini model has its own free-tier
+ * quota, so a second one often answers where the first could not — and the
+ * reader still gets the AI they chose, not ours.
+ */
+const BYOK_ALTERNATES = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.5-flash-lite']
+const TRANSIENT_RETRY_DELAY_MS = 800
+
+export function normalizeGeminiModel(model: string): string {
+  const cleaned = model.replace(/^(google\/|@cf\/|models\/)/, '').trim().toLowerCase().replace(/\s+/g, '-')
+  return cleaned.startsWith('gemini-') ? cleaned : DEFAULT_BYOK_MODEL
 }
 
 /**
@@ -169,6 +236,11 @@ export class GenerationError extends Error {
 
 const STARTUP_TIMEOUT_MS = 30_000
 const IDLE_TIMEOUT_MS = 20_000
+/**
+ * Gemini thinks before its first token and sends nothing while it does, so
+ * the silence before the first frame is longer than any gap after it.
+ */
+const GEMINI_FIRST_TOKEN_TIMEOUT_MS = 45_000
 const TOTAL_TIMEOUT_MS = 120_000
 const MAX_FRAME_CHARACTERS = 1_000_000
 
@@ -222,7 +294,9 @@ async function* readTextDeltas(
   stream: ReadableStream<Uint8Array | string>,
   deadline: number,
   signal?: AbortSignal,
+  firstIdleMs = IDLE_TIMEOUT_MS,
 ): AsyncGenerator<string> {
+  let received = false
   const reader = stream.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
@@ -242,7 +316,8 @@ async function* readTextDeltas(
   }
   try {
     while (true) {
-      const { done, value } = await bounded(reader.read(), Math.min(IDLE_TIMEOUT_MS, deadline - Date.now()), signal)
+      const { done, value } = await bounded(reader.read(), Math.min(received ? IDLE_TIMEOUT_MS : firstIdleMs, deadline - Date.now()), signal)
+      received = true
       if (done) { ended = true; break }
       buffer += typeof value === 'string' ? value : decoder.decode(value, { stream: true })
       if (buffer.length > MAX_FRAME_CHARACTERS) throw new GenerationError('invalid_stream')
@@ -579,29 +654,33 @@ async function openModelStream(input: ModelStreamInput): Promise<ReadableStream<
 
   // 1. BYOK: Direct Google AI Studio / Gemini API if user supplied an apiKey
   if (input.apiKey) {
-    const rawModel = input.model.replace(/^(google\/|@cf\/)/, '')
-    const cleaned = rawModel.trim().toLowerCase().replace(/\s+/g, '-')
-    const geminiModel = cleaned.startsWith('gemini-') ? cleaned : DEFAULT_BYOK_MODEL
+    const geminiModel = normalizeGeminiModel(input.model)
     const contents = formatGeminiContents(input.history, input.question, input.context, input.mode)
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:streamGenerateContent?alt=sse`
-    const response = await fetch(url, {
+    const request = (generationConfig: object) => fetch(url, {
       method: 'POST',
       signal: input.signal,
       headers: {
         'Content-Type': 'application/json',
-        'x-goog-api-key': input.apiKey,
+        'x-goog-api-key': input.apiKey!,
       },
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: systemPrompt }] },
         contents,
-        generationConfig: GEMINI_GENERATION_CONFIG,
+        generationConfig,
       }),
     })
-    if (!response.ok || !response.body) {
-      // The body can echo the request; only the status leaves this function.
-      void response.body?.cancel().catch(() => undefined)
-      throw new ProviderError(response.status)
+    let response = await request(GEMINI_GENERATION_CONFIG)
+    if (!response.ok) {
+      let error = await providerErrorFrom(response)
+      // A model without thinking levels rejects the setting; ask again without it.
+      if (error.status === 400 && /thinking/i.test(error.detail)) {
+        response = await request({ maxOutputTokens: GEMINI_GENERATION_CONFIG.maxOutputTokens })
+        if (!response.ok) error = await providerErrorFrom(response)
+      }
+      if (!response.ok) throw error
     }
+    if (!response.body) throw new ProviderError(response.status)
     return response.body as ReadableStream<Uint8Array>
   }
 
@@ -654,12 +733,15 @@ async function prepareTextStream(input: ModelStreamInput, deadline: number): Pro
   })
   let stream: ReadableStream<Uint8Array | string>
   try {
-    stream = await bounded(opening, Math.min(STARTUP_TIMEOUT_MS, deadline - Date.now()), input.signal)
+    stream = await bounded(opening, Math.min(input.apiKey ? GEMINI_FIRST_TOKEN_TIMEOUT_MS : STARTUP_TIMEOUT_MS, deadline - Date.now()), input.signal)
   } catch (error) {
     acceptingStream = false
     throw error instanceof GenerationError || error instanceof ProviderError ? error : new GenerationError('invalid_stream')
   }
-  const text = groundListEntries(readTextDeltas(stream, deadline, input.signal), input.blocks ?? [])
+  const text = groundListEntries(
+    readTextDeltas(stream, deadline, input.signal, input.apiKey ? GEMINI_FIRST_TOKEN_TIMEOUT_MS : IDLE_TIMEOUT_MS),
+    input.blocks ?? [],
+  )
   try {
     const first = await text.next()
     if (first.done || !first.value) throw new GenerationError('invalid_stream')
@@ -686,29 +768,76 @@ async function prepareTextStream(input: ModelStreamInput, deadline: number): Pro
 export async function streamGroundedAnswer(input: ModelStreamInput): Promise<StreamingGenerationResult> {
   const primaryModel = input.model || DEFAULT_GENERATION_MODEL
   const deadline = Date.now() + TOTAL_TIMEOUT_MS
-  try {
-    return {
-      model: primaryModel,
-      usedModel: primaryModel,
-      fallback: false,
-      text: await prepareTextStream({ ...input, model: primaryModel }, deadline),
+  if (!input.apiKey) {
+    try {
+      return {
+        model: primaryModel,
+        usedModel: primaryModel,
+        fallback: false,
+        text: await prepareTextStream({ ...input, model: primaryModel }, deadline),
+      }
+    } catch (error) {
+      if (primaryModel === FALLBACK_MODEL || input.signal?.aborted || Date.now() >= deadline) throw error
+      return platformFallback(input, primaryModel, error, deadline)
     }
-  } catch (error) {
-    if (primaryModel === FALLBACK_MODEL || input.signal?.aborted || Date.now() >= deadline) throw error
-    const fallbackReason: FallbackReason = input.apiKey ? fallbackReasonFor(error) : 'primary_unavailable'
-    console.warn(JSON.stringify({
-      event: 'primary_streaming_model_failed',
-      model: primaryModel,
-      fallback_model: FALLBACK_MODEL,
-      code: error instanceof GenerationError ? error.code : error instanceof ProviderError ? `status_${error.status}` : 'provider_error',
-      reason: fallbackReason,
-    }))
-    return {
-      model: FALLBACK_MODEL,
-      usedModel: FALLBACK_MODEL,
-      fallback: true,
-      fallbackReason,
-      text: await prepareTextStream({ ...input, model: FALLBACK_MODEL, apiKey: undefined }, deadline),
+  }
+
+  // The reader's own key: the chosen model, once more after a pause if Google
+  // was overloaded, then the other Gemini models on the same key. Only when
+  // none of them answers does the platform model step in.
+  const chosen = normalizeGeminiModel(primaryModel)
+  const attempts = [chosen, chosen, ...BYOK_ALTERNATES.filter((model) => model !== chosen)]
+  let lastError: unknown
+  for (const [index, model] of attempts.entries()) {
+    if (input.signal?.aborted || Date.now() >= deadline) break
+    if (index === 1) await new Promise((resolve) => setTimeout(resolve, TRANSIENT_RETRY_DELAY_MS))
+    try {
+      return {
+        model: chosen,
+        usedModel: model,
+        fallback: false,
+        text: await prepareTextStream({ ...input, model }, deadline),
+      }
+    } catch (error) {
+      lastError = error
+      console.warn(JSON.stringify({
+        event: 'byok_attempt_failed',
+        model,
+        status: error instanceof ProviderError ? error.status : undefined,
+        provider_status: error instanceof ProviderError ? error.providerStatus : undefined,
+        reason: error instanceof ProviderError ? error.reason : error instanceof GenerationError ? error.code : 'unknown',
+        detail: error instanceof ProviderError ? error.detail : undefined,
+      }))
+      // A bad key or a malformed request fails the same way on every model.
+      if (!(error instanceof ProviderError && error.transient)) break
     }
+  }
+  if (input.signal?.aborted || Date.now() >= deadline) throw lastError
+  return platformFallback(input, chosen, lastError, deadline)
+}
+
+async function platformFallback(
+  input: ModelStreamInput,
+  primaryModel: string,
+  error: unknown,
+  deadline: number,
+): Promise<StreamingGenerationResult> {
+  const fallbackReason: FallbackReason = input.apiKey ? fallbackReasonFor(error) : 'primary_unavailable'
+  const fallbackDetail = input.apiKey ? fallbackDetailFor(error) : undefined
+  console.warn(JSON.stringify({
+    event: 'primary_streaming_model_failed',
+    model: primaryModel,
+    fallback_model: FALLBACK_MODEL,
+    code: error instanceof GenerationError ? error.code : error instanceof ProviderError ? `status_${error.status}` : 'provider_error',
+    reason: fallbackReason,
+    detail: fallbackDetail,
+  }))
+  return {
+    model: primaryModel,
+    usedModel: FALLBACK_MODEL,
+    fallback: true,
+    fallbackReason,
+    fallbackDetail,
+    text: await prepareTextStream({ ...input, model: FALLBACK_MODEL, apiKey: undefined }, deadline),
   }
 }

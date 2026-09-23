@@ -18,7 +18,7 @@ export interface Source {
   relevance_score: number
 }
 
-export type FallbackReason = 'byok_rejected' | 'byok_model' | 'byok_quota' | 'byok_unavailable' | 'primary_unavailable'
+export type FallbackReason = 'byok_rejected' | 'byok_model' | 'byok_quota' | 'byok_region' | 'byok_request' | 'byok_unavailable' | 'primary_unavailable'
 
 /** What the search has done so far; every number is a real count. */
 export interface RetrievalProgress {
@@ -47,6 +47,10 @@ export interface ChatResponse {
     fallback?: boolean
     /** Why the user's own model did not answer; decides the notice shown. */
     fallback_reason?: FallbackReason
+    /** What Google said, e.g. "503 UNAVAILABLE: The model is overloaded." */
+    fallback_detail?: string
+    /** The model that was asked for, when another one wrote the answer. */
+    requested_model?: string
     refunded?: boolean
     reference?: string
   }
