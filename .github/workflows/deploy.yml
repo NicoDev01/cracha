@@ -26,6 +26,25 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # The frontend job writes these into the Worker. Checked here, before any
+      # deploy starts, because an empty value would replace a
+      # working production secret.
+      - name: Refuse to overwrite Worker secrets with empty values
+        run: |
+          missing=""
+          for name in NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY STRIPE_API_KEY STRIPE_WEBHOOK_SECRET MODAL_CRAWLER_URL CRAWLER_API_SECRET RAG_QUERY_SECRET; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then echo "Missing GitHub secrets:$missing"; exit 1; fi
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          MODAL_CRAWLER_URL: ${{ secrets.MODAL_CRAWLER_URL }}
+          CRAWLER_API_SECRET: ${{ secrets.CRAWLER_API_SECRET }}
+          RAG_QUERY_SECRET: ${{ secrets.RAG_QUERY_SECRET }}
       - run: npx tsx scripts/preflight-release.ts
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
