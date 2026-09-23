@@ -33,17 +33,26 @@ function watchSession() {
   // signed out can sign in and navigate back here without a reload.
   if (watching || !SESSION_COOKIE.test(document.cookie)) return
   watching = true
-  void import('@/stores/auth-store').then(({ useAuthStore }) => {
-    const sync = ({ isAuthenticated }: { isAuthenticated: boolean }) => {
-      if (isAuthenticated === signedIn) return
-      signedIn = isAuthenticated
-      listeners.forEach((listener) => listener())
-    }
-    useAuthStore.subscribe(sync)
-    sync(useAuthStore.getState())
-    const { isInitialized, initialize } = useAuthStore.getState()
-    if (!isInitialized) void initialize()
-  })
+  import('@/stores/auth-store').then(
+    ({ useAuthStore }) => {
+      const sync = ({ isAuthenticated }: { isAuthenticated: boolean }) => {
+        if (isAuthenticated === signedIn) return
+        signedIn = isAuthenticated
+        listeners.forEach((listener) => listener())
+      }
+      useAuthStore.subscribe(sync)
+      sync(useAuthStore.getState())
+      const { isInitialized, initialize } = useAuthStore.getState()
+      if (!isInitialized) void initialize()
+    },
+    (error: unknown) => {
+      // A chunk that failed to load (flaky network, a deploy in between) must
+      // not keep every link on the signed-out target for the rest of the
+      // visit: the next mount tries again.
+      watching = false
+      console.warn('Could not load the session check:', error)
+    },
+  )
 }
 
 function subscribe(listener: () => void) {
