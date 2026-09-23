@@ -142,7 +142,7 @@ export function NavBar({ scroll = false }: NavBarProps) {
           >
             <AppEntryLink
               signedOutHref="/register"
-              className={buttonVariants({ variant: "default", size: "sm", rounded: "full", className: "relative z-20 px-5" })}
+              className={buttonVariants({ variant: "default", size: "sm", rounded: "full", className: "relative z-20 whitespace-nowrap px-5" })}
             >
               Kostenlos starten
             </AppEntryLink>

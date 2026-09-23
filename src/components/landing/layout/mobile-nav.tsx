@@ -79,13 +79,13 @@ export function NavMobile() {
                     <div className="flex items-center gap-1.5">
                         <ThemeToggleButton className="h-10 w-10" />
                         <AppEntryLink
-                            className={buttonVariants({ variant: "ghost", size: "sm", rounded: "full", className: "h-10 px-3" })}
+                            className={buttonVariants({ variant: "ghost", size: "sm", rounded: "full", className: "h-10 whitespace-nowrap px-3" })}
                         >
                             Login
                         </AppEntryLink>
                         <AppEntryLink
                             signedOutHref="/register"
-                            className={buttonVariants({ variant: "default", size: "sm", rounded: "full", className: "h-10 px-4" })}
+                            className={buttonVariants({ variant: "default", size: "sm", rounded: "full", className: "h-10 whitespace-nowrap px-4" })}
                         >
                             Kostenlos starten
                         </AppEntryLink>
