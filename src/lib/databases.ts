@@ -2,7 +2,7 @@ import type { Database } from '@/types/chat'
 
 export const STATUS_LABELS = {
   active: 'Aktiv',
-  crawling: 'Crawling',
+  crawling: 'Wird eingelesen',
   pending: 'Ausstehend',
   failed: 'Fehler',
   inactive: 'Inaktiv',
@@ -76,4 +76,24 @@ export function formatNumber(value?: number): string {
 export function byLastCrawl(left: Database, right: Database): number {
   const time = (value?: string | Date | null) => (value ? new Date(value).getTime() || 0 : 0)
   return time(right.last_crawl) - time(left.last_crawl)
+}
+
+/**
+ * The chat opens with the knowledge base named here already selected. A URL
+ * rather than a store write before navigating: the chat store only accepts a
+ * selection once it has hydrated and been claimed for the signed-in account,
+ * and a write made earlier from another page could be wiped by that claim.
+ */
+export const CHAT_DATABASE_PARAM = 'wissensbasis'
+
+export function chatHref(databaseId?: string | null): string {
+  return databaseId
+    ? `/dashboard/chat?${CHAT_DATABASE_PARAM}=${encodeURIComponent(databaseId)}`
+    : '/dashboard/chat'
+}
+
+/** The knowledge base a chat URL asks for, or null. Ownership is the server's call. */
+export function databaseFromChatQuery(search: string): string | null {
+  const value = new URLSearchParams(search).get(CHAT_DATABASE_PARAM)?.trim()
+  return value && value.length <= 200 ? value : null
 }

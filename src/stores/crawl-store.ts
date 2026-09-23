@@ -68,6 +68,11 @@ export interface CrawlJob {
   pages_crawled: number
   chunks_created: number
   pages_skipped: number
+  /**
+   * The most pages this crawl may fetch: what was asked for, lowered to what
+   * the server actually allowed once it answered. Unknown for older jobs.
+   */
+  page_limit?: number
   indexed_pages?: number
   indexing_pending?: number
   indexing_complete?: boolean
@@ -170,6 +175,7 @@ function migrateJob(value: unknown): CrawlJob | null {
     pages_crawled: job.pages_crawled ?? job.progress?.pages_crawled ?? 0,
     chunks_created: job.chunks_created ?? job.progress?.chunks_created ?? 0,
     pages_skipped: job.pages_skipped ?? 0,
+    page_limit: typeof job.page_limit === 'number' ? job.page_limit : undefined,
     indexed_pages: job.indexed_pages,
     indexing_pending: job.indexing_pending,
     indexing_complete: job.indexing_complete,
@@ -212,6 +218,7 @@ export const useCrawlStore = create<CrawlState>()(
           pages_crawled: 0,
           chunks_created: 0,
           pages_skipped: 0,
+          page_limit: config.limit,
           progress: { stage: 'queued', current: 0, total: 0, percent: 0 },
           created_at: now,
           updated_at: now,
@@ -240,6 +247,7 @@ export const useCrawlStore = create<CrawlState>()(
             ...newJob,
             remote_job_id: result.job_id,
             tenant_id: result.database_id ?? newJob.tenant_id,
+            page_limit: typeof result.page_limit === 'number' ? result.page_limit : newJob.page_limit,
             status: statusFromResponse(result.status, 'queued'),
             updated_at: new Date().toISOString(),
           }

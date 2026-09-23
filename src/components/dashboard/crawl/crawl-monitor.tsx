@@ -2,17 +2,19 @@
 
 import Link from "next/link"
 import { useEffect, useState } from "react"
-import { Check, CheckCircle2, Circle, Clock3, Database, ExternalLink, FileText, Loader2, OctagonX, XCircle } from "lucide-react"
+import { Check, CheckCircle2, Circle, Clock3, ExternalLink, Library, Loader2, MessagesSquare, OctagonX, XCircle } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
+import { chatHref } from "@/lib/databases"
 import { cn } from "@/lib/utils"
 import { useCrawlStore, type CrawlJob, type CrawlPhase } from "@/stores/crawl-store"
+import { crawlProgressLabel } from "./crawl-progress"
 
 const phaseOrder: CrawlPhase[] = ["queued", "crawling", "indexing", "completed"]
 const phases = [
   { value: "queued" as const, label: "Vorbereiten" },
-  { value: "crawling" as const, label: "Seiten erfassen" },
+  { value: "crawling" as const, label: "Seiten einlesen" },
   { value: "indexing" as const, label: "Wissensbasis aufbauen" },
 ]
 
@@ -26,11 +28,11 @@ function formatDuration(seconds: number) {
 function statusCopy(job: CrawlJob) {
   switch (job.phase) {
     case "queued": return { title: "Wird vorbereitet" }
-    case "crawling": return { title: "Website wird erfasst" }
+    case "crawling": return { title: "Website wird eingelesen" }
     case "indexing": return { title: "Wissensbasis wird erstellt" }
     case "completed": return { title: "Bereit" }
     case "cancelled": return { title: "Abgebrochen" }
-    default: return { title: "Fehlgeschlagen", detail: job.error || "Der Crawl konnte nicht abgeschlossen werden." }
+    default: return { title: "Fehlgeschlagen", detail: job.error || "Das Einlesen konnte nicht abgeschlossen werden." }
   }
 }
 
@@ -66,8 +68,8 @@ export function CrawlMonitor() {
         <div className="flex size-11 items-center justify-center rounded-xl bg-white text-gray-400 shadow-theme-xs dark:bg-gray-900">
           <Clock3 className="size-5" />
         </div>
-        <h2 className="mt-4 text-sm font-semibold text-gray-800 dark:text-white">Noch kein Crawl gestartet</h2>
-        <p className="mt-1 max-w-56 text-xs leading-5 text-gray-500 dark:text-gray-400">Der Status deines nächsten Crawls erscheint automatisch hier.</p>
+        <h2 className="mt-4 text-sm font-semibold text-gray-800 dark:text-white">Noch nichts eingelesen</h2>
+        <p className="mt-1 max-w-56 text-xs leading-5 text-gray-500 dark:text-gray-400">Sobald du eine Website einliest, siehst du hier den Fortschritt.</p>
       </aside>
     )
   }
@@ -86,22 +88,14 @@ export function CrawlMonitor() {
   const determinate = !terminal && currentJob.phase === "indexing" && percent > 0
   // The reader pays for a product, not for an architecture: no service names,
   // no pipeline stages, only what their own website is doing in plain words.
-  const progressLabel = currentJob.phase === "queued"
-    ? "Wird gestartet"
-    : currentJob.phase === "indexing"
-      ? (progress?.current ?? 0) === 0
-        ? "Seiten werden aufbereitet"
-        : `${progress?.current ?? 0} von ${progress?.total ?? currentJob.pages_crawled} Seiten bereit`
-      : (progress?.current ?? 0) === 0
-        ? "Seiten werden gesucht"
-        : `${progress?.current ?? 0} Seiten erfasst`
+  const progressLabel = crawlProgressLabel(currentJob)
 
   const handleCancel = async () => {
     try {
       await cancelCrawl()
-      toast.success("Crawl wurde abgebrochen.")
+      toast.success("Einlesen abgebrochen.")
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Crawl konnte nicht abgebrochen werden.")
+      toast.error(error instanceof Error ? error.message : "Einlesen konnte nicht abgebrochen werden.")
     }
   }
 
@@ -147,7 +141,7 @@ export function CrawlMonitor() {
 
         <div className="mt-5 rounded-xl border border-gray-100 bg-gray-50/80 p-3.5 dark:border-gray-800 dark:bg-gray-800/50">
           <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-gray-800 dark:text-gray-100">
-            <Database className="size-4 shrink-0 text-gray-400" />
+            <Library className="size-4 shrink-0 text-gray-400" />
             <span className="truncate">{currentJob.name}</span>
           </div>
           <a href={currentJob.url} target="_blank" rel="noreferrer" className="mt-2 flex min-w-0 items-center gap-2 text-xs text-gray-500 hover:text-brand-600 dark:text-gray-400">
@@ -157,8 +151,8 @@ export function CrawlMonitor() {
         </div>
 
         {isRunning && (
-          <div className="mt-5 flex items-start gap-2.5 text-xs" aria-label="Crawl-Fortschritt">
-            <Loader2 className="mt-0.5 size-3.5 shrink-0 animate-spin text-brand-500" />
+          <div className="mt-5 flex items-start gap-2.5 text-sm" aria-label="Fortschritt">
+            <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-brand-500" />
             <div className="min-w-0 flex-1">
               <p className="font-medium text-gray-700 dark:text-gray-200">{progressLabel}</p>
               {progress?.url && currentJob.phase === "crawling" && (
@@ -228,12 +222,12 @@ export function CrawlMonitor() {
           )}
           {successful && (
             <Button asChild size="sm" className="gap-2 rounded-lg bg-brand-500 !text-white hover:bg-brand-600">
-              <Link href="/dashboard/chat"><FileText className="size-4" />Zum Chat</Link>
+              <Link href={chatHref(currentJob.tenant_id)}><MessagesSquare className="size-4" />Fragen stellen</Link>
             </Button>
           )}
         </div>
 
-        {isRunning && <p className="mt-4 text-[11px] leading-5 text-gray-400">Du kannst die Seite verlassen. Der Crawl läuft im Hintergrund weiter.</p>}
+        {isRunning && <p className="mt-4 text-[11px] leading-5 text-gray-400">Du kannst die Seite verlassen. Das Einlesen läuft im Hintergrund weiter.</p>}
       </div>
     </aside>
   )

@@ -2,7 +2,7 @@
 
 import { useSidebar } from "@/components/dashboard/context/SidebarContext";
 import { SidebarProvider } from '@/components/dashboard/context/SidebarContext';
-import { ThemeProvider } from '@/components/dashboard/context/ThemeContext';
+import { ThemeProvider, useTheme } from '@/components/dashboard/context/ThemeContext';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { AuthProvider } from '@/components/providers/auth-provider';
 import AppHeader from "@/components/dashboard/layout/AppHeader";
@@ -10,6 +10,7 @@ import AppSidebar from "@/components/dashboard/layout/AppSidebar";
 import Backdrop from "@/components/dashboard/layout/Backdrop";
 import React from "react";
 import { usePathname } from "next/navigation";
+import { Toaster } from "sonner";
 import { Inter, Urbanist } from "next/font/google";
 import localFont from "next/font/local";
 import "./global.css";
@@ -29,6 +30,13 @@ const calSans = localFont({
   variable: "--font-heading",
   display: "swap",
 });
+
+// The same sonner Toaster the public site mounts, following the dashboard's own
+// theme. Without it every toast the dashboard fires was silently dropped.
+function DashboardToaster() {
+  const { theme } = useTheme();
+  return <Toaster position="top-right" richColors theme={theme} />;
+}
 
 function DashboardContent({ children }: { children: React.ReactNode }) {
   const { isExpanded, isHovered, isMobileOpen } = useSidebar();
@@ -80,6 +88,7 @@ export default function DashboardLayout({
           <ThemeProvider>
             <SidebarProvider>
               <DashboardContent>{children}</DashboardContent>
+              <DashboardToaster />
             </SidebarProvider>
           </ThemeProvider>
         </AuthGuard>

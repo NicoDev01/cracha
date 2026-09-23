@@ -43,6 +43,16 @@ it('never writes late stream events into another database', async () => {
   useChatStore.getState().selectDatabase('A')
   expect(useChatStore.getState().messages[1].content).toBe('belongs to A')
 })
+it('drops a selection made before the account was claimed', () => {
+  // Why the chat takes its preselection from the URL: a base chosen on another
+  // page before the store belonged to this account does not survive the claim.
+  useChatStore.getState().claimFor(null)
+  useChatStore.getState().selectDatabase('X')
+  useChatStore.getState().claimFor('carol')
+  expect(useChatStore.getState().selectedDatabase).toBeNull()
+  useChatStore.getState().selectDatabase('X')
+  expect(useChatStore.getState().selectedDatabase).toBe('X')
+})
 it('preserves old conversations when starting a new one', async () => {
   await useChatStore.getState().sendMessage('Erste Frage')
   const original = useChatStore.getState().selectedConversation!

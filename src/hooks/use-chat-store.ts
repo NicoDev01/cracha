@@ -34,8 +34,11 @@ export function useHydratedChatStore() {
       isStreaming: false,
       byokApiKey: null,
       byokModel: null,
+      ready: false,
     }
   }
 
-  return store
+  // The first moment a selection made now belongs to, and stays with, the
+  // signed-in account.
+  return { ...store, ready: owner !== null }
 }

@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react"
 import { useSearchParams } from "next/navigation"
-import { Activity, History, Plus, Radar } from "lucide-react"
+import { Activity, Globe, History, Plus } from "lucide-react"
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useCrawlStore } from "@/stores/crawl-store"
@@ -51,27 +51,27 @@ export function CrawlInterface() {
   }
 
   return (
-    <section className="flex h-full min-h-0 flex-col" aria-label="Website-Crawler">
+    <section className="flex h-full min-h-0 flex-col" aria-label="Website einlesen">
       <header className="flex shrink-0 items-center justify-between gap-3 border-b border-gray-200 px-4 py-3 sm:px-5 dark:border-gray-800">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-500 text-white shadow-theme-sm">
-            <Radar className="size-5" />
+            <Globe className="size-5" />
           </div>
-          <h1 className="truncate font-semibold text-gray-900 dark:text-white">Crawl</h1>
+          <h1 className="truncate font-semibold text-gray-900 dark:text-white">Website einlesen</h1>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="h-9 rounded-xl bg-gray-100 p-1 dark:bg-gray-800">
-            <TabsTrigger value="new" className="rounded-lg px-3" aria-label="Neuer Crawl">
+            <TabsTrigger value="new" className="rounded-lg px-3" aria-label="Neue Website einlesen">
               <Plus className="size-4" />
               <span className="hidden sm:inline">Neu</span>
             </TabsTrigger>
-            <TabsTrigger value="status" className="relative rounded-lg px-3" aria-label="Crawl-Status">
+            <TabsTrigger value="status" className="relative rounded-lg px-3" aria-label="Status">
               <Activity className="size-4" />
               <span className="hidden sm:inline">Status</span>
               {isRunning && <span className="absolute right-1 top-1 size-1.5 animate-pulse rounded-full bg-brand-500" />}
             </TabsTrigger>
-            <TabsTrigger value="history" className="rounded-lg px-3" aria-label="Crawl-Verlauf">
+            <TabsTrigger value="history" className="rounded-lg px-3" aria-label="Verlauf">
               <History className="size-4" />
               <span className="hidden sm:inline">Verlauf</span>
             </TabsTrigger>

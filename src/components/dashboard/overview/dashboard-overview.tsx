@@ -1,15 +1,16 @@
 'use client'
 
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, ArrowRight, Loader2, MessageSquare, Plus, RefreshCw } from 'lucide-react'
+import { AlertTriangle, ArrowRight, Globe, Loader2, MessagesSquare, RefreshCw } from 'lucide-react'
 
 import { StatusBadge } from '@/components/dashboard/common/StatusBadge'
 import { CreditCard } from '@/components/dashboard/overview/credit-card'
+import { FirstSteps, primaryCta } from '@/components/dashboard/overview/first-steps'
 import { Button } from '@/components/ui/button'
 import {
   byLastCrawl,
+  chatHref,
   databaseName,
   databaseStatus,
   formatDate,
@@ -20,7 +21,7 @@ import {
 } from '@/lib/databases'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
-import { getDatabases, useChatStore } from '@/stores/chat-store'
+import { getDatabases } from '@/stores/chat-store'
 import type { Database } from '@/types/chat'
 
 const VISIBLE_DATABASES = 5
@@ -48,9 +49,7 @@ function Notice({ href, tone, children }: {
 }
 
 export function DashboardOverview() {
-  const router = useRouter()
   const { user } = useAuthStore()
-  const selectDatabase = useChatStore((state) => state.selectDatabase)
   const [databases, setDatabases] = useState<Database[]>([])
   const [isLoading, setIsLoading] = useState(() => Boolean(user))
   const [error, setError] = useState<string | null>(null)
@@ -110,51 +109,29 @@ export function DashboardOverview() {
   const crawling = databases.filter((database) => databaseStatus(database) === 'crawling').length
   const failed = databases.filter((database) => databaseStatus(database) === 'failed').length
   const recent = useMemo(() => [...databases].sort(byLastCrawl).slice(0, VISIBLE_DATABASES), [databases])
-
-  const openInChat = (database: Database) => {
-    selectDatabase(database.id)
-    router.push('/dashboard/chat')
-  }
+  const isEmpty = !error && !isLoading && databases.length === 0
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {/*
-        The page answers three questions in order: what do I have (the credit
-        hero below), what do I do next (the pill CTA here, always reachable,
-        also inside the empty state), and what needs attention (the notices
-        and the low-balance hint). The greeting replaces the old "Übersicht"
-        label — a returning user and a brand-new account should not read the
-        same headline.
+        What the page is for, in order: how much can I still do (balance, one
+        top-up button), what do I have (the knowledge bases, each one click away
+        from a question), and what needs attention (running or failed imports).
+        A brand-new account sees the three steps instead of an empty list.
       */}
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold text-gray-800 dark:text-white/90">
-          {databases.length > 0 ? 'Willkommen zurück' : 'Willkommen zu CraCha'}
-        </h1>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => void load()}
-            disabled={isLoading}
-            aria-label="Aktualisieren"
-            title="Aktualisieren"
-            className="size-9 shrink-0 rounded-full text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-          >
-            <RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />
-          </Button>
-          <Button
-            asChild
-            size="sm"
-            rounded="full"
-            className="h-10 gap-1.5 bg-brand-500 px-5 !text-white shadow-sm hover:bg-brand-600"
-          >
-            <Link href="/dashboard/crawl">
-              <Plus className="size-4" />
-              Neuen Crawl starten
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-xl font-semibold text-gray-800 dark:text-white/90">Übersicht</h1>
+        {!isEmpty && (
+          <Button asChild size="sm" rounded="full" className={primaryCta}>
+            <Link href="/dashboard/crawl" prefetch={false}>
+              <Globe className="size-4" />
+              Website einlesen
             </Link>
           </Button>
-        </div>
+        )}
       </div>
+
+      <CreditCard />
 
       {error && (
         <div className="flex items-center justify-between gap-3 rounded-xl border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700 dark:border-error-800 dark:bg-error-500/10 dark:text-error-300">
@@ -163,33 +140,13 @@ export function DashboardOverview() {
         </div>
       )}
 
-      {/*
-        What do I have? One number, big and first — the balance. Everything
-        else the old card explained (what a credit buys, the ledger) moved out;
-        the two units it is spent on are visible where they are spent.
-      */}
-      <CreditCard />
-
-      {!error && !isLoading && databases.length === 0 ? (
-        <div className="flex flex-col items-center rounded-2xl border border-gray-200 bg-white px-6 py-16 text-center dark:border-gray-800 dark:bg-white/[0.03]">
-          <h2 className="text-base font-semibold text-gray-900 dark:text-white">Deine erste Antwort in drei Schritten</h2>
-          <ol className="mt-4 max-w-lg space-y-2 text-left text-sm leading-6 text-gray-600 dark:text-gray-300">
-            <li>1. Wähle eine öffentliche Website und starte mit bis zu 20 Seiten.</li>
-            <li>Warte, bis die Wissensbasis bereit ist, und öffne sie über „Fragen“.</li>
-            <li>Stelle eine konkrete Frage und prüfe die verlinkten Quellen.</li>
-          </ol>
-          <Link href="/website-mit-ki-durchsuchen" className="mt-4 text-sm text-brand-600 underline dark:text-brand-400">Anleitung mit Beispielfragen lesen</Link>
-          <Button asChild className="mt-5 h-10 gap-1.5 rounded-full bg-brand-500 px-5 !text-white shadow-sm hover:bg-brand-600">
-            <Link href="/dashboard/crawl"><Plus className="size-4" />Neuen Crawl starten</Link>
-          </Button>
-        </div>
-      ) : !error && (
+      {isEmpty ? <FirstSteps /> : !error && (
         <>
           {(crawling > 0 || failed > 0) && (
             <div className="grid gap-2 sm:grid-cols-2">
               {crawling > 0 && (
                 <Notice href="/dashboard/crawl" tone="info">
-                  {crawling === 1 ? 'Ein Crawl läuft gerade' : `${crawling} Crawls laufen gerade`}
+                  {crawling === 1 ? 'Eine Website wird gerade eingelesen' : `${crawling} Websites werden gerade eingelesen`}
                 </Notice>
               )}
               {failed > 0 && (
@@ -200,15 +157,29 @@ export function DashboardOverview() {
             </div>
           )}
 
-          <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
+          <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]" aria-labelledby="overview-databases">
             <header className="flex items-center justify-between gap-3 border-b border-gray-100 px-4 py-3 dark:border-gray-800">
-              <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Wissensbasen</h2>
-              <Link
-                href="/dashboard/data"
-                className="text-xs font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400"
-              >
-                Alle verwalten
-              </Link>
+              <h2 id="overview-databases" className="text-sm font-semibold text-gray-900 dark:text-white">Deine Wissensbasen</h2>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => void load()}
+                  disabled={isLoading}
+                  aria-label="Wissensbasen aktualisieren"
+                  title="Aktualisieren"
+                  className="size-8 shrink-0 rounded-full text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                >
+                  <RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />
+                </Button>
+                <Link
+                  href="/dashboard/data"
+                  prefetch={false}
+                  className="text-xs font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400"
+                >
+                  Alle verwalten
+                </Link>
+              </div>
             </header>
 
             {isLoading ? (
@@ -234,18 +205,26 @@ export function DashboardOverview() {
                           {hostname(url)} · {formatNumber(pageCount(database))} Seiten · {formatDate(database.last_crawl)}
                         </p>
                       </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => openInChat(database)}
-                        disabled={status !== 'active'}
-                        className="h-9 shrink-0 gap-2 rounded-full px-4"
-                        title={status === 'active' ? undefined : 'Diese Wissensbasis ist noch nicht durchsuchbar.'}
-                      >
-                        <MessageSquare className="size-4" />
-                        Fragen
-                      </Button>
+                      {status === 'active' ? (
+                        <Button asChild variant="outline" size="sm" className="h-9 shrink-0 gap-2 rounded-full px-4">
+                          <Link href={chatHref(database.id)} prefetch={false}>
+                            <MessagesSquare className="size-4" />
+                            Fragen
+                          </Link>
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled
+                          className="h-9 shrink-0 gap-2 rounded-full px-4"
+                          title="Diese Wissensbasis ist noch nicht durchsuchbar."
+                        >
+                          <MessagesSquare className="size-4" />
+                          Fragen
+                        </Button>
+                      )}
                     </li>
                   )
                 })}
