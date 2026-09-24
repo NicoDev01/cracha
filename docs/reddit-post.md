@@ -6,7 +6,7 @@ Stand: 24.09.2026. Ziel ist Feedback und ein paar erste Nutzer, keine Werbung. D
 
 | Subreddit | Sprache | Warum | Risiko |
 |---|---|---|---|
-| **r/de_EDV** (Empfehlung) | Deutsch | Große deutschsprachige IT-Community, technisch versiert, kritisch. Genau das ungeschönte Feedback, das du willst. | Eigenwerbung ist dort womöglich eingeschränkt. Technikleute hinterfragen Datenschutz und robots.txt. |
+| **r/de_EDV** (Empfehlung) | Deutsch | Große deutschsprachige IT-Community, technisch versiert, kritisch. Genau das ungeschönte Feedback, das du willst. | Eigenwerbung ist dort womöglich eingeschränkt. Technikleute hinterfragen Datenschutz. |
 | r/selbststaendig | Deutsch | Selbstständige, Berater und kleine Agenturen: deine eigentliche Zielgruppe | Wahrscheinlich strengere Werberegeln |
 | r/SideProject | Englisch | Ausdrücklich zum Vorstellen eigener Projekte gedacht, freundlich zu Solo-Entwicklern | Die Oberfläche ist nur deutsch, Englischsprachige testen dann eher nicht selbst |
 
@@ -21,13 +21,6 @@ Stand: 24.09.2026. Ziel ist Feedback und ein paar erste Nutzer, keine Werbung. D
 5. Zeit einplanen: Die ersten zwei bis drei Stunden nach dem Posten zählen. Poste, wenn du danach am Rechner bist und antworten kannst.
 6. Während der Post läuft, Sentry (`cracha-web`) und die Credit-Käufe im Blick behalten. Jede neue Anmeldung bekommt 100 Credits, und die kosten dich echte Crawl- und KI-Kosten.
 
-## Eine Entscheidung vorher: robots.txt
-
-CraCha beachtet robots.txt **standardmäßig nicht**, man kann es beim Einlesen einschalten. In r/de_EDV wird das mit hoher Wahrscheinlichkeit jemand ansprechen, und „ignoriert robots.txt“ kommt dort schlecht an.
-
-- **Option A:** Vor dem Post den Standard auf „robots.txt beachten“ umstellen. Ich kann das ändern; dann lassen sich manche Websites schlechter einlesen.
-- **Option B:** So lassen und ehrlich begründen (Antwortvorschlag unten).
-
 ## Titel (einen auswählen)
 
 1. Ich habe allein ein Tool gebaut, das ganze Websites einliest und Fragen mit Quellenlink beantwortet. Bitte ehrlich zerlegen
@@ -38,20 +31,26 @@ Empfehlung: Titel 2. Er sagt in einem Satz, was es ist, und dass du Kritik wills
 
 ## Post-Text (Deutsch, zum Kopieren)
 
+Reddit nimmt Markdown direkt an: Im Editor auf „Markdown“ umschalten und den Block einfügen.
+
 ```markdown
-Hi zusammen,
+Moin,
 
-ich bin Nico und baue seit einigen Monaten allein und nebenbei an einem kleinen Projekt namens CraCha. Vorweg ganz ehrlich: Das ist kein neues Konzept. „Chat mit deinen Daten“ gibt es inzwischen überall. Ich glaube nur, dass es für ein paar ganz bestimmte Fälle eine Lücke gibt, und genau dazu hätte ich gern eure ungeschönte Meinung.
+ich baue seit einigen Monaten nebenbei immer mal wieder an einem Projekt und habe nun beschlossen, es für User zugänglich zu machen. Ich bin Hobby-Solo-Entwickler aus Bremen und bastle immer mal wieder an kleinen Projekten und KI-Integrationen.
 
-**Was CraCha macht, in einfach**
+Vorweg ganz ehrlich: Das ist kein neues Konzept. RAG-Systeme und „Chat mit deinen Daten“ gibt es inzwischen überall. Einen rekursiven Crawler plus RAG mit Hybrid-Suche und Reranking als fertiges Tool habe ich allerdings noch nicht so oft gesehen.
 
-1. Du gibst die Adresse einer Website ein, zum Beispiel eine Produktdokumentation, ein Hilfe-Center oder die Website einer Hochschule.
-2. CraCha sucht sich die Unterseiten selbst (über die Sitemap oder die Links auf der Seite) und liest bis zu 500 Seiten ein.
-3. Danach stellst du Fragen im Chat. Die Antwort kommt nur aus diesen Seiten, und darunter stehen die Links zu den Originalseiten, damit du selbst nachprüfen kannst.
+Ich glaube, es hilft nur in ganz bestimmten Fällen, aber vielleicht findet es ja jemand spannend und hilfreich. Hier ist sicher noch nicht alles rund, gebt mir also gern eure ungeschönte Meinung dazu.
+
+**Zum Projekt: CraCha (Crawl Chat)**
+
+1. Du gibst die Adresse einer Website ein, zum Beispiel eine Produktdokumentation, eine Kundenwebsite oder ein Wiki.
+2. CraCha crawlt sich rekursiv und selbstständig durch alle Unterseiten (über die Sitemap oder die Links auf der Seite) und liest bis zu 500 Seiten ein. Daraus erstellt es eine Vektordatenbank.
+3. Danach chattest du mit dieser Datenbank, also ganz normales RAG. Die Antworten speisen sich ausschließlich aus den Informationen der gecrawlten Website. Im Text stehen die Quellen mit Links zu den Originalseiten, damit du selbst nachprüfen kannst.
 
 **Warum nicht einfach NotebookLM oder Perplexity?**
 
-- NotebookLM (heißt inzwischen Gemini Notebook) ist stark für eigene PDFs und Dokumente. Webseiten fügt man dort aber einzeln hinzu. Bei einer Doku mit 200 Unterseiten wird das mühsam, und in der Gratisversion ist bei 50 Quellen Schluss.
+- NotebookLM ist stark für eigene PDFs und Dokumente. Webseiten fügt man dort aber einzeln hinzu. Bei einer Doku mit 200 Unterseiten wird das mühsam, und in der Gratisversion ist bei 50 Quellen Schluss.
 - Perplexity und ChatGPT suchen bei jeder Frage neu im ganzen Netz. Für allgemeine Fragen ist das super. Steht die Antwort aber auf Unterseite 147 einer bestimmten Website, taucht die in der Suche nicht immer auf.
 - CraCha sitzt irgendwo dazwischen: eine bestimmte Website, vorher komplett eingelesen, jede Antwort mit Quelle.
 
@@ -63,30 +62,29 @@ ich bin Nico und baue seit einigen Monaten allein und nebenbei an einem kleinen 
 
 **Was es nicht kann**
 
-- Keine PDFs und keine Seiten hinter einem Login
+- Keine PDFs und keine Seiten hinter einem Login oder Passwort
 - Kein automatisches Aktualisieren. Ändert sich die Website, liest man sie neu ein
-- Die Oberfläche gibt es nur auf Deutsch (Fragen auf Englisch gehen trotzdem)
 - Websites mit starkem Bot-Schutz lassen sich teilweise nicht einlesen
 - Es ist KI, sie kann sich irren. Genau deshalb hängen an jeder Antwort die Quellen
 
 **Kosten**
 
-Zum Ausprobieren gibt es 100 Credits gratis, ohne Kreditkarte. Das reicht für etwa 20 Seiten und 16 Fragen. Danach gibt es Pakete ab 10 € als einmalige Aufladung, kein Abo. Ich will hier nichts verkaufen, aber Crawling und KI kosten mich pro Nutzung echtes Geld.
+Zum Ausprobieren gibt es 100 Credits gratis (wie gesagt, ich bin nur Hobby-Solo-Entwickler, daher kein großes Budget).
 
 **Technik, falls es jemanden interessiert**
 
-Next.js auf Cloudflare Workers, der Crawler läuft mit Crawl4AI auf Modal, die Suche über Cloudflare AI Search, Antworten standardmäßig mit Llama 4 Scout. Alles allein gebaut.
+Next.js auf Cloudflare Workers, der Crawler läuft mit Crawl4AI auf Modal, das RAG über Cloudflare AI Search, Antworten standardmäßig mit Llama 4 Scout (BYOK möglich mit Gemini 3.8 Flash).
 
 **Was ich von euch wissen will**
 
 - Versteht man innerhalb von 10 Sekunden auf der Startseite, was das Ding macht?
-- Hättet ihr einen echten Anwendungsfall dafür, oder löst es ein Problem, das niemand hat?
+- Hättet ihr einen echten Anwendungsfall dafür, oder löst es ein Problem bei euch?
 - Falls ihr es ausprobiert: Welche Website habt ihr eingelesen, und waren die Antworten brauchbar?
 - Was hat genervt, was hat nicht funktioniert?
 
 Link: https://cracha-app.com
 
-Danke fürs Lesen. Ich antworte auf alles, Kritik ausdrücklich eingeschlossen.
+Dickes Dankeschön schon mal!
 ```
 
 ## Englische Fassung für r/SideProject (später)
@@ -125,9 +123,6 @@ Ehrlich, kurz und ohne Verteidigungshaltung. Danke sagen, auch wenn es wehtut.
 
 **„Das ist doch nur ein ChatGPT-Wrapper.“**
 > Die KI selbst ist nicht von mir, das stimmt. Die Arbeit steckt vor allem im Einlesen: Unterseiten finden, JavaScript-Seiten rendern, Navigation und Müll rausfiltern, und in Quellen, die man nachprüfen kann. Ob das als Mehrwert reicht, will ich gerade herausfinden. Deshalb der Post.
-
-**„Ignoriert das robots.txt?“** (nur relevant bei Option B)
-> Standardmäßig ja, beim Einlesen lässt es sich einschalten. Eingelesen werden nur öffentlich erreichbare Seiten, der Index ist nur für die Person sichtbar, die ihn angelegt hat, und nichts wird weiterveröffentlicht. Ich sehe aber den Punkt und überlege, den Standard umzudrehen. Wie seht ihr das?
 
 **„Wo landen meine Daten?“**
 > Gehostet auf Cloudflare, Konten bei Supabase (EU-Region Frankfurt), Crawling auf Modal. Die Fragen gehen an das KI-Modell (standardmäßig Llama 4 Scout über Cloudflare Workers AI, optional Gemini). Der Chatverlauf wird nur lokal in deinem Browser gespeichert, das Logging von Fragen und Antworten am KI-Gateway ist aus. Details: https://cracha-app.com/datenschutz
