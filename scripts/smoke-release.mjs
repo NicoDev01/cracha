@@ -12,6 +12,15 @@ async function check() {
     if (!response.ok || !html.includes('<title>')) throw new Error(`Page unavailable: ${path}`);
     if (path === '/' && (!html.includes('Verwandle jede Website') || !html.includes('kein Abo'))) throw new Error('Landing page does not show the current headline and pricing FAQ');
   }
+  // A router prefetch asks for one segment. Answered with the whole page
+  // payload instead, the router rejects it and asks again, forever — which is
+  // what OpenNext's cache interception did (open-next.config.ts).
+  const prefetchHeaders = { rsc: '1', 'next-router-prefetch': '1', 'next-router-segment-prefetch': '/_tree' };
+  const segmentResponse = await fetch(new URL('/login?_rsc=smoke', origin), { headers: prefetchHeaders, cache: 'no-store', signal: AbortSignal.timeout(15000) });
+  const fullResponse = await fetch(new URL('/login?_rsc=smoke', origin), { headers: { rsc: '1' }, cache: 'no-store', signal: AbortSignal.timeout(15000) });
+  if (!segmentResponse.ok || !fullResponse.ok) throw new Error(`Prefetch unavailable: segment ${segmentResponse.status}, full ${fullResponse.status}`);
+  const [segment, full] = await Promise.all([segmentResponse.text(), fullResponse.text()]);
+  if (!segment.includes('"tree"') || segment.length >= full.length) throw new Error('Segment prefetch answered with the full page payload');
   return version.release;
 }
 

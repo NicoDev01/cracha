@@ -26,8 +26,11 @@ import staticAssetsIncrementalCache from "@opennextjs/cloudflare/overrides/incre
  */
 export default defineCloudflareConfig({
   incrementalCache: staticAssetsIncrementalCache,
-  // Answers a prerendered page from the routing layer, after middleware,
-  // without loading the Next server and the page's code at all. Must be turned
-  // off again if the app ever adopts Partial Prerendering.
-  enableCacheInterception: true,
+  // No `enableCacheInterception`. It answered from the routing layer without
+  // Next, but it cannot serve the router's segment prefetches while Next 16.3's
+  // default `prefetchInlining` is on: asked for `/_tree`, it returns the whole
+  // page payload, the router rejects it and asks again. In production that was
+  // a loop of ~20 prefetch requests a second for /, /login and /register on
+  // every open landing page (@opennextjs/aws 4.1.0, still so in 4.1.5). Next
+  // itself reads the same cache entries and answers segments correctly.
 });
