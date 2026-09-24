@@ -91,6 +91,18 @@ export default function DatenschutzPage() {
           Website funktioniert dann unverändert.
         </p>
         <p>
+          <strong className="text-foreground">Fehlerberichte.</strong> Tritt in
+          deinem Browser ein Programmfehler auf, sendet die Website einen
+          Fehlerbericht an Sentry. Er enthält die Fehlermeldung und die Stelle im
+          Programmcode, die aufgerufene Seite ohne URL-Parameter, die zuvor
+          aufgerufenen Seiten und Anfragen ohne deren Inhalt, Browser,
+          Betriebssystem sowie den Zeitpunkt. Namen, E-Mail-Adressen, Cookies und
+          Chatinhalte übermitteln wir nicht. Wie bei jeder Anfrage übermittelt
+          dein Browser dabei technisch auch deine IP-Adresse. Die Berichte werden
+          in der EU-Region von Sentry (Frankfurt am Main) gespeichert und nach
+          Ablauf der Aufbewahrungsfrist des Dienstes automatisch gelöscht.
+        </p>
+        <p>
           <strong className="text-foreground">Bei der Registrierung.</strong> Wir
           verarbeiten deine E-Mail-Adresse, den von dir angegebenen Namen und
           dein Passwort. Das Passwort speichern wir nicht im Klartext, sondern
@@ -174,6 +186,12 @@ export default function DatenschutzPage() {
               DSGVO widersprechen.
             </>,
             <>
+              <strong className="text-foreground">Fehlerberichte mit Sentry</strong>{" "}
+              — Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse daran,
+              Programmfehler zu erkennen und zu beheben, bevor sie viele Nutzer
+              treffen). Du kannst nach Art. 21 DSGVO widersprechen.
+            </>,
+            <>
               <strong className="text-foreground">
                 Einmalige Erinnerungs-E-Mail
               </strong>{" "}
@@ -246,6 +264,11 @@ export default function DatenschutzPage() {
             <>
               <strong className="text-foreground">Modal</strong> — Ausführung der
               Abrufe der von dir angegebenen Websites.
+            </>,
+            <>
+              <strong className="text-foreground">Sentry</strong> (Functional
+              Software, Inc.) — Empfang und Speicherung der Fehlerberichte aus dem
+              Browser in der EU-Region.
             </>,
             <>
               <strong className="text-foreground">Google</strong> — für die Antworterzeugung mit Gemini über das Cloudflare AI Gateway sowie bei freiwilliger Anmeldung über Google. Zur Generierung erhält das Modell Fragen, begrenzten Gesprächsverlauf und relevante Quelltexte. Außerdem landen E-Mails an hallo@cracha-app.com in einem Google-Mail-Postfach.
