@@ -25,3 +25,9 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
+
+# Named explicitly: acceptance/ sits next to the package and must not be
+# discovered as a second top-level package.
+[tool.setuptools]
+packages = ["cracha_crawler"]
+py-modules = ["modal_app"]
