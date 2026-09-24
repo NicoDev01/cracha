@@ -1,5 +1,6 @@
 {
-  "main": ".open-next/worker.js",
+  // OpenNext's generated worker plus the cron handler; see custom-worker.ts.
+  "main": "custom-worker.ts",
   "name": "cracha",
   "compatibility_date": "2026-08-05",
   "keep_vars": true,
@@ -36,6 +37,11 @@
     "STRIPE_PRICE_CREDITS_S": "price_1U45HmKErihln31nI18CKkEz",
     "STRIPE_PRICE_CREDITS_M": "price_1U45HsKErihln31n71w9wdKG",
     "STRIPE_PRICE_CREDITS_L": "price_1U45HwKErihln31n00NaCUAU"
+  },
+  // Hourly: the activation reminder goes to accounts 24-72 hours after
+  // sign-up, so an hour's delay is invisible and a failed send is retried.
+  "triggers": {
+    "crons": ["17 * * * *"]
   },
   "observability": {
     "enabled": true,

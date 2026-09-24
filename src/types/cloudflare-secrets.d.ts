@@ -22,4 +22,10 @@ interface CloudflareEnv {
   STRIPE_PRICE_CREDITS_M?: string
   STRIPE_PRICE_CREDITS_L?: string
   SUPABASE_SERVICE_ROLE_KEY?: string
+
+  /**
+   * Sends the activation reminder (custom-worker.ts). Optional like the Stripe
+   * keys: without it the hourly run does nothing and says so in the log.
+   */
+  RESEND_API_KEY?: string
 }

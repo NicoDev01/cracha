@@ -308,8 +308,8 @@ export function RegisterForm() {
               zu. Informationen zur Datenverarbeitung findest du in der{' '}
               <Link href="/datenschutz" className="text-blue-600 hover:underline">
                 Datenschutzerklärung
-              </Link>{' '}
-              .
+              </Link>
+              . Hast du nach 24 Stunden noch keine Website eingelesen, erinnern wir dich einmal per E-Mail; widersprechen kannst du jederzeit.
             </p>
           </div>
           

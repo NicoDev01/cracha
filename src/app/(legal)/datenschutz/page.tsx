@@ -13,7 +13,7 @@ export default function DatenschutzPage() {
   return (
     <LegalPage
       title="Datenschutzerklärung"
-      updated="23. September 2026"
+      updated="24. September 2026"
       intro={
         <>
           CraCha ist ein Werkzeug, mit dem du öffentlich zugängliche Websites in
@@ -117,6 +117,26 @@ export default function DatenschutzPage() {
           Dritter — etwa Namen und Kontaktdaten auf einer Teamseite —, werden
           diese mitverarbeitet. Zu dieser Verarbeitung siehe Abschnitt 6.
         </p>
+        <p>
+          <strong className="text-foreground">Einmalige Erinnerung.</strong>{" "}
+          Hast du 24 Stunden nach der Registrierung noch keine Website
+          eingelesen, schicken wir dir einmalig eine E-Mail mit Hinweisen zum
+          Einstieg. Dafür verwenden wir deine E-Mail-Adresse und speichern den
+          Zeitpunkt des Versands. Weitere E-Mails dieser Art senden wir nicht.
+          Du kannst dem jederzeit widersprechen, etwa mit einer kurzen Antwort
+          auf die E-Mail oder an hallo@cracha-app.com; dabei entstehen dir keine
+          anderen als die Übermittlungskosten nach den Basistarifen.
+        </p>
+        <p>
+          <strong className="text-foreground">Auswertung der Nutzung.</strong>{" "}
+          Um zu verstehen, wo neue Nutzer beim Einstieg hängen bleiben, zählen
+          wir aus den ohnehin vorhandenen Konto- und Credit-Buchungen, wie viele
+          Konten bestätigt wurden, eine Website eingelesen, eine Antwort erhalten
+          oder CraCha an mehreren Tagen genutzt haben. Wir sehen dabei nur
+          Gesamtzahlen, keine einzelnen Personen. Es werden dafür keine
+          zusätzlichen Daten erhoben und keine Cookies oder Tracking-Skripte
+          eingesetzt.
+        </p>
       </Section>
 
       <Section heading="3. Zwecke und Rechtsgrundlagen">
@@ -152,6 +172,23 @@ export default function DatenschutzPage() {
               erkennen, welche Seiten genutzt werden und wo Ladezeiten das
               Angebot verschlechtern). Du kannst dieser Verarbeitung nach Art. 21
               DSGVO widersprechen.
+            </>,
+            <>
+              <strong className="text-foreground">
+                Einmalige Erinnerungs-E-Mail
+              </strong>{" "}
+              — Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse daran, neuen
+              Nutzern den Einstieg in den bereits angelegten Dienst zu
+              erleichtern) in Verbindung mit § 7 Abs. 3 UWG. Du kannst nach Art.
+              21 DSGVO jederzeit widersprechen.
+            </>,
+            <>
+              <strong className="text-foreground">
+                Zusammengefasste Auswertung der Nutzung
+              </strong>{" "}
+              — Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse daran, den
+              Einstieg in den Dienst zu verbessern). Du kannst nach Art. 21 DSGVO
+              widersprechen.
             </>,
           ]}
         />
@@ -203,7 +240,8 @@ export default function DatenschutzPage() {
             </>,
             <>
               <strong className="text-foreground">Resend</strong> — Versand der
-              Bestätigungs- und Passwort-E-Mails.
+              Bestätigungs- und Passwort-E-Mails sowie der einmaligen
+              Erinnerungs-E-Mail.
             </>,
             <>
               <strong className="text-foreground">Modal</strong> — Ausführung der

@@ -108,7 +108,21 @@ npx wrangler secret put CRAWLER_API_SECRET
 npx wrangler secret put RAG_QUERY_SECRET
 npx wrangler secret put STRIPE_API_KEY
 npx wrangler secret put STRIPE_WEBHOOK_SECRET
+npx wrangler secret put RESEND_API_KEY
 npm run deploy
+```
+
+`RESEND_API_KEY` ist optional und wird nicht aus GitHub geschrieben, der Deploy lässt ihn also stehen. Der Worker startet stündlich (`triggers.crons` in `wrangler.jsonc`, Handler in `custom-worker.ts`) den Versand der einmaligen Erinnerungs-E-Mail an bestätigte Konten, die 24 bis 72 Stunden nach der Registrierung noch keine Website eingelesen haben. Ohne Schlüssel versendet er nichts und protokolliert `"configured":false`. Der Schlüssel braucht in Resend nur die Berechtigung „Sending access“ für die Domain `cracha-app.com`. Kontrolle:
+
+```bash
+npx wrangler tail cracha --format pretty --search activation_reminders
+```
+
+Den Einstiegs-Funnel (Registriert → bestätigt → Website eingelesen → Antwort → an 2+ Tagen aktiv → Kauf) liefert im Supabase-SQL-Editor, optional für einen Zeitraum der Registrierung:
+
+```sql
+select * from public.product_funnel();
+select * from public.product_funnel('2026-09-01', '2026-10-01');
 ```
 
 ## 6. Endabnahme & Smoke-Test
