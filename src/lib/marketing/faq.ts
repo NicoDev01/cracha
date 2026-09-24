@@ -38,7 +38,7 @@ export const landingFaq: FaqItem[] = [
   },
   {
     question: "Was kostet CraCha?",
-    answer: `Du startest mit ${CREDITS.welcome} Start-Credits gratis, ohne Kreditkarte. Danach kaufst du bei Bedarf Credit-Pakete ab ${lowestPackPrice} – einmalige Aufladung, kein Abo. Eine eingelesene Seite kostet ${CREDITS.perPage} Credit, eine Antwort ${CREDITS.perChatMessage} Credits.`,
+    answer: `Du startest mit ${CREDITS.welcome} Start-Credits gratis, ohne Kreditkarte. Danach kaufst du bei Bedarf Credit-Pakete ab ${lowestPackPrice} – einmalige Aufladung, kein Abo. Eine eingelesene Seite kostet ${CREDITS.perPage} Credit, eine Antwort ${CREDITS.perChatMessage} Credits. Alle Pakete mit Rechenbeispielen stehen auf der Seite „Preise“.`,
   },
   {
     question: "Sind die Antworten immer richtig?",
