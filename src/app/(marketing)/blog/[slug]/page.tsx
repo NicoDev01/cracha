@@ -19,7 +19,8 @@ export function generateStaticParams() {
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const post = findPost((await params).slug);
   if (!post) return {};
-  const metadata = marketingPageMetadata({ path: `/blog/${post.slug}`, title: post.title, description: post.description, keywords: post.keywords });
+  // The preview image comes from opengraph-image.tsx in this folder.
+  const metadata = marketingPageMetadata({ path: `/blog/${post.slug}`, title: post.title, description: post.description, keywords: post.keywords, ownImage: true });
   return {
     ...metadata,
     openGraph: {
@@ -54,6 +55,14 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
       <div className="mt-6">
         <Markdown source={post.body} />
       </div>
+
+      <aside aria-label="Über den Autor" className="mt-14 border-t pt-6 text-sm leading-6 text-muted-foreground">
+        <p>
+          <strong className="text-foreground">{blogAuthor}</strong> entwickelt und betreibt CraCha. Fragen oder
+          Korrekturen zu diesem Artikel an{" "}
+          <a href="mailto:hallo@cracha-app.com" className="underline underline-offset-4">hallo@cracha-app.com</a>.
+        </p>
+      </aside>
 
       <div className="mt-14 rounded-2xl border p-6">
         <h2 className="text-2xl font-semibold">Probier es mit deiner eigenen Website</h2>

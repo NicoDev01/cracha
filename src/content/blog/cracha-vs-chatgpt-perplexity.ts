@@ -1,10 +1,11 @@
+import { cheapestPackage, starterPages, starterQuestions, welcomeCredits } from "./facts";
 import type { BlogPost } from "./index";
 
 export const crachaVsChatgptPerplexity: BlogPost = {
   slug: "cracha-vs-chatgpt-perplexity",
   title: "Website mit KI durchsuchen: CraCha vs. ChatGPT und Perplexity",
   description:
-    "ChatGPT und Perplexity suchen bei jeder Frage neu im Netz. CraCha liest eine Website einmal komplett ein. Was das für Antworten aus umfangreichen Websites bedeutet und wann welcher Ansatz passt.",
+    "ChatGPT und Perplexity suchen bei jeder Frage neu im Netz, CraCha liest eine Website vorab ein. Was das für Antworten aus großen Websites bedeutet.",
   published: "2026-09-24",
   keywords: ["CraCha vs ChatGPT", "Perplexity Alternative", "Website mit KI durchsuchen", "ChatGPT Website durchsuchen", "Fragen an eine Website stellen"],
   body: `
@@ -14,7 +15,7 @@ export const crachaVsChatgptPerplexity: BlogPost = {
 
 - **ChatGPT und Perplexity** beantworten Fragen mit einer **Live-Suche im Netz**. Das ist ideal für offene Fragen quer durch viele Websites.
 - **CraCha** liest **eine bestimmte Website vollständig ein** und beantwortet deine Fragen nur aus diesen Seiten, jeweils mit Link zur Originalseite.
-- Suchst du etwas, das irgendwo auf einer großen Website steht, liefert eine eigene Wissensbasis oft verlässlichere Treffer als eine allgemeine Websuche.
+- Suchst du etwas, das irgendwo auf einer großen Website steht, findet eine eigene Wissensbasis auch Unterseiten, die eine allgemeine Websuche weit hinten einsortiert.
 
 ## Zwei Ansätze: Live-Suche oder eigene Wissensbasis
 
@@ -33,14 +34,14 @@ Das hilft, wenn du mit eigenen Dateien oder wenigen ausgewählten Seiten arbeite
 
 ## Vergleich auf einen Blick
 
-| | ChatGPT und Perplexity | CraCha |
+| Kriterium | ChatGPT und Perplexity | CraCha |
 |---|---|---|
 | Woher kommen die Antworten? | Live-Suche im Netz, dazu eigene Dateien im Projekt | Nur aus der Website, die du eingelesen hast |
-| Große Website mit vielen Unterseiten | Hängt davon ab, welche Seiten die Suche findet | Unterseiten werden vorher vollständig eingelesen, bis 500 pro Durchgang |
+| Große Website mit vielen Unterseiten | Hängt davon ab, welche Seiten die Suche findet | Unterseiten werden vorher eingelesen, bis zu 500 pro Durchgang |
 | Fragen quer durchs ganze Internet | Ja, dafür sind sie gemacht | Nein |
 | Aktuelle Nachrichten | Ja | Nein, CraCha kennt den Stand des letzten Einlesens |
 | Quellen in der Antwort | Links zu gefundenen Webseiten | Links zu den Originalseiten der eingelesenen Website |
-| Kosten | Kostenlose Stufen, mehr im Abo | 100 Start-Credits gratis, danach Pakete ab 10 € ohne Abo |
+| Kosten | Kostenlose Stufen, mehr im Abo | ${welcomeCredits} Start-Credits gratis, danach Pakete ab ${cheapestPackage} ohne Abo |
 
 ## Wann ChatGPT oder Perplexity die bessere Wahl ist
 
@@ -52,8 +53,9 @@ Das hilft, wenn du mit eigenen Dateien oder wenigen ausgewählten Seiten arbeite
 
 - Die Antwort steht **auf einer bestimmten Website**, zum Beispiel in einer Produktdokumentation, einem Hilfe-Center, auf der Website eines Kunden oder einer Hochschule.
 - Die Website hat **so viele Unterseiten**, dass du die richtige Stelle über die Suche nicht zuverlässig findest.
-- Du willst sicher sein, dass die Antwort **nur aus dieser Quelle** stammt und nicht aus irgendeinem Forum.
+- Die Antwort soll sich **nur auf diese Quelle** stützen, nicht auf irgendein Forum. CraCha antwortet ausschließlich aus den eingelesenen Seiten und sagt es, wenn sie die Antwort nicht enthalten.
 - Du stellst **immer wieder Fragen** zu derselben Website. Die Wissensbasis bleibt in deinem Konto.
+- Du willst einen **eigenen Text gegen die Website prüfen**, etwa einen Entwurf oder eine Preisliste. Der Content-Check im Chat zeigt Widersprüche und veraltete Angaben mit Quelle.
 
 ## Ein kostenloser Tipp für einzelne Fragen
 
@@ -65,7 +67,7 @@ CraCha liest nur öffentlich erreichbare HTML-Seiten ein, keine PDFs und keine B
 
 ## Fazit
 
-ChatGPT und Perplexity sind Generalisten für das ganze Netz. CraCha ist ein Spezialwerkzeug für **eine** Website, die du gründlich befragen willst. Probier es mit einer Website aus, in der du regelmäßig etwas suchst: Mit den 100 Start-Credits liest du zum Beispiel 20 Seiten ein und stellst danach 16 Fragen.
+ChatGPT und Perplexity sind Generalisten für das ganze Netz. CraCha ist ein Spezialwerkzeug für **eine** Website, die du gründlich befragen willst. Probier es mit einer Website aus, in der du regelmäßig etwas suchst: Mit den ${welcomeCredits} Start-Credits liest du zum Beispiel ${starterPages} Seiten ein und stellst danach ${starterQuestions} Fragen.
 
 ## Quellen
 

@@ -1,10 +1,11 @@
+import { cheapestPackage, maxDatabases, pagesCost, starterPages, starterQuestions, welcomeCredits } from "./facts";
 import type { BlogPost } from "./index";
 
 export const crachaVsNotebooklm: BlogPost = {
   slug: "cracha-vs-notebooklm",
   title: "CraCha vs. NotebookLM (Gemini Notebook): Welches Tool für ganze Websites?",
   description:
-    "NotebookLM heißt jetzt Gemini Notebook. Wir vergleichen es mit CraCha: Wie gut kommt jedes Tool mit einer Website aus vielen Unterseiten zurecht, und wann ist welches die bessere Wahl?",
+    "NotebookLM heißt jetzt Gemini Notebook. Wie gut kommt es mit einer Website aus vielen Unterseiten zurecht, und wann ist CraCha die bessere Wahl?",
   published: "2026-09-24",
   keywords: ["CraCha vs NotebookLM", "NotebookLM Alternative", "Gemini Notebook Website", "NotebookLM Website hinzufügen", "NotebookLM Quellen Limit"],
   body: `
@@ -30,14 +31,14 @@ CraCha geht den umgekehrten Weg. Du gibst **eine** Start-Adresse ein. CraCha nut
 
 ## Vergleich auf einen Blick
 
-| | Gemini Notebook | CraCha |
+| Kriterium | Gemini Notebook | CraCha |
 |---|---|---|
 | Wie kommen Inhalte hinein? | Quellen einzeln hinzufügen: Dateien, Texte, Videos, einzelne Webseiten | Start-Adresse eingeben, Unterseiten werden automatisch gefunden |
 | Website mit vielen Unterseiten | Jede Seite ist eine eigene Quelle | Bis zu 500 Seiten pro Einlesevorgang |
-| Wie viele Quellen? | 50 pro Notizbuch in der kostenlosen Version, mehr in bezahlten Tarifen | Bis zu 25 Wissensbasen je Konto |
+| Wie viele Quellen? | 50 pro Notizbuch in der kostenlosen Version, mehr in bezahlten Tarifen | Bis zu ${maxDatabases} Wissensbasen je Konto, jede mit bis zu 500 Seiten pro Einlesevorgang |
 | PDFs, eigene Dateien, YouTube | Ja | Nein, nur öffentlich erreichbare HTML-Seiten |
 | Quellen in der Antwort | Verweise auf die Stellen in deinen Quellen | Links zu den Originalseiten der Website |
-| Kosten | Kostenlos nutzbar, höhere Limits im Google-AI-Abo | 100 Start-Credits gratis, danach Pakete ab 10 € ohne Abo |
+| Kosten | Kostenlos nutzbar, höhere Limits im Google-AI-Abo | ${welcomeCredits} Start-Credits gratis, danach Pakete ab ${cheapestPackage} ohne Abo |
 
 ## Ein Beispiel aus der Praxis
 
@@ -45,7 +46,7 @@ Angenommen, du arbeitest dich in die Dokumentation eines Tools ein, sagen wir 20
 
 **Mit Gemini Notebook** suchst du die relevanten Seiten heraus und fügst jede Adresse einzeln hinzu. In der kostenlosen Version ist nach 50 Seiten Schluss, du musst also vorher auswählen. Verpasst du dabei die Seite mit der Antwort, kann das Notizbuch sie auch nicht finden.
 
-**Mit CraCha** trägst du die Start-Adresse der Dokumentation ein, zum Beispiel \`https://docs.beispiel.de/\`, und beschränkst das Einlesen bei Bedarf mit einem Muster auf \`/docs/\`. 200 eingelesene Seiten kosten 200 Credits. Danach fragst du zum Beispiel: *„Welche Breaking Changes nennt der Migrationsleitfaden für Version 3?“* Die Antwort verlinkt die Seiten, auf die sie sich stützt.
+**Mit CraCha** trägst du die Start-Adresse der Dokumentation ein, zum Beispiel \`https://docs.beispiel.de/\`, und beschränkst das Einlesen bei Bedarf mit einem Muster auf \`/docs/\`. 200 eingelesene Seiten kosten ${pagesCost(200)} Credits. Danach fragst du zum Beispiel: *„Welche Breaking Changes nennt der Migrationsleitfaden für Version 3?“* Die Antwort verlinkt die Seiten, auf die sie sich stützt.
 
 ## Wann Gemini Notebook die bessere Wahl ist
 
@@ -60,7 +61,8 @@ Angenommen, du arbeitest dich in die Dokumentation eines Tools ein, sagen wir 20
 - Die Antworten stecken in **einer bestimmten Website** mit vielen Unterseiten, etwa einer Produktdokumentation, einem Hilfe-Center oder der Website eines Kunden.
 - Du willst **nicht jede Seite einzeln heraussuchen**, sondern die Website als Ganzes befragen.
 - Jede Antwort soll direkt auf die **Originalseite** verlinken, damit du sie prüfen kannst.
-- Du stellst **wiederholt Fragen** zu derselben Website. Die Wissensbasis bleibt in deinem Konto.
+- Du stellst **wiederholt Fragen** zu derselben Website. Die Wissensbasis bleibt in deinem Konto; ändert sich die Website, liest du sie neu ein.
+- Du willst einen **eigenen Text gegen die Website prüfen**, etwa einen Entwurf, eine Preisliste oder ein Angebot. Der Content-Check im Chat zeigt Widersprüche und veraltete Angaben mit Quelle.
 
 ## Was CraCha nicht kann
 
@@ -68,7 +70,7 @@ Damit der Vergleich fair bleibt: CraCha liest nur öffentlich erreichbare HTML-S
 
 ## Fazit
 
-Die beiden Werkzeuge lösen unterschiedliche Aufgaben. Gemini Notebook ist ein Notizbuch für Quellen, die du selbst zusammenstellst. CraCha verwandelt eine komplette Website in eine Wissensbasis. Willst du vor allem Websites mit vielen Unterseiten befragen, probier CraCha mit einem überschaubaren Bereich aus: Mit den 100 Start-Credits liest du zum Beispiel 20 Seiten ein und stellst danach 16 Fragen.
+Die beiden Werkzeuge lösen unterschiedliche Aufgaben. Gemini Notebook ist ein Notizbuch für Quellen, die du selbst zusammenstellst. CraCha verwandelt eine komplette Website in eine Wissensbasis. Willst du vor allem Websites mit vielen Unterseiten befragen, probier CraCha mit einem überschaubaren Bereich aus: Mit den ${welcomeCredits} Start-Credits liest du zum Beispiel ${starterPages} Seiten ein und stellst danach ${starterQuestions} Fragen.
 
 ## Quellen
 
