@@ -61,13 +61,23 @@ export function SiteFooter({ className }: React.HTMLAttributes<HTMLElement>) {
               </Link>
             </li>
             <li>
+              <Link href="/preise" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+                Preise
+              </Link>
+            </li>
+            <li>
               <Link href="/#fragen" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-                Fragen & Kosten
+                Häufige Fragen
               </Link>
             </li>
             <li>
               <Link href="/website-mit-ki-durchsuchen" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
                 Anleitung
+              </Link>
+            </li>
+            <li>
+              <Link href="/blog" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+                Blog
               </Link>
             </li>
           </ul>

@@ -50,12 +50,16 @@ export function NavBar({ scroll = false }: NavBarProps) {
       href: "/#why-cracha",
     },
     {
-      title: "Fragen & Kosten",
-      href: "/#fragen",
+      title: "Preise",
+      href: "/preise",
     },
     {
       title: "Anleitung",
       href: "/website-mit-ki-durchsuchen",
+    },
+    {
+      title: "Blog",
+      href: "/blog",
     },
   ];
 

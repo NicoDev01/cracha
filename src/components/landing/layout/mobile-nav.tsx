@@ -145,14 +145,14 @@ export function NavMobile() {
                             Warum CraCha?
                         </Link>
                         <Link
-                            href="/#fragen"
+                            href="/preise"
                             className={cn(
                                 "py-2 font-semibold transition-colors hover:text-foreground/80",
-                                pathname === "/#fragen" ? "text-foreground" : "text-foreground/60"
+                                pathname === "/preise" ? "text-foreground" : "text-foreground/60"
                             )}
                             onClick={() => setOpen(false)}
                         >
-                            Fragen & Kosten
+                            Preise
                         </Link>
                         <Link
                             href="/website-mit-ki-durchsuchen"
@@ -166,6 +166,7 @@ export function NavMobile() {
                         </Link>
                         {[
                             { href: "/beispiele", title: "Beispiele" },
+                            { href: "/blog", title: "Blog" },
                         ].map((item) => (
                             <Link
                                 key={item.href}
