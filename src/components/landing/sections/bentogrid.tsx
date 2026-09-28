@@ -25,24 +25,24 @@ export function BentoGrid() {
       <MaxWidthWrapper>
         <div className="mx-auto mb-12 max-w-3xl text-center">
          <h2 className="font-heading text-3xl leading-tight md:text-5xl text-foreground">
-            So einfach geht <span className="text-gradient_indigo-purple">CraCha</span>
+            So einfach geht <span className="text-orange-600 dark:text-orange-400">CraCha</span>
           </h2>
        </div>
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-8">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-8 lg:[&_h3]:min-h-[3.75rem] lg:[&_p]:min-h-[6.875rem] xl:[&_p]:min-h-[5.5rem]">
           <GridItem
             icon={<Search className="h-4 w-4" />}
-            title="1. Start-URL eingeben"
-            description="Gib die Adresse einer Website ein und leg fest, wie viele Unterseiten CraCha einlesen soll – oder einfach alle aus der Sitemap, bis zu 500 pro Durchgang."
+            title="1. Website eingeben"
+            description="Gib die Website-Adresse ein und wähle, wie viele Unterseiten CraCha einlesen soll – bis zu 500 pro Durchgang."
           />
           <GridItem
             icon={<Settings className="h-4 w-4" />}
-            title="2. CraCha findet alle Unterseiten"
-            description="CraCha folgt den Links oder der Sitemap der Website, findet die Unterseiten automatisch und liest sie ein – du klickst dich durch nichts. Im Dashboard siehst du, sobald deine Wissensbasis bereit ist."
+            title="2. Unterseiten finden"
+            description="CraCha liest die Unterseiten automatisch ein. Im Dashboard siehst du, wann deine Wissensbasis bereit ist."
           />
           <GridItem
             icon={<MessageSquare className="h-4 w-4" />}
             title="3. Fragen stellen"
-            description="Frag im Chat, was du wissen willst. Jede Antwort nennt ihre Quellen als klickbare Links, die dich direkt zur passenden Originalseite führen."
+            description="Stell deine Fragen im Chat. Jede Antwort verlinkt ihre Quellen, damit du auf der Originalseite nachlesen kannst."
           />
         </div>
       </MaxWidthWrapper>

@@ -23,7 +23,7 @@ export default function ProductShowcase() {
                 <div className="grid gap-10 px-2.5 lg:grid-cols-2 lg:items-center lg:px-7">
                     <div className={cn(reverse ? "lg:order-2" : "lg:order-1")}>
                         <h2 className="font-heading text-3xl leading-tight text-foreground md:text-5xl">
-                           Warum <span className="text-gradient_indigo-purple">CraCha</span>?
+                           Warum <span className="text-orange-600 dark:text-orange-400">CraCha</span>?
                         </h2>
                         <p className="mt-4 text-base text-muted-foreground">
                             Statt einzelne Seiten in einen KI-Chat zu kopieren, befragst du mit

@@ -42,7 +42,7 @@ export const Cursor: React.FC = () => {
           top: y - 4,
           opacity: vis,
           transform: `scale(${1 - press * 0.15})`,
-          filter: "drop-shadow(0 6px 10px rgba(20,20,60,0.3))",
+          filter: "drop-shadow(0 6px 10px rgba(48,39,32,0.3))",
         }}
       >
         <path d="M4 2.5 L19.5 12 L12.4 13.6 L9 20.5 Z" fill={C.ink} stroke="white" strokeWidth={1.6} strokeLinejoin="round" />
@@ -78,7 +78,7 @@ export const Url: React.FC = () => {
           fontFamily: ui,
           fontSize: 28,
           fontWeight: 600,
-          color: C.indigo,
+          color: C.accent,
         }}
       >
         cracha-app.com

@@ -1,5 +1,5 @@
 import { useCurrentFrame } from "remotion";
-import { C, CX, FPS, GRADIENT, ease, heading, prog, ui } from "./theme";
+import { C, CX, FPS, TEXT_GRADIENT, ease, heading, prog, ui } from "./theme";
 
 type Word = { text: string; accent?: boolean };
 
@@ -46,7 +46,7 @@ export const Words: React.FC<{
               transform: `translateY(${y}px)`,
               filter: `blur(${blur}px)`,
               ...(w.accent
-                ? { backgroundImage: GRADIENT, WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }
+                ? { backgroundImage: TEXT_GRADIENT, WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }
                 : null),
             }}
           >

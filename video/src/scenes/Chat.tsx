@@ -40,9 +40,9 @@ const Cite: React.FC<{ n: number; glow: number }> = ({ n, glow }) => (
       borderRadius: 10,
       fontSize: 18,
       fontWeight: 700,
-      color: glow > 0.05 ? "white" : C.indigo,
-      background: glow > 0.05 ? C.indigo : `${C.indigo}18`,
-      boxShadow: `0 0 0 ${glow * 8}px ${C.indigo}${hex(glow * 60)}`,
+      color: glow > 0.05 ? "white" : C.accent,
+      background: glow > 0.05 ? C.accent : `${C.orange}18`,
+      boxShadow: `0 0 0 ${glow * 8}px ${C.orange}${hex(glow * 60)}`,
       verticalAlign: "middle",
     }}
   >
@@ -95,12 +95,12 @@ export const Chat: React.FC = () => {
             opacity: 1 - prog(t, T.answer - 0.2, T.answer + 0.05, ease.linear),
           }}
         >
-          <Sparkles size={28} color={C.indigo} strokeWidth={2.2} />
+          <Sparkles size={28} color={C.orange} strokeWidth={2.2} />
           <span
             style={{
               fontSize: 26,
               fontWeight: 600,
-              backgroundImage: `linear-gradient(90deg, ${C.faint} 0%, ${C.faint} ${sweep}%, ${C.indigo} ${sweep + 20}%, ${C.faint} ${sweep + 40}%, ${C.faint} 100%)`,
+              backgroundImage: `linear-gradient(90deg, ${C.faint} 0%, ${C.faint} ${sweep}%, ${C.orange} ${sweep + 20}%, ${C.faint} ${sweep + 40}%, ${C.faint} 100%)`,
               WebkitBackgroundClip: "text",
               backgroundClip: "text",
               color: "transparent",
@@ -147,7 +147,7 @@ export const Chat: React.FC = () => {
                 borderRadius: 30,
                 background: "white",
                 boxShadow: SHADOW_SM,
-                outline: `${1 + lit * 1.5}px solid ${lit > 0.05 ? C.indigo : C.line}`,
+                outline: `${1 + lit * 1.5}px solid ${lit > 0.05 ? C.orange : C.line}`,
                 opacity: Math.min(1, p * 1.5),
                 transform: `translateY(${(1 - p) * 24 - lit * 4}px) scale(${0.85 + 0.15 * p})`,
                 fontSize: 21,
@@ -160,13 +160,13 @@ export const Chat: React.FC = () => {
                   width: 38,
                   height: 38,
                   borderRadius: 19,
-                  background: `${C.indigo}14`,
+                  background: `${C.orange}14`,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
                   fontSize: 18,
                   fontWeight: 700,
-                  color: C.indigo,
+                  color: C.accent,
                 }}
               >
                 {s.n}

@@ -24,9 +24,9 @@ export default function IndexPage() {
       {/* Same array as the FAQ rendered in FaqSection. */}
       <JsonLd data={faqPageJsonLd(landingFaq)} />
       <HeroLanding />
-      <SectionWrapper>
+      <div className="bg-black pb-16 pt-2">
         <PreviewLanding />
-      </SectionWrapper>
+      </div>
       <SectionWrapper>
         <Powered />
       </SectionWrapper>

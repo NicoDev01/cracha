@@ -11,11 +11,11 @@ export const PageContent: React.FC<{ w: number; h: number; url?: string; s?: num
   h,
   url,
   s = 1,
-  tint = C.indigo,
+  tint = C.orange,
 }) => {
   const bar = 34 * s;
   const pad = 18 * s;
-  const line = (width: string, top: number, color = "#eceef6", height = 10 * s) => (
+  const line = (width: string, top: number, color = "#f0e9e1", height = 10 * s) => (
     <div style={{ position: "absolute", left: pad, top, width, height, borderRadius: height, background: color }} />
   );
   return (
@@ -41,7 +41,7 @@ export const PageContent: React.FC<{ w: number; h: number; url?: string; s?: num
               marginLeft: 10 * s,
               padding: `${3 * s}px ${10 * s}px`,
               borderRadius: 20,
-              background: "#f2f3f9",
+              background: "#f8f3ed",
               fontFamily: ui,
               fontSize: 13 * s,
               fontWeight: 500,
@@ -67,7 +67,7 @@ export const PageContent: React.FC<{ w: number; h: number; url?: string; s?: num
             width: w * 0.3,
             height: h * 0.32,
             borderRadius: 10 * s,
-            background: `linear-gradient(135deg, ${tint}26, ${C.purple}26)`,
+            background: `linear-gradient(135deg, ${tint}26, ${C.red}26)`,
           }}
         />
       ) : null}
@@ -99,8 +99,8 @@ export const ScanBand: React.FC<{ pos: number; dir: 1 | -1; top: number; height:
           height: trail,
           background:
             dir === 1
-              ? `linear-gradient(180deg, ${C.indigo}00, ${C.indigo}${Math.round(strength * 70).toString(16).padStart(2, "0")})`
-              : `linear-gradient(0deg, ${C.indigo}00, ${C.indigo}${Math.round(strength * 70).toString(16).padStart(2, "0")})`,
+              ? `linear-gradient(180deg, ${C.orange}00, ${C.orange}${Math.round(strength * 70).toString(16).padStart(2, "0")})`
+              : `linear-gradient(0deg, ${C.orange}00, ${C.orange}${Math.round(strength * 70).toString(16).padStart(2, "0")})`,
         }}
       />
       <div
@@ -110,9 +110,9 @@ export const ScanBand: React.FC<{ pos: number; dir: 1 | -1; top: number; height:
           right: 0,
           top: edge - 1.5,
           height: 3,
-          background: C.indigo,
+          background: C.orange,
           opacity: strength,
-          boxShadow: `0 0 14px 2px ${C.indigo}aa`,
+          boxShadow: `0 0 14px 2px ${C.orange}aa`,
         }}
       />
     </>

@@ -18,7 +18,7 @@
  */
 
 import Link from 'next/link'
-import { useEffect, useSyncExternalStore, type ReactNode } from 'react'
+import { useEffect, useSyncExternalStore, type ComponentProps } from 'react'
 
 const SESSION_COOKIE = /(?:^|;\s*)sb-[^=;]+-auth-token(?:\.\d+)?=/
 
@@ -61,14 +61,10 @@ function subscribe(listener: () => void) {
 }
 
 export function AppEntryLink({
-  className,
   children,
-  prefetch,
   signedOutHref = '/login',
-}: {
-  className?: string
-  children: ReactNode
-  prefetch?: boolean
+  ...linkProps
+}: Omit<ComponentProps<typeof Link>, 'href'> & {
   signedOutHref?: '/login' | '/register'
 }) {
   const isAuthenticated = useSyncExternalStore(subscribe, () => signedIn, () => false)
@@ -76,7 +72,7 @@ export function AppEntryLink({
   useEffect(watchSession, [])
 
   return (
-    <Link href={isAuthenticated ? '/dashboard' : signedOutHref} className={className} prefetch={prefetch}>
+    <Link {...linkProps} href={isAuthenticated ? '/dashboard' : signedOutHref}>
       {children}
     </Link>
   )

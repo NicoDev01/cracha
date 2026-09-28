@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { AppEntryLink } from "@/components/landing/app-entry-link";
+import Image from "next/image";
+import { HeroStartButton } from "@/components/landing/hero-start-button";
 
 /**
  * The first screen has to say what happens, not hint at it: CraCha crawls
@@ -9,27 +10,35 @@ import { AppEntryLink } from "@/components/landing/app-entry-link";
  */
 export default function HeroLanding() {
   return (
-    <section className="space-y-8 py-12 sm:py-20 lg:py-16">
-      <div className="mx-auto flex w-full max-w-5xl flex-col items-center gap-5 px-4 text-center sm:px-6 lg:px-8">
-        <h1 className="text-balance font-urban text-4xl font-extrabold tracking-tight sm:text-5xl md:text-6xl lg:text-[66px] leading-tight">
+    <section className="relative isolate flex min-h-[630px] items-center overflow-hidden bg-black text-white sm:min-h-[640px]">
+      <Image
+        src="/images/landing-eclipse.jpg"
+        alt=""
+        fill
+        priority
+        sizes="100vw"
+        className="-z-20 object-cover object-center"
+      />
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-b from-black/55 via-black/35 to-black" />
+      <div className="mx-auto flex w-full max-w-5xl flex-col items-center gap-6 px-4 pb-12 pt-44 text-center sm:px-6 sm:pb-14 sm:pt-36 lg:px-8">
+        <h1 className="text-balance font-urban text-4xl font-semibold leading-[1.08] tracking-tight sm:text-5xl md:text-6xl lg:text-[70px]">
           Verwandle jede Website<br />
-          <span className="text-gradient_indigo-purple">in eine Wissensbasis</span>
+          in eine <span className="text-orange-400">Wissensbasis</span>
         </h1>
-        <p className="max-w-2xl text-pretty leading-relaxed text-muted-foreground sm:text-xl">
+        <p className="max-w-2xl text-pretty text-base leading-relaxed text-white/80 sm:text-lg">
           CraCha crawlt jede Website bis in die letzte Unterseite und macht daraus deine
           Wissensbasis. Dann fragst du einfach im Chat und bekommst Antworten aus dem gesamten
           Inhalt.
         </p>
-        <div className="flex flex-wrap items-center justify-center gap-4">
-          <AppEntryLink signedOutHref="/register" className="inline-flex min-h-11 items-center justify-center rounded-full bg-primary px-6 py-3 font-medium text-primary-foreground focus-visible:outline-2 focus-visible:outline-offset-4">
-            Kostenlos starten
-          </AppEntryLink>
-          <Link href="#how-to-use" className="inline-flex min-h-11 items-center rounded-full border px-6 py-3 font-medium hover:bg-muted">
+        <div className="mt-3 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4">
+          <HeroStartButton />
+          <Link href="#how-to-use" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-white/20 bg-white/10 px-6 py-3 text-sm font-medium text-white backdrop-blur-md transition-colors hover:bg-white/20 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white">
             So funktioniert’s
+            <span aria-hidden="true">▷</span>
           </Link>
         </div>
-        <p className="max-w-xl text-sm text-muted-foreground">
-          100 Start-Credits gratis · Keine Kreditkarte nötig
+        <p className="text-sm text-white/60">
+          100 Start-Credits gratis
         </p>
       </div>
     </section>

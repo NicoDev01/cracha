@@ -65,7 +65,7 @@ export default function Features() {
         <MaxWidthWrapper>
              <div className="mx-auto mb-12 max-w-3xl text-center">
                 <h2 className="font-heading text-3xl leading-tight md:text-5xl text-foreground">
-                    Das macht CraCha für <span className="text-gradient_indigo-purple">dich</span>
+                    Das macht CraCha für <span className="text-orange-600 dark:text-orange-400">dich</span>
                 </h2>
             </div>
 

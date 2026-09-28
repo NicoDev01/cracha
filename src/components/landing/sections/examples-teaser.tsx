@@ -14,7 +14,7 @@ export default function ExamplesTeaser() {
       <MaxWidthWrapper>
         <div className="mx-auto mb-10 max-w-3xl text-center">
           <h2 className="font-heading text-3xl leading-tight text-foreground md:text-5xl">
-            Wofür du CraCha <span className="text-gradient_indigo-purple">nutzen kannst</span>
+            Wofür du CraCha <span className="text-orange-600 dark:text-orange-400">nutzen kannst</span>
           </h2>
           <p className="mt-4 text-muted-foreground sm:text-lg">
             Für jede öffentliche Website, auf der die Antwort irgendwo zwischen vielen Unterseiten steht.

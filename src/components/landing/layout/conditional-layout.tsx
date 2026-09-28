@@ -12,6 +12,7 @@ interface ConditionalLayoutProps {
 export function ConditionalLayout({ children }: ConditionalLayoutProps) {
   const pathname = usePathname();
   const isDashboard = pathname?.startsWith("/dashboard");
+  const isHome = pathname === "/";
 
   if (isDashboard) {
     // Dashboard layout - no navbar/footer
@@ -21,8 +22,8 @@ export function ConditionalLayout({ children }: ConditionalLayoutProps) {
   // Landing page layout - with navbar/footer
   return (
     <div className="flex min-h-screen flex-col">
-      <NavMobile />
-      <NavBar scroll={true} />
+      <NavMobile home={isHome} />
+      <NavBar home={isHome} scroll={true} />
       <main className="flex-1">{children}</main>
       <SiteFooter />
     </div>

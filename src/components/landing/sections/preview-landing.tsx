@@ -23,7 +23,7 @@ export default function PreviewLanding() {
   const [src, setSrc] = useState<string>();
 
   useEffect(() => {
-    const attach = () => setSrc("/videos/cracha-promo.mp4");
+    const attach = () => setSrc("/videos/cracha-promo.mp4?v=20260928-fire-v3");
     if (document.readyState === "complete") {
       attach();
       return;
@@ -42,12 +42,12 @@ export default function PreviewLanding() {
 
   return (
     <div className="mx-auto mb-3 max-w-6xl px-4 sm:px-6 lg:px-8">
-      <div className="overflow-hidden rounded-2xl border bg-muted shadow-2xl shadow-indigo-500/10 sm:rounded-3xl">
+      <div className="overflow-hidden rounded-2xl border border-white/15 bg-black shadow-2xl shadow-black/40 sm:rounded-3xl">
         <video
           ref={ref}
           className="block aspect-video w-full"
           src={src}
-          poster="/videos/cracha-promo-poster.webp"
+          poster="/videos/cracha-promo-poster.webp?v=20260928-fire-v2"
           width={1920}
           height={1080}
           autoPlay

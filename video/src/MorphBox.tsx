@@ -29,15 +29,15 @@ const KEYS: Keyframe<Box>[] = [
   { t: T.shrink, ...ROOT_BIG, bg: W, op: 1 },
   { t: T.shrink + 0.65, ...ROOT_SMALL, bg: W, op: 1 },
   { t: T.converge + 0.1, ...ROOT_SMALL, bg: W, op: 1 },
-  { t: T.converge + 0.8, cx: DB_POS.x, cy: DB_POS.y - 60, w: 64, h: 12, r: 6, bg: C.indigo, op: 0, e: ease.in },
+  { t: T.converge + 0.8, cx: DB_POS.x, cy: DB_POS.y - 60, w: 64, h: 12, r: 6, bg: C.orange, op: 0, e: ease.in },
   { t: T.chat, cx: DB_POS.x, cy: DB_POS.y, w: 250, h: 250, r: 56, bg: W, op: 0 },
   { t: T.chat + 0.15, cx: DB_POS.x, cy: DB_POS.y, w: 250, h: 250, r: 56, bg: W, op: 1, e: ease.linear },
   { t: T.chat + 0.8, ...INPUT, r: INPUT.h / 2, bg: W, op: 1 },
   { t: T.send, ...INPUT, r: INPUT.h / 2, bg: W, op: 1 },
-  { t: T.send + 0.65, cx: Q_CX, cy: QUESTION.cy, w: QUESTION.w, h: QUESTION.h, r: QUESTION.h / 2, bg: C.indigo, op: 1 },
-  { t: T.cta, cx: Q_CX, cy: QUESTION.cy, w: QUESTION.w, h: QUESTION.h, r: QUESTION.h / 2, bg: C.indigo, op: 1 },
-  { t: T.cta + 0.75, ...CTA, r: CTA.h / 2, bg: C.indigo, op: 1 },
-  { t: T.outro, ...CTA, r: CTA.h / 2, bg: C.indigo, op: 1 },
+  { t: T.send + 0.65, cx: Q_CX, cy: QUESTION.cy, w: QUESTION.w, h: QUESTION.h, r: QUESTION.h / 2, bg: C.orange, op: 1 },
+  { t: T.cta, cx: Q_CX, cy: QUESTION.cy, w: QUESTION.w, h: QUESTION.h, r: QUESTION.h / 2, bg: C.orange, op: 1 },
+  { t: T.cta + 0.75, ...CTA, r: CTA.h / 2, bg: C.orange, op: 1 },
+  { t: T.outro, ...CTA, r: CTA.h / 2, bg: C.orange, op: 1 },
   { t: T.outro + 0.7, cx: CX, cy: 470, w: 640, h: 176, r: 88, bg: W, op: 1 },
 ];
 
@@ -70,7 +70,7 @@ const Centered: React.FC<{ w: number; h: number; children: React.ReactNode; styl
 );
 
 const Caret: React.FC<{ t: number; h: number }> = ({ t, h }) => (
-  <span style={{ width: 3, height: h, marginLeft: 3, background: C.indigo, opacity: Math.floor(t * 2.2) % 2 ? 0 : 1 }} />
+  <span style={{ width: 3, height: h, marginLeft: 3, background: C.orange, opacity: Math.floor(t * 2.2) % 2 ? 0 : 1 }} />
 );
 
 const pressOf = (t: number, at: number) => prog(t, at - 0.12, at, ease.out) - prog(t, at, at + 0.25, ease.out);
@@ -91,7 +91,7 @@ const UrlContent: React.FC<{ t: number }> = ({ t }) => {
           padding: "0 32px",
           borderRadius: 36,
           background: GRADIENT,
-          color: "white",
+          color: C.ink,
           display: "flex",
           alignItems: "center",
           gap: 10,
@@ -99,7 +99,7 @@ const UrlContent: React.FC<{ t: number }> = ({ t }) => {
           fontWeight: 600,
           transform: `scale(${(0.6 + 0.4 * btnIn) * (1 - pressOf(t, T.press) * 0.07)})`,
           opacity: Math.min(1, btnIn * 1.5),
-          boxShadow: `0 10px 24px -8px ${C.indigo}99`,
+          boxShadow: `0 10px 24px -8px ${C.orange}99`,
         }}
       >
         Crawlen <ArrowRight size={26} strokeWidth={2.5} />
@@ -140,21 +140,21 @@ const InputContent: React.FC<{ t: number }> = ({ t }) => {
           width: 68,
           height: 68,
           borderRadius: 34,
-          background: typed ? GRADIENT : "#dfe1ee",
+          background: typed ? GRADIENT : "#e8e0d6",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           transform: `scale(${1 - pressOf(t, T.send) * 0.12})`,
         }}
       >
-        <ArrowUp size={34} color="white" strokeWidth={2.6} />
+        <ArrowUp size={34} color={typed ? C.ink : "white"} strokeWidth={2.6} />
       </div>
     </Centered>
   );
 };
 
 const QuestionContent: React.FC = () => (
-  <Centered w={QUESTION.w} h={QUESTION.h} style={{ justifyContent: "center", color: "white", fontSize: 28, fontWeight: 500, whiteSpace: "nowrap" }}>
+  <Centered w={QUESTION.w} h={QUESTION.h} style={{ justifyContent: "center", color: C.ink, fontSize: 28, fontWeight: 500, whiteSpace: "nowrap" }}>
     {QUESTION.text}
   </Centered>
 );
@@ -163,7 +163,7 @@ const CtaContent: React.FC = () => (
   <Centered
     w={CTA.w}
     h={CTA.h}
-    style={{ justifyContent: "center", gap: 14, color: "white", fontFamily: heading, fontWeight: 700, fontSize: 40, whiteSpace: "nowrap" }}
+    style={{ justifyContent: "center", gap: 14, color: C.ink, fontFamily: heading, fontWeight: 700, fontSize: 40, whiteSpace: "nowrap" }}
   >
     Jetzt kostenlos starten <ArrowRight size={38} strokeWidth={2.6} />
   </Centered>

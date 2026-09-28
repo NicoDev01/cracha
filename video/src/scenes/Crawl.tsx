@@ -2,7 +2,7 @@ import { Check } from "lucide-react";
 import { interpolateColors, useCurrentFrame } from "remotion";
 import { DB_POS, ROOT_BIG, ROOT_SMALL } from "../layout";
 import { PageContent, ScanBand } from "../PageCard";
-import { C, FPS, GRADIENT, SHADOW_SM, ease, heading, lerp, prog, ui } from "../theme";
+import { C, FPS, TEXT_GRADIENT, SHADOW_SM, ease, heading, lerp, prog, ui } from "../theme";
 import { PAGES, T } from "../timeline";
 
 type Node = { x: number; y: number; w: number; h: number; url?: string; parent: { x: number; y: number; h: number }; at: number };
@@ -134,7 +134,7 @@ const Counter: React.FC<{ t: number }> = ({ t }) => {
           lineHeight: 1,
           letterSpacing: "-0.03em",
           fontVariantNumeric: "tabular-nums",
-          backgroundImage: GRADIENT,
+          backgroundImage: TEXT_GRADIENT,
           WebkitBackgroundClip: "text",
           backgroundClip: "text",
           color: "transparent",
@@ -154,8 +154,8 @@ const Counter: React.FC<{ t: number }> = ({ t }) => {
               width: 28,
               height: 28,
               borderRadius: 20,
-              border: `4px solid ${C.indigo}33`,
-              borderTopColor: C.indigo,
+              border: `4px solid ${C.orange}33`,
+              borderTopColor: C.orange,
               transform: `rotate(${t * 540}deg)`,
             }}
           />
@@ -240,8 +240,8 @@ const ScanChip: React.FC<{ t: number }> = ({ t }) => {
             width: 20,
             height: 20,
             borderRadius: 20,
-            border: `3px solid ${C.indigo}33`,
-            borderTopColor: C.indigo,
+            border: `3px solid ${C.orange}33`,
+            borderTopColor: C.orange,
             transform: `rotate(${t * 540}deg)`,
           }}
         />
@@ -273,14 +273,14 @@ export const Crawl: React.FC = () => {
                 d={edgePath(n)}
                 pathLength={1}
                 fill="none"
-                stroke={`${C.indigo}55`}
+                stroke={`${C.orange}55`}
                 strokeWidth={2.5}
                 strokeLinecap="round"
                 strokeDasharray="1 1"
                 strokeDashoffset={1 - p}
               />
-              {p < 1 ? <circle cx={head.x} cy={head.y} r={6} fill={C.indigo} /> : null}
-              {p < 1 ? <circle cx={head.x} cy={head.y} r={14} fill={`${C.indigo}30`} /> : null}
+              {p < 1 ? <circle cx={head.x} cy={head.y} r={6} fill={C.orange} /> : null}
+              {p < 1 ? <circle cx={head.x} cy={head.y} r={14} fill={`${C.orange}30`} /> : null}
             </g>
           );
         })}
@@ -312,7 +312,7 @@ export const Crawl: React.FC = () => {
               width: w,
               height: h,
               borderRadius: lerp(small ? 10 : 14, 6, fly),
-              background: interpolateColors(fly, [0, 0.6, 1], ["#ffffff", C.indigo, C.purple]),
+              background: interpolateColors(fly, [0, 0.6, 1], ["#ffffff", C.orange, C.red]),
               boxShadow: SHADOW_SM,
               outline: `1px solid ${C.line}`,
               transform: `scale(${0.5 + 0.5 * pop})`,

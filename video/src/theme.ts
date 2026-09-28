@@ -10,30 +10,32 @@ export const DURATION_S = 33;
 export const CX = WIDTH / 2;
 export const CY = HEIGHT / 2;
 
-// The landing page's hero: Urbanist for headlines, Inter for UI text, the
-// indigo-to-purple gradient from `.text-gradient_indigo-purple`.
+// Match the landing page's warm brand palette; keep the existing typography.
 export const heading = loadUrbanist("normal", { weights: ["600", "700", "800"], subsets: ["latin", "latin-ext"] }).fontFamily;
 export const ui = loadInter("normal", { weights: ["400", "500", "600", "700"], subsets: ["latin", "latin-ext"] }).fontFamily;
 
 export const C = {
-  ink: "#0b0b12",
-  text: "#1f2233",
-  muted: "#6b7085",
-  faint: "#a3a7b8",
-  line: "rgba(24, 28, 60, 0.09)",
+  ink: "#17120f",
+  text: "#302720",
+  muted: "#786f69",
+  faint: "#aaa19b",
+  line: "rgba(48, 39, 32, 0.09)",
   card: "#ffffff",
-  indigo: "#6366f1",
-  purple: "#a855f7",
-  sky: "#38bdf8",
-  pink: "#ec4899",
+  accent: "#c2410c",
+  orange: "#f97316",
+  red: "#ef4444",
+  amber: "#f59e0b",
+  yellow: "#fbbf24",
   green: "#22c55e",
 };
 
-export const GRADIENT = `linear-gradient(90deg, ${C.indigo} 0%, ${C.purple} 100%)`;
+export const GRADIENT = `linear-gradient(90deg, ${C.red} 0%, ${C.orange} 55%, ${C.amber} 100%)`;
+// Darker warm tones keep gradient headlines readable on the light backdrop.
+export const TEXT_GRADIENT = "linear-gradient(90deg, #b91c1c 0%, #c2410c 55%, #b45309 100%)";
 
 export const SHADOW =
-  "0 1px 2px rgba(20, 22, 60, 0.06), 0 12px 32px -8px rgba(40, 40, 110, 0.18), 0 40px 80px -24px rgba(60, 50, 140, 0.22)";
-export const SHADOW_SM = "0 1px 2px rgba(20, 22, 60, 0.06), 0 8px 20px -8px rgba(40, 40, 110, 0.2)";
+  "0 1px 2px rgba(48, 39, 32, 0.06), 0 12px 32px -8px rgba(90, 45, 20, 0.18), 0 40px 80px -24px rgba(120, 55, 20, 0.18)";
+export const SHADOW_SM = "0 1px 2px rgba(48, 39, 32, 0.06), 0 8px 20px -8px rgba(90, 45, 20, 0.2)";
 
 export const ease = {
   inOut: Easing.bezier(0.76, 0, 0.24, 1),

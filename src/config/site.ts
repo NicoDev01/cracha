@@ -9,6 +9,15 @@ import { SiteConfig } from "@/types";
  */
 const site_url = process.env.NEXT_PUBLIC_APP_URL || "https://cracha-app.com";
 
+export const marketingNavLinks = [
+  { title: "Nutzung", href: "/#how-to-use" },
+  { title: "Beispiele", href: "/beispiele" },
+  { title: "Warum CraCha?", href: "/#why-cracha" },
+  { title: "Preise", href: "/preise" },
+  { title: "Anleitung", href: "/website-mit-ki-durchsuchen" },
+  { title: "Blog", href: "/blog" },
+] as const;
+
 export const siteConfig: SiteConfig = {
   name: "CraCha",
   // About 150 characters: Google cuts the search snippet off beyond that.

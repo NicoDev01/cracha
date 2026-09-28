@@ -7,182 +7,89 @@ import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
 import { Icons } from "@/components/shared/icons";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import {
-    Sheet,
-    SheetContent,
-    SheetTrigger,
-    SheetHeader,
-    SheetTitle,
-    SheetDescription,
+  Sheet,
+  SheetContent,
+  SheetTrigger,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
 } from "@/components/ui/sheet";
 import { ThemeToggleButton } from "@/components/dashboard/common/ThemeToggleButton";
 import { AppEntryLink } from "@/components/landing/app-entry-link";
+import { marketingNavLinks } from "@/config/site";
 
-export function NavMobile() {
-    const pathname = usePathname();
-    const [open, setOpen] = React.useState(false);
-    const [scrolled, setScrolled] = React.useState(false);
+export function NavMobile({ home = false }: { home?: boolean }) {
+  const pathname = usePathname();
+  const [open, setOpen] = React.useState(false);
+  const [scrolled, setScrolled] = React.useState(false);
 
-    React.useEffect(() => {
-        const handleScroll = () => {
-            setScrolled(window.scrollY > 50);
-        };
+  React.useEffect(() => {
+    const handleScroll = () => setScrolled(window.scrollY > 50);
+    handleScroll();
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
-        window.addEventListener("scroll", handleScroll);
-        return () => window.removeEventListener("scroll", handleScroll);
-    }, []);
-
-
-    return (
-        <Sheet open={open} onOpenChange={setOpen}>
-            {/* Mobile Top Bar */}
-            <div className={`sticky top-0 z-50 lg:hidden px-4 pt-8 backdrop-blur-xl transition-all ${
-                scrolled ? "bg-background/60" : "bg-transparent"
-            }`}>
-                {/* Logo above */}
-                <div className="flex h-10 items-center justify-start">
-                    <Link href="/" className="flex items-center">
-                        <Image
-                            src="/images/logo/logo.svg"
-                            alt="CraCha"
-                            width={132}
-                            height={32}
-                            priority
-                            className="dark:hidden"
-                        />
-                        <Image
-                            src="/images/logo/logo-dark.svg"
-                            alt="CraCha"
-                            width={132}
-                            height={32}
-                            priority
-                            className="hidden dark:block"
-                        />
-                    </Link>
-                </div>
-
-                {/* Below the logo: left burger, right theme + login */}
-                <div className="mt-1 flex h-10 items-center justify-between">
-                    {/* Burger menu trigger (left) */}
-                    <SheetTrigger asChild>
-                        <Button
-                            variant="ghost"
-                            className="h-10 w-10 p-0 text-base hover:bg-transparent focus-visible:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
-                        >
-                            <Icons.menu className="h-6 w-6" />
-                            <span className="sr-only">Menü öffnen</span>
-                        </Button>
-                    </SheetTrigger>
-
-                    {/* Right side: Theme toggle, Login, primary CTA */}
-                    <div className="flex items-center gap-1.5">
-                        <ThemeToggleButton className="h-10 w-10" />
-                        <AppEntryLink
-                            className={buttonVariants({ variant: "ghost", size: "sm", rounded: "full", className: "h-10 whitespace-nowrap px-3" })}
-                        >
-                            Login
-                        </AppEntryLink>
-                        <AppEntryLink
-                            signedOutHref="/register"
-                            className={buttonVariants({ variant: "default", size: "sm", rounded: "full", className: "h-10 whitespace-nowrap px-4" })}
-                        >
-                            Kostenlos starten
-                        </AppEntryLink>
-                    </div>
-                </div>
-            </div>
-
-            <SheetContent side="left" className="pr-0">
-                <SheetHeader className="sr-only">
-                    <SheetTitle>Mobile Navigation</SheetTitle>
-                </SheetHeader>
-                <SheetDescription className="sr-only">
-                    Navigation für Mobilgeräte
-                </SheetDescription>
-                <Link
-                    href="/"
-                    className="flex items-center"
-                    onClick={() => setOpen(false)}
-                >
-                    <Image
-                        src="/images/logo/logo.svg"
-                        alt="CraCha"
-                        width={148}
-                        height={36}
-                        priority
-                        className="dark:hidden"
-                    />
-                    <Image
-                        src="/images/logo/logo-dark.svg"
-                        alt="CraCha"
-                        width={148}
-                        height={36}
-                        priority
-                        className="hidden dark:block"
-                    />
-                </Link>
-                <div className="my-4 h-[calc(100vh-8rem)] pb-10 pl-6">
-                    <div className="flex flex-col space-y-4">
-                        <Link
-                            href="/#how-to-use"
-                            className={cn(
-                                "py-2 font-semibold transition-colors hover:text-foreground/80",
-                                pathname === "/#how-to-use" ? "text-foreground" : "text-foreground/60"
-                            )}
-                            onClick={() => setOpen(false)}
-                        >
-                            Nutzung
-                        </Link>
-                        <Link
-                            href="/#why-cracha"
-                            className={cn(
-                                "py-2 font-semibold transition-colors hover:text-foreground/80",
-                                pathname === "/#why-cracha" ? "text-foreground" : "text-foreground/60"
-                            )}
-                            onClick={() => setOpen(false)}
-                        >
-                            Warum CraCha?
-                        </Link>
-                        <Link
-                            href="/preise"
-                            className={cn(
-                                "py-2 font-semibold transition-colors hover:text-foreground/80",
-                                pathname === "/preise" ? "text-foreground" : "text-foreground/60"
-                            )}
-                            onClick={() => setOpen(false)}
-                        >
-                            Preise
-                        </Link>
-                        <Link
-                            href="/website-mit-ki-durchsuchen"
-                            className={cn(
-                                "py-2 font-semibold transition-colors hover:text-foreground/80",
-                                pathname === "/website-mit-ki-durchsuchen" ? "text-foreground" : "text-foreground/60"
-                            )}
-                            onClick={() => setOpen(false)}
-                        >
-                            Anleitung
-                        </Link>
-                        {[
-                            { href: "/beispiele", title: "Beispiele" },
-                            { href: "/blog", title: "Blog" },
-                        ].map((item) => (
-                            <Link
-                                key={item.href}
-                                href={item.href}
-                                className={cn(
-                                    "py-2 font-semibold transition-colors hover:text-foreground/80",
-                                    pathname === item.href ? "text-foreground" : "text-foreground/60"
-                                )}
-                                onClick={() => setOpen(false)}
-                            >
-                                {item.title}
-                            </Link>
-                        ))}
-                    </div>
-                </div>
-            </SheetContent>
-        </Sheet>
-    );
+  return (
+    <Sheet open={open} onOpenChange={setOpen}>
+      <div
+        className={cn(
+          "top-0 z-50 flex w-full items-center justify-between px-5 py-5 text-white xl:hidden",
+          home
+            ? scrolled
+              ? "fixed border-b border-white/10 bg-black/85 backdrop-blur-xl"
+              : "absolute"
+            : "sticky border-b border-white/10 bg-black/85 backdrop-blur-xl"
+        )}
+      >
+        <Link href="/" aria-label="CraCha Startseite">
+          <Image src="/images/logo/logo-dark.svg" alt="CraCha" width={132} height={32} priority />
+        </Link>
+        <SheetTrigger asChild>
+          <Button variant="ghost" className="h-11 w-11 rounded-full border border-white/15 bg-white/10 p-0 text-white hover:bg-white/20 hover:text-white">
+            <Icons.menu className="h-5 w-5" />
+            <span className="sr-only">Menü öffnen</span>
+          </Button>
+        </SheetTrigger>
+      </div>
+      <SheetContent side="left" className="overflow-y-auto border-white/15 bg-black text-white">
+        <SheetHeader className="sr-only">
+          <SheetTitle>Mobile Navigation</SheetTitle>
+          <SheetDescription>Navigation für Mobilgeräte</SheetDescription>
+        </SheetHeader>
+        <Link href="/" className="flex items-center" onClick={() => setOpen(false)}>
+          <Image src="/images/logo/logo-dark.svg" alt="CraCha" width={148} height={36} priority />
+        </Link>
+        <nav aria-label="Hauptnavigation" className="mt-6 flex flex-col gap-2">
+          {marketingNavLinks.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              aria-current={pathname === item.href ? "page" : undefined}
+              className={cn(
+                "rounded-full px-4 py-3 font-semibold text-white/80 transition-colors hover:bg-white/10 hover:text-white",
+                pathname === item.href && "bg-white/10 text-white"
+              )}
+              onClick={() => setOpen(false)}
+            >
+              {item.title}
+            </Link>
+          ))}
+          <AppEntryLink className="rounded-full px-4 py-3 font-semibold text-white/80" onClick={() => setOpen(false)}>
+            Login
+          </AppEntryLink>
+          <AppEntryLink
+            signedOutHref="/register"
+            className="mt-2 inline-flex w-fit items-center gap-2 rounded-full bg-white px-5 py-3 font-semibold text-black"
+            onClick={() => setOpen(false)}
+          >
+            Kostenlos starten <span aria-hidden="true">↗</span>
+          </AppEntryLink>
+          <ThemeToggleButton className="mt-2 text-white hover:bg-white/10 hover:text-white" />
+        </nav>
+      </SheetContent>
+    </Sheet>
+  );
 }

@@ -40,4 +40,4 @@ export const T = {
 
 /** Pages found on the crawled site; the database and chat quote the same number. */
 export const PAGES = 1248;
-export const SITE = "deine-website.de";
+export const SITE = "kundenwebsite.de";

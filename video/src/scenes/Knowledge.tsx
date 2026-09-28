@@ -29,8 +29,8 @@ export const Database: React.FC<{ a: string; b: string; fill: number; id: string
         const lit = Math.max(0, Math.min(1, fill - (2 - k)));
         return (
           <g key={k}>
-            <path d={side} fill="#e4e6f4" />
-            <ellipse cx={130} cy={y0} rx={rx} ry={ry} fill="#f1f2fa" stroke="#dcdff0" />
+            <path d={side} fill="#eee5da" />
+            <ellipse cx={130} cy={y0} rx={rx} ry={ry} fill="#faf3e8" stroke="#e5d9ca" />
             <g opacity={lit}>
               <path d={side} fill={`url(#${id}-side)`} />
               <ellipse cx={130} cy={y0} rx={rx} ry={ry} fill={`url(#${id}-side)`} />
@@ -67,8 +67,8 @@ const fmt = (n: number) => Math.round(n).toLocaleString("de-DE");
 
 const SLOTS = [CX - 440, CX, CX + 440];
 const OTHERS = [
-  { name: "Firmen-Wiki", meta: "612 Seiten", a: C.purple, b: C.pink },
-  { name: "Dokumentation", meta: "2.310 Seiten", a: C.sky, b: C.indigo },
+  { name: "Dokumentation", meta: "612 Seiten", a: C.red, b: C.orange },
+  { name: "Wiki", meta: "2.310 Seiten", a: C.amber, b: C.yellow },
 ];
 
 export const Knowledge: React.FC = () => {
@@ -131,7 +131,7 @@ export const Knowledge: React.FC = () => {
           alignItems: "center",
         }}
       >
-        <Database a={C.indigo} b={C.purple} fill={fill} id="main" />
+        <Database a={C.orange} b={C.red} fill={fill} id="main" />
         <div style={{ marginTop: 22, opacity: labelIn, transform: `translateY(${(1 - labelIn) * 16}px)` }}>
           <Label name={SITE} meta={`${fmt(pages * PAGES)} Seiten`} />
         </div>

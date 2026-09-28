@@ -6,178 +6,67 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
-// import { useScroll } from "@/hooks/use-scroll";
 import MaxWidthWrapper from "@/components/shared/max-width-wrapper";
-import { ThemeToggleButton } from "@/components/dashboard/common/ThemeToggleButton";
 import { AppEntryLink } from "@/components/landing/app-entry-link";
-import { buttonVariants } from "@/components/ui/button";
+import { marketingNavLinks } from "@/config/site";
 
 interface NavBarProps {
   scroll?: boolean;
-  large?: boolean;
+  home?: boolean;
 }
 
-export function NavBar({ scroll = false }: NavBarProps) {
+export function NavBar({ scroll = false, home = false }: NavBarProps) {
   const [scrolled, setScrolled] = React.useState(false);
   const pathname = usePathname();
 
   React.useEffect(() => {
-    const handleScroll = () => {
-      const isScrolled = window.scrollY > 20;
-      setScrolled(isScrolled);
-    };
-
-    if (scroll) {
-      // Initial check
-      handleScroll();
-      window.addEventListener("scroll", handleScroll, { passive: true });
-      return () => window.removeEventListener("scroll", handleScroll);
-    }
+    if (!scroll) return;
+    const handleScroll = () => setScrolled(window.scrollY > 20);
+    handleScroll();
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
   }, [scroll]);
 
-  // Navigation links für CraCha
-  const mainNavLinks = [
-    {
-      title: "Nutzung",
-      href: "/#how-to-use",
-    },
-    {
-      title: "Beispiele",
-      href: "/beispiele",
-    },
-    {
-      title: "Warum CraCha?",
-      href: "/#why-cracha",
-    },
-    {
-      title: "Preise",
-      href: "/preise",
-    },
-    {
-      title: "Anleitung",
-      href: "/website-mit-ki-durchsuchen",
-    },
-    {
-      title: "Blog",
-      href: "/blog",
-    },
-  ];
-
   return (
-    <>
-      {/* SVG Filters */}
-      <svg className="absolute w-0 h-0 pointer-events-none hidden lg:block">
-        <defs>
-          <filter id="gooey-filter" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur" />
-            <feColorMatrix
-              in="blur"
-              mode="matrix"
-              values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 19 -9"
-              result="gooey"
-            />
-            <feComposite in="SourceGraphic" in2="gooey" operator="atop" />
-          </filter>
-        </defs>
-      </svg>
-
-      <header
-        className={cn(
-          "sticky top-0 z-50 w-full hidden lg:flex justify-center backdrop-blur-xl transition-all duration-300",
-          scrolled ? "bg-background/80 border-b border-border/40" : "bg-transparent"
-        )}
-      >
-        <MaxWidthWrapper className="flex h-12 md:h-14 items-center justify-between py-0">
-          <div className="flex gap-6 md:gap-10">
-            {/*
-              148x36 is the wordmark's own proportion (4.12:1). It used to be
-              154x32, which does not match any logo we have ever shipped, so the
-              browser fell back to the file's intrinsic ratio and drew a 154x154
-              square starting at y=-49 -- the mark hung out of a 56px header and
-              was clipped at the top.
-            */}
-            <Link href="/" className="flex items-center">
-              <Image
-                src="/images/logo/logo.svg"
-                alt="CraCha"
-                width={148}
-                height={36}
-                priority
-                className="dark:hidden"
-              />
-              <Image
-                src="/images/logo/logo-dark.svg"
-                alt="CraCha"
-                width={148}
-                height={36}
-                priority
-                className="hidden dark:block"
-              />
+    <header
+      className={cn(
+        "top-0 z-50 hidden w-full justify-center py-4 text-white xl:flex",
+        home
+          ? scrolled
+            ? "fixed border-b border-white/10 bg-black/85 backdrop-blur-xl"
+            : "absolute"
+          : "sticky border-b border-white/10 bg-black/85 backdrop-blur-xl"
+      )}
+    >
+      <MaxWidthWrapper large className="flex items-center justify-between gap-6">
+        <Link href="/" className="shrink-0" aria-label="CraCha Startseite">
+          <Image src="/images/logo/logo-dark.svg" alt="CraCha" width={148} height={36} priority />
+        </Link>
+        <nav aria-label="Hauptnavigation" className="flex items-center gap-1 rounded-full border border-white/15 bg-white/10 p-1 backdrop-blur-xl">
+          {marketingNavLinks.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              aria-current={pathname === item.href ? "page" : undefined}
+              className={cn(
+                "whitespace-nowrap rounded-full px-3 py-2 text-sm font-medium text-white/80 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-white",
+                pathname === item.href && "bg-white/10 text-white"
+              )}
+            >
+              {item.title}
             </Link>
-
-            <nav className="hidden lg:flex items-center gap-3">
-              {mainNavLinks.map((item, index) => (
-                <Link
-                  key={index}
-                  href={item.href}
-                  prefetch={true}
-                  className={cn(
-                    "inline-flex items-center h-9 px-3 rounded-full text-sm leading-none font-medium transition-colors duration-200 hover:text-foreground/80 hover:bg-foreground/10 whitespace-nowrap",
-                    pathname === item.href
-                      ? "text-foreground"
-                      : "text-foreground/60"
-                  )}
-                >
-                  {item.title}
-                </Link>
-              ))}
-            </nav>
-          </div>
-
-          {/* Hide right controls on mobile; they are provided by NavMobile */}
-          <div className="hidden items-center gap-2 lg:flex">
-            {/* Dark/Light Toggle */}
-            <ThemeToggleButton />
-            <AppEntryLink
-              className={buttonVariants({ variant: "ghost", size: "sm", rounded: "full", className: "px-4" })}
-            >
-              Login
-            </AppEntryLink>
-            {/* Primary CTA: new visitors register, signed-in visitors go to the dashboard */}
-            <div
-            id="gooey-btn"
-            className="relative flex items-center group gooey-filter"
+          ))}
+          <AppEntryLink
+            signedOutHref="/register"
+            className="ml-1 inline-flex min-h-9 shrink-0 items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-black transition-colors hover:bg-white/85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
           >
-            <AppEntryLink
-              signedOutHref="/register"
-              className={buttonVariants({ variant: "default", size: "sm", rounded: "full", className: "relative z-20 whitespace-nowrap px-5" })}
-            >
-              Kostenlos starten
-            </AppEntryLink>
-              {/* Decorative arrow bubble appears to the RIGHT, behind the primary button */}
-              <span
-                aria-hidden="true"
-                role="img"
-                className="pointer-events-none absolute top-1/2 -translate-y-1/2 left-full ml-0 -translate-x-15 px-2.5 py-2 rounded-full bg-primary text-primary-foreground font-normal text-xs transition-transform duration-300 h-8 flex items-center justify-center z-0 group-hover:translate-x-0"
-              >
-                <svg
-                  className="w-3 h-3"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M7 17L17 7M17 7H7M17 7V17"
-                  />
-                </svg>
-              </span>
-            </div>
-          </div>
-        </MaxWidthWrapper>
-      </header>
-    </>
+            Kostenlos starten <span aria-hidden="true">↗</span>
+          </AppEntryLink>
+        </nav>
+        <AppEntryLink className="shrink-0 rounded-full px-3 py-2 text-sm font-medium text-white/80 transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-white">
+          Login
+        </AppEntryLink>
+      </MaxWidthWrapper>
+    </header>
   );
 }
