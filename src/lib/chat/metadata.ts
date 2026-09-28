@@ -27,6 +27,10 @@ export function formatModel(model: string): string {
     const variant = /^\d+b$/i.test(llama[2]) ? llama[2].toUpperCase() : `${llama[2][0].toUpperCase()}${llama[2].slice(1)}`
     return `Llama ${llama[1]} ${variant}`
   }
+  const deepseek = /^deepseek-v(\d+(?:\.\d+)?)-([a-z]+)$/i.exec(name)
+  if (deepseek) return `DeepSeek V${deepseek[1]} ${deepseek[2][0].toUpperCase()}${deepseek[2].slice(1)}`
+  const gpt = /^gpt-(\d+(?:\.\d+)?)-([a-z]+)$/i.exec(name)
+  if (gpt) return `GPT-${gpt[1]} ${gpt[2][0].toUpperCase()}${gpt[2].slice(1)}`
   const gemini = /^gemini-(\d+(?:\.\d+)?)-([a-z-]+)$/i.exec(name)
   if (gemini) {
     const variant = gemini[2]

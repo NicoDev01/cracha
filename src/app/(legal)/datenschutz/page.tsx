@@ -271,6 +271,9 @@ export default function DatenschutzPage() {
               Browser in der EU-Region.
             </>,
             <>
+              <strong className="text-foreground">OpenRouter</strong> (OpenRouter, Inc., USA) — Vermittlung der Antworterzeugung an das Sprachmodell DeepSeek V4.1 Flash, betrieben von DeepInfra, Fireworks AI oder Together AI (jeweils USA), ersatzweise GPT-6 Luna bei Microsoft Azure oder OpenAI. Zur Generierung erhält das Modell Fragen, begrenzten Gesprächsverlauf und relevante Quelltexte. Wir lassen nur Anbieter zu, die diese Daten nicht zum Training verwenden; Anbieter in China sind ausgeschlossen. OpenRouter speichert nach eigenen Angaben keine Frage- und Antwortinhalte.
+            </>,
+            <>
               <strong className="text-foreground">Google</strong> — für die Antworterzeugung mit Gemini über das Cloudflare AI Gateway sowie bei freiwilliger Anmeldung über Google. Zur Generierung erhält das Modell Fragen, begrenzten Gesprächsverlauf und relevante Quelltexte. Außerdem landen E-Mails an hallo@cracha-app.com in einem Google-Mail-Postfach.
             </>,
           ]}

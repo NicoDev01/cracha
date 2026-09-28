@@ -11,6 +11,7 @@ import {
   streamGroundedAnswer,
   groundListEntries,
   groundListEntry,
+  isOpenRouterModel,
   paddedBlockText,
   reciteNumbers,
   trimHistory,
@@ -862,5 +863,125 @@ describe('checking citations against the cited page', () => {
     const anchors = citationAnchors('Intro\n1. Christiane Niebuhr-Redder [2]\nGegründet 1996 in Bremen. [1]', blocks)
     expect(anchors['1:2'].phrase).toBe('Christiane Niebuhr-Redder')
     expect(anchors['2:1'].phrase).toBe('Webmen ist seit 1996 Ihre Digitalagentur im Herzen')
+  })
+})
+
+describe('platform model through OpenRouter', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  // OpenRouter streams OpenAI chat chunks and keeps the line alive with
+  // comments while the model reasons; both have to pass through the reader.
+  const sse = (...frames: string[]) => new Response(new ReadableStream({
+    start(controller) {
+      for (const frame of frames) controller.enqueue(new TextEncoder().encode(frame))
+      controller.close()
+    },
+  }), { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+  const answer = (text: string) => sse(
+    ': OPENROUTER PROCESSING\n\n',
+    `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`,
+    `data: ${JSON.stringify({ choices: [{ delta: { content: '' }, finish_reason: 'stop' }] })}\n\n`,
+    'data: [DONE]\n\n',
+  )
+  const input = (run = vi.fn()) => ({
+    ai: { run } as unknown as CloudflareEnv['AI'],
+    model: 'deepseek/deepseek-v4.1-flash',
+    question: 'Wer ist im Team?',
+    history: [{ role: 'user' as const, content: 'Hallo' }],
+    context: '[1] Team\nAnna',
+    openRouterKey: 'or-test',
+  })
+  const collect = async (result: Awaited<ReturnType<typeof streamGroundedAnswer>>) => {
+    let text = ''
+    for await (const delta of result.text) text += delta
+    return text
+  }
+
+  it('recognises OpenRouter ids and leaves Workers AI ids alone', () => {
+    expect(isOpenRouterModel('deepseek/deepseek-v4.1-flash')).toBe(true)
+    expect(isOpenRouterModel('openai/gpt-6-luna')).toBe(true)
+    expect(isOpenRouterModel('@cf/meta/llama-4-scout-17b-16e-instruct')).toBe(false)
+  })
+
+  it('asks DeepSeek on the allowed hosts only, with low reasoning hidden from the stream', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(answer('Anna [1]'))
+    vi.stubGlobal('fetch', fetchMock)
+    const result = await streamGroundedAnswer(input())
+    expect(await collect(result)).toBe('Anna [1]')
+    expect(result).toMatchObject({ usedModel: 'deepseek/deepseek-v4.1-flash', fallback: false })
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe('https://openrouter.ai/api/v1/chat/completions')
+    expect(init.headers.Authorization).toBe('Bearer or-test')
+    const body = JSON.parse(init.body)
+    expect(body).toMatchObject({
+      model: 'deepseek/deepseek-v4.1-flash',
+      stream: true,
+      reasoning: { effort: 'low', exclude: true },
+      provider: { data_collection: 'deny', order: ['deepinfra', 'fireworks', 'together'], allow_fallbacks: false },
+    })
+    expect(body.messages[0].role).toBe('system')
+    expect(body.messages.at(-1).content).toContain('Frage:\nWer ist im Team?')
+  })
+
+  it('turns reasoning off when configured', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(answer('Anna [1]'))
+    vi.stubGlobal('fetch', fetchMock)
+    await collect(await streamGroundedAnswer({ ...input(), reasoning: 'none' }))
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).reasoning).toEqual({ enabled: false })
+  })
+
+  it('answers with GPT-6 Luna when DeepSeek fails, and says so', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 503, message: 'No endpoints available' } }), { status: 503 }))
+      .mockResolvedValueOnce(answer('Anna [1]'))
+    vi.stubGlobal('fetch', fetchMock)
+    const result = await streamGroundedAnswer(input())
+    expect(await collect(result)).toBe('Anna [1]')
+    expect(result).toMatchObject({ model: 'deepseek/deepseek-v4.1-flash', usedModel: 'openai/gpt-6-luna', fallback: true, fallbackReason: 'primary_unavailable' })
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).provider.order).toEqual(['azure', 'openai'])
+  })
+
+  it('falls back to Workers AI when OpenRouter cannot answer at all', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{"error":{"message":"Invalid key"}}', { status: 401 })))
+    const run = vi.fn().mockResolvedValue(new ReadableStream<string>({
+      start(controller) {
+        controller.enqueue('data: {"response":"Anna [1]"}\n\n')
+        controller.enqueue('data: [DONE]\n\n')
+        controller.close()
+      },
+    }))
+    const result = await streamGroundedAnswer(input(run))
+    expect(await collect(result)).toBe('Anna [1]')
+    expect(result.usedModel).toBe('@cf/meta/llama-4-scout-17b-16e-instruct')
+    expect(run.mock.calls[0][0]).toBe('@cf/meta/llama-4-scout-17b-16e-instruct')
+  })
+
+  it('never calls OpenRouter without a key', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const run = vi.fn()
+      .mockRejectedValueOnce(new Error('credits required'))
+      .mockResolvedValueOnce(new ReadableStream<string>({
+        start(controller) {
+          controller.enqueue('data: {"response":"Anna [1]"}\n\n')
+          controller.enqueue('data: [DONE]\n\n')
+          controller.close()
+        },
+      }))
+    const result = await streamGroundedAnswer({ ...input(run), openRouterKey: undefined })
+    expect(await collect(result)).toBe('Anna [1]')
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(result.usedModel).toBe('@cf/meta/llama-4-scout-17b-16e-instruct')
+  })
+
+  it('answers a failing reader key with the OpenRouter platform model', async () => {
+    const fetchMock = vi.fn(async (url: string) => (url.includes('openrouter')
+      ? answer('Anna [1]')
+      : new Response('{"error":{"status":"PERMISSION_DENIED","message":"API key not valid"}}', { status: 403 })))
+    vi.stubGlobal('fetch', fetchMock)
+    const result = await streamGroundedAnswer({ ...input(), model: 'gemini-3.8-flash', apiKey: 'bad', platformModel: 'deepseek/deepseek-v4.1-flash' })
+    expect(await collect(result)).toBe('Anna [1]')
+    expect(result).toMatchObject({ usedModel: 'deepseek/deepseek-v4.1-flash', fallback: true, fallbackReason: 'byok_rejected' })
   })
 })

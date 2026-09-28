@@ -202,6 +202,9 @@ export async function POST(request: NextRequest) {
             apiKey: byokKey,
             gatewayId,
             mode,
+            openRouterKey: env.OPENROUTER_API_KEY || undefined,
+            reasoning: env.GENERATION_REASONING,
+            platformModel: configuredModel,
           })
         } catch (error) {
           console.error(JSON.stringify({ event: 'chat_generation_failed', reason: error instanceof Error ? error.name : 'unknown' }))

@@ -28,4 +28,12 @@ interface CloudflareEnv {
    * keys: without it the hourly run does nothing and says so in the log.
    */
   RESEND_API_KEY?: string
+
+  /**
+   * Routes GENERATION_MODEL ids of the form `vendor/model` through OpenRouter.
+   * A secret set on the Worker. Without it, answers come from Workers AI.
+   */
+  OPENROUTER_API_KEY?: string
+  /** Reasoning effort for the OpenRouter model: none, minimal, low (default), medium, high. */
+  GENERATION_REASONING?: string
 }

@@ -227,7 +227,7 @@ function ByokDialogContent({
           Eigenen API-Key nutzen (BYOK)
         </DialogTitle>
         <DialogDescription className="text-xs text-gray-500 dark:text-gray-400">
-          Ohne eigenen Key antwortet das Standardmodell (Llama 4 Scout). Mit deinem Google-AI-Studio-Key antwortet Gemini. Der Key bleibt nur in diesem Tab im Arbeitsspeicher und wird nie gespeichert. Die Prüfung läuft direkt zwischen deinem Browser und Google.
+          Ohne eigenen Key antwortet das Standardmodell (DeepSeek V4.1 Flash). Mit deinem Google-AI-Studio-Key antwortet Gemini. Der Key bleibt nur in diesem Tab im Arbeitsspeicher und wird nie gespeichert. Die Prüfung läuft direkt zwischen deinem Browser und Google.
         </DialogDescription>
       </DialogHeader>
 

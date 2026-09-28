@@ -50,7 +50,14 @@ export interface StreamingGenerationResult {
  * Overridden by the GENERATION_MODEL var.
  */
 export const DEFAULT_GENERATION_MODEL = '@cf/meta/llama-4-scout-17b-16e-instruct'
-const FALLBACK_MODEL = DEFAULT_GENERATION_MODEL
+/** Answers when neither OpenRouter model does; needs only the AI binding. */
+const FALLBACK_MODEL = '@cf/meta/llama-4-scout-17b-16e-instruct'
+/**
+ * The second OpenRouter model, on other hosts than the first. GPT-6 Luna:
+ * $0.10 / $0.50 per million tokens and fast, but it drops formatting to save
+ * tokens, which is why it is the backup rather than the default.
+ */
+export const OPENROUTER_BACKUP_MODEL = 'openai/gpt-6-luna'
 /** Used when a BYOK request names no Gemini model or an unrecognisable one. */
 export const DEFAULT_BYOK_MODEL = 'gemini-3.8-flash'
 
@@ -1049,6 +1056,65 @@ export interface ModelStreamInput {
   gatewayId?: string
   apiKey?: string
   mode?: 'default' | 'verification'
+  /** The platform's OpenRouter key; routes `vendor/model` ids through OpenRouter. */
+  openRouterKey?: string
+  /** Reasoning effort for OpenRouter models: none, minimal, low, medium, high. */
+  reasoning?: string
+  /** The configured platform model, which answers when a reader's own key fails. */
+  platformModel?: string
+}
+
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
+const REASONING_EFFORTS = new Set(['none', 'minimal', 'low', 'medium', 'high'])
+
+/**
+ * A model id OpenRouter serves: `vendor/model`, not a Workers AI `@cf/` id.
+ */
+export function isOpenRouterModel(model: string): boolean {
+  return !model.startsWith('@cf/') && /^[a-z0-9-]+\/[a-z0-9.:-]+$/i.test(model)
+}
+
+/**
+ * Which hosts may serve which model. DeepSeek's own API and the other hosts in
+ * China are left out: the questions and crawled pages of German businesses must
+ * not be processed there. The order is price first among hosts that run the
+ * full model at stable uptime (checked against OpenRouter's endpoint list,
+ * September 2026). No host may use the data for training.
+ */
+const OPENROUTER_PROVIDERS: Record<string, { order: string[] }> = {
+  'deepseek/deepseek-v4.1-flash': { order: ['deepinfra', 'fireworks', 'together'] },
+  'openai/gpt-6-luna': { order: ['azure', 'openai'] },
+}
+
+function openRouterRequest(input: ModelStreamInput, messages: unknown[], maxTokens: number) {
+  const hosts = OPENROUTER_PROVIDERS[input.model]
+  const effort = REASONING_EFFORTS.has(input.reasoning ?? '') ? input.reasoning! : 'low'
+  return fetch(OPENROUTER_URL, {
+    method: 'POST',
+    signal: input.signal,
+    headers: {
+      Authorization: `Bearer ${input.openRouterKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://cracha-app.com',
+      'X-Title': 'CraCha',
+    },
+    body: JSON.stringify({
+      model: input.model,
+      messages,
+      stream: true,
+      // Reasoning tokens count against the limit; the list of a large
+      // collection page must still fit after them.
+      max_tokens: maxTokens + 4_000,
+      temperature: 0.2,
+      // A little reasoning checks lists and markers before writing; the answer
+      // streams without it, since the reader has no use for the scratch work.
+      reasoning: effort === 'none' ? { enabled: false } : { effort, exclude: true },
+      provider: {
+        data_collection: 'deny',
+        ...(hosts ? { order: hosts.order, allow_fallbacks: false } : {}),
+      },
+    }),
+  })
 }
 
 /**
@@ -1099,6 +1165,20 @@ async function openModelStream(input: ModelStreamInput): Promise<ReadableStream<
       }
       if (!response.ok) throw error
     }
+    if (!response.body) throw new ProviderError(response.status)
+    return response.body as ReadableStream<Uint8Array>
+  }
+
+  // 2. The platform model through OpenRouter, in the OpenAI chat format our
+  //    stream reader already understands.
+  if (input.openRouterKey && isOpenRouterModel(input.model)) {
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      ...trimHistory(input.history),
+      { role: 'user', content: finalUserText(input.question, input.context, input.mode, kind) },
+    ]
+    const response = await openRouterRequest(input, messages, maxTokens)
+    if (!response.ok) throw await providerErrorFrom(response)
     if (!response.body) throw new ProviderError(response.status)
     return response.body as ReadableStream<Uint8Array>
   }
@@ -1188,17 +1268,31 @@ export async function streamGroundedAnswer(input: ModelStreamInput): Promise<Str
   const primaryModel = input.model || DEFAULT_GENERATION_MODEL
   const deadline = Date.now() + TOTAL_TIMEOUT_MS
   if (!input.apiKey) {
-    try {
-      return {
-        model: primaryModel,
-        usedModel: primaryModel,
-        fallback: false,
-        text: await prepareTextStream({ ...input, model: primaryModel }, deadline),
+    // Through OpenRouter a second model on other hosts comes first, then the
+    // Workers AI model, which needs nothing but the binding.
+    const viaOpenRouter = Boolean(input.openRouterKey) && isOpenRouterModel(primaryModel)
+    const attempts = [primaryModel, ...(viaOpenRouter && primaryModel !== OPENROUTER_BACKUP_MODEL ? [OPENROUTER_BACKUP_MODEL] : [])]
+    let lastError: unknown
+    for (const model of attempts) {
+      if (input.signal?.aborted || Date.now() >= deadline) break
+      try {
+        const text = await prepareTextStream({ ...input, model }, deadline)
+        return model === primaryModel
+          ? { model: primaryModel, usedModel: model, fallback: false, text }
+          : { model: primaryModel, usedModel: model, fallback: true, fallbackReason: 'primary_unavailable', text }
+      } catch (error) {
+        lastError = error
+        console.warn(JSON.stringify({
+          event: 'platform_model_failed',
+          model,
+          status: error instanceof ProviderError ? error.status : undefined,
+          code: error instanceof GenerationError ? error.code : undefined,
+          detail: error instanceof ProviderError ? error.detail : undefined,
+        }))
       }
-    } catch (error) {
-      if (primaryModel === FALLBACK_MODEL || input.signal?.aborted || Date.now() >= deadline) throw error
-      return platformFallback(input, primaryModel, error, deadline)
     }
+    if (primaryModel === FALLBACK_MODEL || input.signal?.aborted || Date.now() >= deadline) throw lastError
+    return platformFallback(input, primaryModel, lastError, deadline)
   }
 
   // The reader's own key: the chosen model, once more after a pause if Google
@@ -1260,6 +1354,25 @@ async function platformFallback(
     reason: fallbackReason,
     detail: fallbackDetail,
   }))
+  // A reader's failing Gemini key is answered by the platform model, which is
+  // the OpenRouter one when it is configured and Scout otherwise.
+  const platform = input.platformModel && input.openRouterKey && isOpenRouterModel(input.platformModel) && input.apiKey
+    ? input.platformModel
+    : null
+  if (platform) {
+    try {
+      return {
+        model: primaryModel,
+        usedModel: platform,
+        fallback: true,
+        fallbackReason,
+        fallbackDetail,
+        text: await prepareTextStream({ ...input, model: platform, apiKey: undefined }, deadline),
+      }
+    } catch (platformError) {
+      console.warn(JSON.stringify({ event: 'platform_model_failed', model: platform, status: platformError instanceof ProviderError ? platformError.status : undefined }))
+    }
+  }
   return {
     model: primaryModel,
     usedModel: FALLBACK_MODEL,
