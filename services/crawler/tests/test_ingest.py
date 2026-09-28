@@ -106,6 +106,38 @@ async def test_finalize_publishes_an_index_that_answers_questions() -> None:
 
 
 @pytest.mark.asyncio
+async def test_a_waiter_that_hands_off_leaves_a_partial_index_unpublished() -> None:
+    # The crawl function publishes nothing it passes to the finalizer: the
+    # finalizer's first poll got 409 from the finished job and turned a working
+    # knowledge base into a failed, unbilled crawl.
+    ingest = object.__new__(RagIngestClient)
+    completed = False
+
+    async def wait(*_args, **_kwargs):
+        return SimpleNamespace(
+            complete=False,
+            pending_count=20,
+            indexed_count=0,
+            chunks_count=55,
+            searchable_count=18,
+        )
+
+    async def complete(*_args, **_kwargs):
+        nonlocal completed
+        completed = True
+
+    ingest._wait_for_index = wait
+    ingest._complete = complete
+
+    result = await ingest.finalize(
+        "database", "user", ["page-a.md"], attempts=1, publish_partial=False
+    )
+
+    assert result.complete is False
+    assert completed is False
+
+
+@pytest.mark.asyncio
 async def test_finalize_leaves_an_empty_index_unpublished() -> None:
     ingest = object.__new__(RagIngestClient)
     completed = False

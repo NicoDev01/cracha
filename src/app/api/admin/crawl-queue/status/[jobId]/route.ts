@@ -7,6 +7,7 @@ import { getAuthenticatedUser } from '@/lib/supabase/server'
 export const dynamic = 'force-dynamic'
 
 const TERMINAL = new Set(['completed', 'failed', 'cancelled'])
+const STATUS_TIMEOUT_MS = 8_000
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ jobId: string }> }) {
   const user = await getAuthenticatedUser()
@@ -19,9 +20,18 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ success: false, error: 'Crawl-Auftrag nicht gefunden.' }, { status: 404 })
   }
 
-  const response = await fetch(`${env.MODAL_CRAWLER_URL.replace(/\/$/, '')}/status/${encodeURIComponent(jobId)}`, {
-    headers: { Authorization: `Bearer ${env.CRAWLER_API_SECRET}` },
-  })
+  let response: Response
+  try {
+    // The crawler answers in well under a second. Without a bound, one request
+    // lost while Modal replaced its container hung for two minutes, and since
+    // the page asks again only after an answer, progress froze with it.
+    response = await fetch(`${env.MODAL_CRAWLER_URL.replace(/\/$/, '')}/status/${encodeURIComponent(jobId)}`, {
+      headers: { Authorization: `Bearer ${env.CRAWLER_API_SECRET}` },
+      signal: AbortSignal.timeout(STATUS_TIMEOUT_MS),
+    })
+  } catch {
+    return NextResponse.json({ success: false, error: 'Status vorübergehend nicht erreichbar.' }, { status: 504 })
+  }
   const result = (await response.json().catch(() => ({}))) as {
     success?: boolean
     status?: string

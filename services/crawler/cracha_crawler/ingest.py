@@ -182,12 +182,19 @@ class RagIngestClient:
         on_progress: ProgressCallback | None = None,
         job_id: str | None = None,
         crawl_complete: bool | None = None,
+        publish_partial: bool = True,
     ) -> IndexStatus:
         """Wait for the index, then publish it.
 
         `crawl_complete` tells the Worker whether this crawl saw the whole
         site. Only then may it delete indexed pages the crawl did not return;
         None leaves the field out and the Worker keeps its old behaviour.
+
+        `publish_partial` is for the last waiter only. A caller that hands an
+        unfinished index to someone else must leave it unpublished: publishing
+        ends the job on the Worker, so the next waiter's first status poll got
+        409, and a knowledge base that answered questions was reported as
+        failed and billed at nothing.
         """
         async with httpx.AsyncClient(timeout=180) as client:
             status = await self._wait_for_index(
@@ -204,7 +211,7 @@ class RagIngestClient:
             # AI Search never flips the last few items to "completed". Leaving it
             # in "crawling" until the budget ran out and then marking it failed
             # discarded a working index.
-            if status.complete or status.searchable_count > 0:
+            if status.complete or (publish_partial and status.searchable_count > 0):
                 await self._complete(
                     client,
                     database_id,
@@ -266,6 +273,8 @@ class RagIngestClient:
             complete=False,
         )
         last_change = _monotonic()
+        # Its own clock: the injected one is scripted call by call in tests.
+        started = time.monotonic()
         delay = float(INDEX_STATUS_INTERVAL_SECONDS)
         # From the starting count: failed keys are dropped from active_keys as
         # we go, and the pace should not change because of that.
@@ -295,6 +304,13 @@ class RagIngestClient:
                 pending_count=pending,
                 complete=bool(status.get("ready")),
                 searchable_count=int(status.get("searchable") or 0),
+            )
+            # Where the indexing wait goes is otherwise invisible: the job
+            # record keeps only its latest state.
+            print(
+                f"[INDEX] t={time.monotonic() - started:.1f}s poll={attempt + 1} "
+                f"searchable={latest.searchable_count}/{total} pending={pending} "
+                f"chunks={chunks_count} ready={latest.complete}"
             )
             progress = (indexed, chunks_count)
             if progress != previous_progress:

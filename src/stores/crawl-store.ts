@@ -291,7 +291,9 @@ export const useCrawlStore = create<CrawlState>()(
           if (polledRemoteJobId !== remoteJobId) return
           let nextDelay = 5000
           try {
-            const response = await apiFetch(`/api/admin/crawl-queue/status/${remoteJobId}`)
+            // The next poll is scheduled only after this one ends, so a request
+            // that never answers must not be allowed to stop the polling.
+            const response = await apiFetch(`/api/admin/crawl-queue/status/${remoteJobId}`, { signal: AbortSignal.timeout(15_000) })
             const result = (await response.json().catch(() => ({}))) as CrawlStatusResponse
             if (polledRemoteJobId !== remoteJobId) return
             if (!response.ok) throw new Error(result.error || `Statusabfrage fehlgeschlagen (${response.status}).`)

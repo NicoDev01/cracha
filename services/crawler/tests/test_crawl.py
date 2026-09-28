@@ -6,6 +6,54 @@ import pytest
 from cracha_crawler import crawl
 from cracha_crawler.models import CrawlRequest, Page
 
+settled_start_url = crawl._settled_start_url
+
+
+@pytest.fixture(autouse=True)
+def start_url_stays(monkeypatch) -> None:
+    """Keeps crawl_pages off the network; the redirect probe is tested alone."""
+
+    async def unchanged(url: str) -> str:
+        return url
+
+    monkeypatch.setattr(crawl, "_settled_start_url", unchanged)
+
+
+def _redirecting_to(monkeypatch, final_url: str) -> None:
+    async def download(_client, _url: str) -> tuple[bytes, str]:
+        return b"<html></html>", final_url
+
+    monkeypatch.setattr(crawl, "_safe_download", download)
+
+
+async def test_an_apex_domain_that_redirects_to_www_is_crawled_on_www(monkeypatch) -> None:
+    # simba.de answers with a redirect to www.simba.de. Every pass keeps to the
+    # start host, so the start page itself was refused and the crawl failed.
+    _redirecting_to(monkeypatch, "https://www.simba.de/")
+
+    assert await settled_start_url("https://simba.de/") == "https://www.simba.de/"
+
+
+async def test_a_www_domain_that_redirects_to_the_apex_is_crawled_on_the_apex(monkeypatch) -> None:
+    _redirecting_to(monkeypatch, "https://example.com/start")
+
+    assert await settled_start_url("https://www.example.com/") == "https://example.com/start"
+
+
+async def test_a_redirect_to_another_site_is_not_adopted(monkeypatch) -> None:
+    _redirecting_to(monkeypatch, "https://elsewhere.example/")
+
+    assert await settled_start_url("https://simba.de/") == "https://simba.de/"
+
+
+async def test_an_unreachable_start_page_is_left_to_the_passes(monkeypatch) -> None:
+    async def refuse(_client, _url: str) -> tuple[bytes, str]:
+        raise httpx.ConnectError("refused")
+
+    monkeypatch.setattr(crawl, "_safe_download", refuse)
+
+    assert await settled_start_url("https://simba.de/") == "https://simba.de/"
+
 
 def html_page(body: str) -> Page | None:
     document = f"<html><head><title>Preise</title></head><body><main>{body}</main></body></html>"

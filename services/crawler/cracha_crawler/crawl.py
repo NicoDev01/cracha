@@ -298,6 +298,33 @@ async def _dynamic_page_urls(start_url: str, source_host: str | None) -> list[st
     return list(dict.fromkeys(urls))
 
 
+def _www_twins(host: str | None, other: str | None) -> bool:
+    """Whether two hosts differ only by a leading ``www.``."""
+    if not host or not other or host == other:
+        return False
+    return host.removeprefix("www.") == other.removeprefix("www.")
+
+
+async def _settled_start_url(url: str) -> str:
+    """The start URL on the host the site actually serves.
+
+    Every pass keeps to the start URL's host, so a site that sends `simba.de`
+    to `www.simba.de` had its own start page rejected as an off-site redirect,
+    and the crawl failed with "simba.de war nicht erreichbar". Only the
+    www/apex hop is adopted; any other redirect is left for the passes to
+    refuse as before.
+    """
+    try:
+        async with create_safe_client(timeout=15) as client:
+            _content, final_url = await _safe_download(client, url)
+    except (httpx.HTTPError, ValueError, OSError):
+        return url
+    if _www_twins(urlsplit(url).hostname, urlsplit(final_url).hostname):
+        print(f"[CRAWL] start URL {url} is served from {final_url}")
+        return canonical_url(final_url)
+    return url
+
+
 class CrawlBlockedError(RuntimeError):
     """The source refused us, as opposed to having nothing worth indexing.
 
@@ -1100,6 +1127,9 @@ async def crawl_pages(
     """
     stats = stats if stats is not None else CrawlStats()
     await assert_public_url(str(request.url))
+    settled = await _settled_start_url(str(request.url))
+    if settled != str(request.url):
+        request = request.model_copy(update={"url": settled})
     browser_timeout = min(
         MAX_BROWSER_TIMEOUT_SECONDS,
         max(MIN_BROWSER_TIMEOUT_SECONDS, request.limit * 5),

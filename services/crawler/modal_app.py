@@ -338,6 +338,9 @@ async def process_crawl(payload: dict, job_id: str) -> dict:
             on_progress=report_progress,
             job_id=job_id,
             crawl_complete=crawl_complete,
+            # An unfinished index goes to finalize_index below, which keeps
+            # polling; publishing it here would end the job under its feet.
+            publish_partial=False,
         )
         result = {
             "success": True,
