@@ -1,8 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getWorkerEnv } from '@/lib/server/cloudflare'
+import { alertCrawlFailure } from '@/lib/server/crawl-alerts'
 import { creditsAdmin, settleCrawlCredits } from '@/lib/server/credits'
 import { coordinatorCommand } from '@/lib/server/database-registry'
+
+/** Never lets a lookup or a mail failure touch the settlement itself. */
+async function reportFailure(reference: string): Promise<void> {
+  try {
+    const env = getWorkerEnv()
+    const job = await env.DATABASE_REGISTRY.get<{ database_id?: string }>(`crawl_job:${reference}`, 'json')
+    const record = job?.database_id
+      ? await env.DATABASE_REGISTRY.get<{ source_url?: string; last_error?: string }>(job.database_id, 'json')
+      : null
+    await alertCrawlFailure(env, {
+      reference,
+      databaseId: job?.database_id ?? null,
+      sourceUrl: record?.source_url,
+      error: record?.last_error,
+    })
+  } catch (error) {
+    console.error(JSON.stringify({ event: 'crawl_alert_failed', reference, error: error instanceof Error ? error.message : 'unknown' }))
+  }
+}
 
 const bodySchema = z.object({
   hold_reference: z.string().uuid(),
@@ -16,6 +36,9 @@ export async function POST(request: NextRequest) {
   if (!secret || supplied !== `Bearer ${secret}`) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const parsed = bodySchema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: 'Invalid settlement' }, { status: 400 })
+  // Before the settlement: a status poll may already have settled this job,
+  // and the failure still has to be reported. Cancellations are the user's own.
+  if (parsed.data.status === 'failed') await reportFailure(parsed.data.hold_reference)
   try {
     const { data, error } = await creditsAdmin().from('credit_holds').select('user_id,database_id').eq('reference', parsed.data.hold_reference).maybeSingle()
     if (error) throw error

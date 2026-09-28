@@ -677,7 +677,7 @@ async def _http_fallback_pages(
                 if refusal:
                     print(f"[WARN] HTTP fallback skipped {url} ({refusal})")
                     if url == start_url:
-                        blocked_start = refusal
+                        blocked_start = f"{refusal} Die Website lässt sich deshalb nicht einlesen."
                     skipped += 1
                     continue
             try:
@@ -694,10 +694,14 @@ async def _http_fallback_pages(
                     stats.failed += 1
                 if url == start_url:
                     status = getattr(getattr(error, "response", None), "status_code", None)
+                    # Read by the person whose crawl failed, so it names what
+                    # happened and what to try, never an exception class.
                     blocked_start = (
-                        f"{source_host} hat die Seite mit HTTP {status} abgelehnt."
+                        f"{source_host} hat die Seite mit HTTP {status} abgelehnt. "
+                        "Die Website lässt sich nicht automatisiert einlesen."
                         if status
-                        else f"{source_host} war nicht erreichbar ({type(error).__name__})."
+                        else f"{source_host} war nicht erreichbar. "
+                        "Prüfe die Adresse und versuche es erneut."
                     )
                 skipped += 1
                 await _report_progress(
@@ -829,7 +833,10 @@ async def _crawl4ai_pages(
     try:
         await proxy.start()
     except Exception as exc:
-        raise CrawlBlockedError(f"Secure egress proxy failed to start: {exc}") from exc
+        print(f"[CRAWL] secure egress proxy failed to start: {type(exc).__name__}: {exc}")
+        raise CrawlBlockedError(
+            "Der Crawler konnte nicht starten. Bitte versuche es erneut."
+        ) from exc
 
     browser_config = BrowserConfig(
             browser_type="chromium",

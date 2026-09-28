@@ -138,6 +138,36 @@ async def test_a_waiter_that_hands_off_leaves_a_partial_index_unpublished() -> N
 
 
 @pytest.mark.asyncio
+async def test_waiting_stops_at_its_deadline(no_sleep: None, monkeypatch) -> None:
+    # The crawl function watches its index for a bounded time, then hands it
+    # over; the attempt count alone no longer decides that.
+    ingest = object.__new__(RagIngestClient)
+    polls = 0
+    now = iter(float(second) for second in range(0, 10_000, 40))
+    monkeypatch.setattr(ingest_module.time, "monotonic", lambda: next(now))
+
+    async def post(*_args, **_kwargs):
+        nonlocal polls
+        polls += 1
+        return SimpleNamespace(
+            json=lambda: {"ready": False, "pending": 20, "failures": [], "chunks_count": polls}
+        )
+
+    ingest._post = post
+    result = await ingest._wait_for_index(
+        object(),
+        "database",
+        "user",
+        [f"page-{index}.md" for index in range(20)],
+        attempts=250,
+        deadline_seconds=150,
+    )
+
+    assert result.complete is False
+    assert polls < 10
+
+
+@pytest.mark.asyncio
 async def test_finalize_leaves_an_empty_index_unpublished() -> None:
     ingest = object.__new__(RagIngestClient)
     completed = False

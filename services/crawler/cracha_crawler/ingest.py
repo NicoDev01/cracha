@@ -183,6 +183,7 @@ class RagIngestClient:
         job_id: str | None = None,
         crawl_complete: bool | None = None,
         publish_partial: bool = True,
+        deadline_seconds: float | None = None,
     ) -> IndexStatus:
         """Wait for the index, then publish it.
 
@@ -206,6 +207,7 @@ class RagIngestClient:
                 attempts=attempts,
                 stall_seconds=INDEX_STALL_SECONDS,
                 job_id=job_id,
+                deadline_seconds=deadline_seconds,
             )
             # A knowledge base whose pages answer questions is finished, even if
             # AI Search never flips the last few items to "completed". Leaving it
@@ -257,6 +259,7 @@ class RagIngestClient:
         stall_seconds: float | None = None,
         _monotonic: Callable[[], float] = time.monotonic,
         job_id: str | None = None,
+        deadline_seconds: float | None = None,
     ) -> IndexStatus:
         payload: dict[str, object] = {
             "database_id": database_id,
@@ -352,6 +355,8 @@ class RagIngestClient:
                     f"[WARN] AI Search stopped progressing with {pending} item(s) pending; "
                     f"{latest.searchable_count} of {total} are searchable."
                 )
+                return latest
+            if deadline_seconds is not None and time.monotonic() - started >= deadline_seconds:
                 return latest
             if attempt + 1 < attempts:
                 await asyncio.sleep(delay)

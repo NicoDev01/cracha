@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useEffect, useState } from "react"
-import { Check, CheckCircle2, Circle, Clock3, ExternalLink, Library, Loader2, MessagesSquare, OctagonX, XCircle } from "lucide-react"
+import { Check, CheckCircle2, Circle, Clock3, ExternalLink, Library, Loader2, MessagesSquare, OctagonX, RotateCcw, XCircle } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -43,8 +43,9 @@ function StepIcon({ complete, active }: { complete: boolean; active: boolean }) 
 }
 
 export function CrawlMonitor() {
-  const { currentJob, isRunning, statusError, quotaNotice, cancelCrawl } = useCrawlStore()
+  const { currentJob, isRunning, statusError, quotaNotice, cancelCrawl, retryCrawl } = useCrawlStore()
   const [elapsed, setElapsed] = useState(0)
+  const [retrying, setRetrying] = useState(false)
 
   useEffect(() => {
     if (!currentJob) return
@@ -89,6 +90,22 @@ export function CrawlMonitor() {
   // The reader pays for a product, not for an architecture: no service names,
   // no pipeline stages, only what their own website is doing in plain words.
   const progressLabel = crawlProgressLabel(currentJob)
+
+  // A failed crawl used to be a dead end: the only way on was deleting the
+  // knowledge base and setting it up again. Needs the knowledge base id, which
+  // a crawl refused before the server assigned one never had.
+  const canRetry = !isRunning && ["failed", "cancelled"].includes(currentJob.status) && Boolean(currentJob.tenant_id)
+
+  const handleRetry = async () => {
+    setRetrying(true)
+    try {
+      await retryCrawl()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Einlesen konnte nicht neu gestartet werden.")
+    } finally {
+      setRetrying(false)
+    }
+  }
 
   const handleCancel = async () => {
     try {
@@ -205,6 +222,12 @@ export function CrawlMonitor() {
             <Button type="button" variant="outline" size="sm" onClick={handleCancel} className="gap-2 rounded-lg text-gray-600 dark:text-gray-300">
               <OctagonX className="size-4" />
               Abbrechen
+            </Button>
+          )}
+          {canRetry && (
+            <Button type="button" size="sm" onClick={handleRetry} disabled={retrying} className="gap-2 rounded-lg bg-brand-500 !text-white hover:bg-brand-600">
+              {retrying ? <Loader2 className="size-4 animate-spin" /> : <RotateCcw className="size-4" />}
+              Erneut versuchen
             </Button>
           )}
           {successful && (

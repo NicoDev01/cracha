@@ -9,7 +9,7 @@ from typing import Annotated
 import modal
 
 from cracha_crawler.crawl import CrawlBlockedError, CrawlStats, analyze_site, crawl_pages
-from cracha_crawler.ingest import INDEX_STATUS_ATTEMPTS, PageBuffer, RagIngestClient
+from cracha_crawler.ingest import PageBuffer, RagIngestClient
 from cracha_crawler.models import AnalyzeRequest, CrawlRequest, Page, SiteAnalysis
 from cracha_crawler.settlement import settle_status
 from cracha_crawler.status import stale_job_ids
@@ -27,6 +27,12 @@ MAX_PARALLEL_UPLOADS = 3
 # once its oldest page has waited this long, so a small crawl starts indexing
 # while it is still fetching and a large one still fills its batches first.
 INGEST_MAX_BUFFER_SECONDS = 5.0
+# How long the crawl keeps watching its own index before finalize_index takes
+# over. Fifteen polls came to about 75 seconds, and AI Search took 42 to 72
+# seconds for twenty pages, so ordinary crawls were handed to a container that
+# first had to start. Waiting here costs an idle crawl container for a minute;
+# handing over cost the user that start.
+CRAWL_INDEX_WAIT_SECONDS = 150
 image = (
     modal.Image.debian_slim(python_version="3.12")
     .apt_install("curl")
@@ -38,6 +44,22 @@ image = (
         "pydantic==2.13.4",
     )
     .run_commands("crawl4ai-setup")
+    .add_local_python_source("cracha_crawler")
+)
+# Everything that never opens a browser: the web API, the index finalizer and
+# the settlement sweep. crawl4ai is imported only inside the browser pass, so
+# these start without Chromium. Measured cold starts: 3.7 to 5.9 seconds on
+# the crawl image, 3.4 on this one, for requests that execute in 20 to 200 ms.
+# Most of what remains is Modal placing the container, which is why the API
+# also stays warm for longer below.
+light_image = (
+    modal.Image.debian_slim(python_version="3.12")
+    .pip_install(
+        "defusedxml==0.7.1",
+        "fastapi==0.141.1",
+        "httpx==0.28.1",
+        "pydantic==2.13.4",
+    )
     .add_local_python_source("cracha_crawler")
 )
 app = modal.App(APP_NAME)
@@ -89,7 +111,7 @@ async def prune_crawl_statuses() -> int:
 
 
 @app.function(
-    image=image,
+    image=light_image,
     secrets=[runtime_secret],
     timeout=1800,
     cpu=0.25,
@@ -239,15 +261,24 @@ async def process_crawl(payload: dict, job_id: str) -> dict:
     # it reuses that listing. Letting three start at once would mean three
     # scans, so the rest wait for the first to hand its listing over.
     scanned = asyncio.Event()
+    crawl_started = time.monotonic()
 
     async def upload_batch(batch: list[Page], first: bool) -> list[str]:
         nonlocal known_items
+        queued = time.monotonic()
         if not first:
             await scanned.wait()
         async with upload_slots:
+            sent = time.monotonic()
             uploaded = await ingest_client.upload(
                 request.tenant_id, request.user_id, batch, known_items, job_id=job_id
             )
+        # Whether pages reach Cloudflare while the crawl is still fetching is
+        # the whole point of streaming them, and nothing else records it.
+        print(
+            f"[UPLOAD] {len(batch)} page(s) queued at t={queued - crawl_started:.1f}s, "
+            f"sent after {sent - queued:.1f}s, accepted after {time.monotonic() - sent:.1f}s"
+        )
         if uploaded.known_items is not None:
             known_items = uploaded.known_items
         scanned.set()
@@ -289,6 +320,7 @@ async def process_crawl(payload: dict, job_id: str) -> dict:
             pages, skipped = await crawl_pages(request, report_progress, accept_page, coverage)
         finally:
             stale_flusher.cancel()
+        print(f"[CRAWL] {len(pages)} page(s) fetched in {time.monotonic() - crawl_started:.1f}s")
         if not pages:
             raise RuntimeError("No indexable content was found.")
         # A re-crawl prunes the index to what it found. One that stopped at the
@@ -334,7 +366,8 @@ async def process_crawl(payload: dict, job_id: str) -> dict:
             request.tenant_id,
             request.user_id,
             active_keys,
-            attempts=INDEX_STATUS_ATTEMPTS,
+            attempts=250,
+            deadline_seconds=CRAWL_INDEX_WAIT_SECONDS,
             on_progress=report_progress,
             job_id=job_id,
             crawl_complete=crawl_complete,
@@ -398,8 +431,9 @@ async def process_crawl(payload: dict, job_id: str) -> dict:
         # A site that refused us is not a site with nothing to index, and the
         # reader cannot open a log to tell the two apart. When the crawler
         # knows which it was, that sentence is the error.
+        # Its sentences are complete: what happened, and what to try next.
         message = (
-            f"{error} Die Quelle lässt sich nicht automatisiert abrufen."
+            str(error)
             if isinstance(error, CrawlBlockedError)
             else "Der Aufbau der Wissensbasis ist fehlgeschlagen. Bitte versuche es erneut."
         )
@@ -414,7 +448,10 @@ async def process_crawl(payload: dict, job_id: str) -> dict:
 
 # 180s so a sitemap index spanning many files still fits; /analyze bounds its
 # own work below, every other endpoint returns in well under a second.
-@app.function(image=image, secrets=[runtime_secret], timeout=180)
+# The API is what a user waits on first, so an idle container stays for five
+# minutes instead of one: long enough to cover analysing a site, starting the
+# crawl and watching it, at the price of a few idle CPU-minutes.
+@app.function(image=light_image, secrets=[runtime_secret], timeout=180, scaledown_window=300)
 @modal.concurrent(max_inputs=50)
 @modal.asgi_app()
 def api():
@@ -559,7 +596,9 @@ def api():
     return web
 
 
-@app.function(image=image, secrets=[runtime_secret], schedule=modal.Period(minutes=5), timeout=240)
+@app.function(
+    image=light_image, secrets=[runtime_secret], schedule=modal.Period(minutes=5), timeout=240
+)
 async def reconcile_settlements() -> None:
     # Failed delivery never becomes a free crawl. Keep terminal rows until ack.
     async for job_id, status in crawl_statuses.items.aio():

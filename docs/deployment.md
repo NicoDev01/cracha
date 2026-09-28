@@ -112,7 +112,7 @@ npx wrangler secret put RESEND_API_KEY
 npm run deploy
 ```
 
-`RESEND_API_KEY` ist optional und wird nicht aus GitHub geschrieben, der Deploy lässt ihn also stehen. Der Worker startet stündlich (`triggers.crons` in `wrangler.jsonc`, Handler in `custom-worker.ts`) den Versand der einmaligen Erinnerungs-E-Mail an bestätigte Konten, die 24 bis 72 Stunden nach der Registrierung noch keine Website eingelesen haben. Ohne Schlüssel versendet er nichts und protokolliert `"configured":false`. Der Schlüssel braucht in Resend nur die Berechtigung „Sending access“ für die Domain `cracha-app.com`. Kontrolle:
+`RESEND_API_KEY` ist optional und wird nicht aus GitHub geschrieben, der Deploy lässt ihn also stehen. Der Worker startet stündlich (`triggers.crons` in `wrangler.jsonc`, Handler in `custom-worker.ts`) den Versand der einmaligen Erinnerungs-E-Mail an bestätigte Konten, die 24 bis 72 Stunden nach der Registrierung noch keine Website eingelesen haben. Ohne Schlüssel versendet er nichts und protokolliert `"configured":false`. Derselbe Schlüssel schickt bei jedem fehlgeschlagenen Crawl eine Mail an hallo@cracha-app.com (`src/lib/server/crawl-alerts.ts`) mit Job, Wissensbasis, Adresse und Fehler des Crawlers, ohne Angaben zur Person. Der Schlüssel braucht in Resend nur die Berechtigung „Sending access“ für die Domain `cracha-app.com`. Kontrolle:
 
 ```bash
 npx wrangler tail cracha --format pretty --search activation_reminders

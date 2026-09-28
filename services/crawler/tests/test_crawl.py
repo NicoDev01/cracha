@@ -357,6 +357,26 @@ async def test_a_site_that_refuses_robots_txt_says_so(monkeypatch) -> None:
     assert "example.com" in str(failure.value)
 
 
+async def test_an_unreachable_site_is_explained_without_an_exception_name(monkeypatch) -> None:
+    # The first real customer read "simba.de war nicht erreichbar (ValueError)."
+    async def allow_url(_url: str) -> None:
+        return None
+
+    async def unreachable(_client, _url: str) -> tuple[bytes, str]:
+        raise httpx.ConnectError("refused")
+
+    monkeypatch.setattr(crawl, "assert_public_url", allow_url)
+    monkeypatch.setattr(crawl, "_safe_download", unreachable)
+
+    with pytest.raises(crawl.CrawlBlockedError) as failure:
+        await crawl._http_fallback_pages(request())
+
+    message = str(failure.value)
+    assert message.startswith("example.com war nicht erreichbar.")
+    assert "Error" not in message
+    assert "Prüfe die Adresse" in message
+
+
 async def test_the_user_agent_names_someone_to_contact() -> None:
     # The whole failure above came down to this string. A bot that does not say
     # who it is gets turned away by more than one large site.

@@ -112,6 +112,8 @@ interface CrawlState {
   /** Whose history this is. Persisted, so a browser can tell after a reload. */
   ownerId: string | null
   startCrawl: (config: CrawlConfig) => Promise<void>
+  /** Starts the current, failed or cancelled knowledge base again with its own settings. */
+  retryCrawl: () => Promise<void>
   cancelCrawl: () => Promise<void>
   resumeCurrentCrawl: () => void
   pollJobStatus: (localJobId: string, remoteJobId: string) => void
@@ -191,34 +193,25 @@ function migrateJob(value: unknown): CrawlJob | null {
 
 export const useCrawlStore = create<CrawlState>()(
   persist(
-    (set, get) => ({
-      currentJob: null,
-      isRunning: false,
-      statusError: null,
-      quotaNotice: null,
-      jobs: [],
-      ownerId: null,
-
-      startCrawl: async (config) => {
+    (set, get) => {
+      /** Shows a new job at once, starts it with `request`, then polls it. */
+      const launch = async (
+        job: Pick<CrawlJob, 'tenant_id' | 'name' | 'url' | 'type' | 'page_limit'>,
+        request: () => Promise<Response>,
+      ) => {
         if (get().isRunning) throw new Error('Es läuft bereits ein Crawl.')
 
         stopPolling()
         const now = new Date().toISOString()
         const localJobId = `crawl_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
         const newJob: CrawlJob = {
+          ...job,
           id: localJobId,
-          // Empty until the server answers with the id it assigned. A re-crawl
-          // already knows it.
-          tenant_id: config.database_id ?? '',
-          name: config.name,
           status: 'pending',
           phase: 'queued',
-          url: config.url,
-          type: config.type,
           pages_crawled: 0,
           chunks_created: 0,
           pages_skipped: 0,
-          page_limit: config.limit,
           progress: { stage: 'queued', current: 0, total: 0, percent: 0 },
           created_at: now,
           updated_at: now,
@@ -229,15 +222,11 @@ export const useCrawlStore = create<CrawlState>()(
           isRunning: true,
           statusError: null,
           quotaNotice: null,
-          jobs: [newJob, ...state.jobs.filter((job) => job.id !== localJobId)],
+          jobs: [newJob, ...state.jobs.filter((entry) => entry.id !== localJobId)],
         }))
 
         try {
-          const response = await apiFetch('/api/admin/crawl-queue', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...config, database_name: config.name }),
-          })
+          const response = await request()
           const result = (await response.json().catch(() => ({}))) as CrawlApiResponse
           if (!response.ok || !result.success || !result.job_id) {
             throw new Error(result.error || `Crawl konnte nicht gestartet werden (${response.status}).`)
@@ -280,185 +269,224 @@ export const useCrawlStore = create<CrawlState>()(
           }))
           throw error
         }
-      },
+      }
 
-      pollJobStatus: (localJobId, remoteJobId) => {
-        if (polledRemoteJobId === remoteJobId) return
-        stopPolling()
-        polledRemoteJobId = remoteJobId
+      return {
+        currentJob: null,
+        isRunning: false,
+        statusError: null,
+        quotaNotice: null,
+        jobs: [],
+        ownerId: null,
 
-        const poll = async () => {
-          if (polledRemoteJobId !== remoteJobId) return
-          let nextDelay = 5000
-          try {
-            // The next poll is scheduled only after this one ends, so a request
-            // that never answers must not be allowed to stop the polling.
-            const response = await apiFetch(`/api/admin/crawl-queue/status/${remoteJobId}`, { signal: AbortSignal.timeout(15_000) })
-            const result = (await response.json().catch(() => ({}))) as CrawlStatusResponse
+        startCrawl: async (config) => {
+          await launch({
+            // Empty until the server answers with the id it assigned. A re-crawl
+            // already knows it.
+            tenant_id: config.database_id ?? '',
+            name: config.name,
+            url: config.url,
+            type: config.type,
+            page_limit: config.limit,
+          }, () => apiFetch('/api/admin/crawl-queue', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...config, database_name: config.name }),
+          }))
+        },
+
+        retryCrawl: async () => {
+          const job = get().currentJob
+          if (!job?.tenant_id) throw new Error('Diese Wissensbasis kann nicht erneut eingelesen werden.')
+          // The re-crawl route reuses the settings the knowledge base was built
+          // with, so a retry is the same crawl again, not a crawl with defaults.
+          await launch(
+            { tenant_id: job.tenant_id, name: job.name, url: job.url, type: job.type, page_limit: job.page_limit },
+            () => apiFetch(`/api/admin/databases/${encodeURIComponent(job.tenant_id)}/recrawl`, { method: 'POST' }),
+          )
+        },
+
+        pollJobStatus: (localJobId, remoteJobId) => {
+          if (polledRemoteJobId === remoteJobId) return
+          stopPolling()
+          polledRemoteJobId = remoteJobId
+
+          const poll = async () => {
             if (polledRemoteJobId !== remoteJobId) return
-            if (!response.ok) throw new Error(result.error || `Statusabfrage fehlgeschlagen (${response.status}).`)
+            // A poll costs one KV read and one call to the crawler; the user
+            // check no longer goes to Supabase since tokens are ES256-signed.
+            // Five seconds made a crawl of twenty pages visibly jump.
+            let nextDelay = 3000
+            try {
+              // The next poll is scheduled only after this one ends, so a request
+              // that never answers must not be allowed to stop the polling.
+              const response = await apiFetch(`/api/admin/crawl-queue/status/${remoteJobId}`, { signal: AbortSignal.timeout(15_000) })
+              const result = (await response.json().catch(() => ({}))) as CrawlStatusResponse
+              if (polledRemoteJobId !== remoteJobId) return
+              if (!response.ok) throw new Error(result.error || `Statusabfrage fehlgeschlagen (${response.status}).`)
 
-            const current = get().jobs.find((job) => job.id === localJobId) ?? get().currentJob
-            if (!current) {
-              stopPolling()
-              return
+              const current = get().jobs.find((job) => job.id === localJobId) ?? get().currentJob
+              if (!current) {
+                stopPolling()
+                return
+              }
+
+              const phase = result.phase ?? phaseFromStatus(result.status)
+              // The end of indexing is the moment the user waits for, so it is
+              // noticed within two seconds rather than three.
+              if (phase === 'indexing') nextDelay = 2000
+              const status = statusFromResponse(result.status, phase)
+              const terminal = !activeStatuses.has(status)
+              const updatedJob: CrawlJob = {
+                ...current,
+                status,
+                phase,
+                pages_crawled: result.result?.pages_count ?? current.pages_crawled,
+                chunks_created: result.result?.chunks_count ?? current.chunks_created,
+                pages_skipped: result.result?.skipped_count ?? current.pages_skipped,
+                indexed_pages: result.result?.indexed_pages ?? current.indexed_pages,
+                indexing_pending: result.result?.indexing_pending ?? current.indexing_pending,
+                indexing_complete: result.result?.indexing_complete ?? current.indexing_complete,
+                progress: result.progress ?? current.progress,
+                error: result.error,
+                updated_at: new Date().toISOString(),
+                completed_at: terminal ? new Date().toISOString() : undefined,
+              }
+
+              set((state) => ({
+                currentJob: updatedJob,
+                isRunning: !terminal,
+                statusError: null,
+                jobs: replaceJob(state.jobs, updatedJob),
+              }))
+
+              if (terminal) {
+                stopPolling()
+                return
+              }
+            } catch (error) {
+              if (polledRemoteJobId === remoteJobId) {
+                set({ statusError: error instanceof Error ? error.message : 'Status konnte nicht aktualisiert werden.' })
+              }
             }
 
-            const phase = result.phase ?? phaseFromStatus(result.status)
-            // Indexing moves in small steps that deserve a live feel; crawling
-            // reports whole pages and does not benefit from asking sooner.
-            if (phase === 'indexing') nextDelay = 3000
-            const status = statusFromResponse(result.status, phase)
-            const terminal = !activeStatuses.has(status)
-            const updatedJob: CrawlJob = {
-              ...current,
-              status,
-              phase,
-              pages_crawled: result.result?.pages_count ?? current.pages_crawled,
-              chunks_created: result.result?.chunks_count ?? current.chunks_created,
-              pages_skipped: result.result?.skipped_count ?? current.pages_skipped,
-              indexed_pages: result.result?.indexed_pages ?? current.indexed_pages,
-              indexing_pending: result.result?.indexing_pending ?? current.indexing_pending,
-              indexing_complete: result.result?.indexing_complete ?? current.indexing_complete,
-              progress: result.progress ?? current.progress,
-              error: result.error,
-              updated_at: new Date().toISOString(),
-              completed_at: terminal ? new Date().toISOString() : undefined,
-            }
-
-            set((state) => ({
-              currentJob: updatedJob,
-              isRunning: !terminal,
-              statusError: null,
-              jobs: replaceJob(state.jobs, updatedJob),
-            }))
-
-            if (terminal) {
-              stopPolling()
-              return
-            }
-          } catch (error) {
-            if (polledRemoteJobId === remoteJobId) {
-              set({ statusError: error instanceof Error ? error.message : 'Status konnte nicht aktualisiert werden.' })
-            }
+            if (polledRemoteJobId === remoteJobId) pollTimer = setTimeout(poll, nextDelay)
           }
 
-          if (polledRemoteJobId === remoteJobId) pollTimer = setTimeout(poll, nextDelay)
-        }
+          void poll()
+        },
 
-        void poll()
-      },
+        resumeCurrentCrawl: () => {
+          const job = get().currentJob
+          if (job?.status === 'failed' && job.error === legacyIndexingError) {
+            void (async () => {
+              try {
+                const response = await apiFetch('/api/databases')
+                if (!response.ok) return
+                const body = await response.json() as {
+                  databases?: Array<{
+                    id: string
+                    status?: string
+                    pages_count?: number
+                    chunks_count?: number
+                  }>
+                }
+                const database = body.databases?.find((entry) => entry.id === job.tenant_id)
+                if (database?.status !== 'active' || !database.chunks_count) return
 
-      resumeCurrentCrawl: () => {
-        const job = get().currentJob
-        if (job?.status === 'failed' && job.error === legacyIndexingError) {
-          void (async () => {
-            try {
-              const response = await apiFetch('/api/databases')
-              if (!response.ok) return
-              const body = await response.json() as {
-                databases?: Array<{
-                  id: string
-                  status?: string
-                  pages_count?: number
-                  chunks_count?: number
-                }>
+                const reconciled: CrawlJob = {
+                  ...job,
+                  status: 'completed',
+                  phase: 'completed',
+                  pages_crawled: database.pages_count ?? job.pages_crawled,
+                  chunks_created: database.chunks_count,
+                  indexed_pages: database.pages_count ?? job.pages_crawled,
+                  indexing_pending: 0,
+                  indexing_complete: true,
+                  progress: {
+                    stage: 'completed',
+                    current: database.pages_count ?? job.pages_crawled,
+                    total: database.pages_count ?? job.pages_crawled,
+                    percent: 100,
+                    chunks_count: database.chunks_count,
+                  },
+                  error: undefined,
+                  updated_at: new Date().toISOString(),
+                }
+                set((state) => ({
+                  currentJob: reconciled,
+                  isRunning: false,
+                  statusError: null,
+                  jobs: replaceJob(state.jobs, reconciled),
+                }))
+              } catch {
+                // The database list has its own retry flow; keep the local job unchanged.
               }
-              const database = body.databases?.find((entry) => entry.id === job.tenant_id)
-              if (database?.status !== 'active' || !database.chunks_count) return
+            })()
+            return
+          }
+          if (!job?.remote_job_id || !activeStatuses.has(job.status)) return
+          set({ isRunning: true })
+          get().pollJobStatus(job.id, job.remote_job_id)
+        },
 
-              const reconciled: CrawlJob = {
-                ...job,
-                status: 'completed',
-                phase: 'completed',
-                pages_crawled: database.pages_count ?? job.pages_crawled,
-                chunks_created: database.chunks_count,
-                indexed_pages: database.pages_count ?? job.pages_crawled,
-                indexing_pending: 0,
-                indexing_complete: true,
-                progress: {
-                  stage: 'completed',
-                  current: database.pages_count ?? job.pages_crawled,
-                  total: database.pages_count ?? job.pages_crawled,
-                  percent: 100,
-                  chunks_count: database.chunks_count,
-                },
-                error: undefined,
-                updated_at: new Date().toISOString(),
-              }
-              set((state) => ({
-                currentJob: reconciled,
-                isRunning: false,
-                statusError: null,
-                jobs: replaceJob(state.jobs, reconciled),
-              }))
-            } catch {
-              // The database list has its own retry flow; keep the local job unchanged.
-            }
-          })()
-          return
-        }
-        if (!job?.remote_job_id || !activeStatuses.has(job.status)) return
-        set({ isRunning: true })
-        get().pollJobStatus(job.id, job.remote_job_id)
-      },
+        cancelCrawl: async () => {
+          const currentJob = get().currentJob
+          if (!currentJob?.remote_job_id || !get().isRunning) return
 
-      cancelCrawl: async () => {
-        const currentJob = get().currentJob
-        if (!currentJob?.remote_job_id || !get().isRunning) return
+          const response = await apiFetch(`/api/admin/crawl-queue/cancel/${currentJob.remote_job_id}`, {
+            method: 'POST',
+          })
+          const result = (await response.json().catch(() => ({}))) as CrawlApiResponse
+          if (!response.ok || !result.success) {
+            const message = result.error || `Crawl konnte nicht abgebrochen werden (${response.status}).`
+            set({ statusError: message })
+            throw new Error(message)
+          }
 
-        const response = await apiFetch(`/api/admin/crawl-queue/cancel/${currentJob.remote_job_id}`, {
-          method: 'POST',
-        })
-        const result = (await response.json().catch(() => ({}))) as CrawlApiResponse
-        if (!response.ok || !result.success) {
-          const message = result.error || `Crawl konnte nicht abgebrochen werden (${response.status}).`
-          set({ statusError: message })
-          throw new Error(message)
-        }
+          stopPolling()
+          const cancelledJob: CrawlJob = {
+            ...currentJob,
+            status: 'cancelled',
+            phase: 'cancelled',
+            error: undefined,
+            updated_at: new Date().toISOString(),
+            completed_at: new Date().toISOString(),
+          }
+          set((state) => ({
+            currentJob: cancelledJob,
+            isRunning: false,
+            statusError: null,
+            jobs: replaceJob(state.jobs, cancelledJob),
+          }))
+        },
 
-        stopPolling()
-        const cancelledJob: CrawlJob = {
-          ...currentJob,
-          status: 'cancelled',
-          phase: 'cancelled',
-          error: undefined,
-          updated_at: new Date().toISOString(),
-          completed_at: new Date().toISOString(),
-        }
-        set((state) => ({
-          currentJob: cancelledJob,
-          isRunning: false,
-          statusError: null,
-          jobs: replaceJob(state.jobs, cancelledJob),
-        }))
-      },
+        deleteJob: (jobId) => {
+          const isCurrent = get().currentJob?.id === jobId
+          if (isCurrent && get().isRunning) return
+          if (isCurrent) stopPolling()
+          set((state) => ({
+            jobs: state.jobs.filter((job) => job.id !== jobId),
+            currentJob: isCurrent ? null : state.currentJob,
+            statusError: isCurrent ? null : state.statusError,
+            quotaNotice: isCurrent ? null : state.quotaNotice,
+          }))
+        },
 
-      deleteJob: (jobId) => {
-        const isCurrent = get().currentJob?.id === jobId
-        if (isCurrent && get().isRunning) return
-        if (isCurrent) stopPolling()
-        set((state) => ({
-          jobs: state.jobs.filter((job) => job.id !== jobId),
-          currentJob: isCurrent ? null : state.currentJob,
-          statusError: isCurrent ? null : state.statusError,
-          quotaNotice: isCurrent ? null : state.quotaNotice,
-        }))
-      },
-
-      /**
-       * The crawl history lives in localStorage under one fixed key, so on a
-       * shared browser the next person to sign in inherited the previous one's
-       * crawls — their site names, their URLs, their knowledge base ids. The
-       * knowledge bases themselves were never reachable, but the list was, and
-       * a list of somebody else's work is exactly what must not appear.
-       */
-      claimFor: (userId) => {
-        if (get().ownerId === userId) return
-        stopPolling()
-        set({ ownerId: userId, jobs: [], currentJob: null, isRunning: false, statusError: null, quotaNotice: null })
-      },
-    }),
+        /**
+         * The crawl history lives in localStorage under one fixed key, so on a
+         * shared browser the next person to sign in inherited the previous one's
+         * crawls — their site names, their URLs, their knowledge base ids. The
+         * knowledge bases themselves were never reachable, but the list was, and
+         * a list of somebody else's work is exactly what must not appear.
+         */
+        claimFor: (userId) => {
+          if (get().ownerId === userId) return
+          stopPolling()
+          set({ ownerId: userId, jobs: [], currentJob: null, isRunning: false, statusError: null, quotaNotice: null })
+        },
+      }
+    },
     {
       name: 'crawl-store',
       version: 4,
