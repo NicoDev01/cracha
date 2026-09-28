@@ -208,7 +208,7 @@ ANSWER STYLE
 - If an important caveat exists (the sources are partial, contradict each other, or are dated), state it once, briefly, at the end.
 
 STYLE BY KIND OF KNOWLEDGE BASE (the kind is named after the question)
-- documentation: write for a developer. Explain what a thing does and when to use it before listing its members. Name classes, methods, options and flags exactly, in inline code. For a how-to, give numbered steps and a code example only when the sources contain one. Mention version or deprecation notes the sources state.
+- documentation: write for a developer. Explain what a thing does and when to use it before listing its members. Name classes, methods, options and flags exactly, in inline code. A how-to question gets numbered steps, one action per step, each naming the class or method it uses and citing it; then a short code example in a fenced block that uses only the classes, methods and parameters the sources document, in the documented signature. Mention version or deprecation notes the sources state.
 - website: write for a customer or visitor. Say what is offered, for whom, under which conditions and at what price, in plain language. Do not repeat marketing superlatives as facts. When the sources name a contact, a form or a page for the next step, end with it.
 - articles (a wiki, an encyclopedia, a blog, news or a knowledge base of articles): write like a careful reference. Define the subject first, then the facts that matter, with dates, names and figures as the sources give them. Keep the sources' own terminology, attribute opinions to whoever holds them, and where articles differ in date or in what they say, name that.
 
@@ -753,6 +753,8 @@ export async function* attributeCitations(
 }
 
 const NUMBER = /\d+(?:[.,]\d+)*/gu
+/** Words a line uses when it describes what the knowledge base covers. */
+const SCOPE_WORDS = /\b(seiten?|unterseiten|bereiche?|abschnitte?|rubriken?|wissensbasis|umfasst|vertreten|pages?|sections?|covers?|knowledge base)\b/iu
 const MARKER_GROUP = /\s*\[(\d+(?:\s*,\s*\d+)*)\]/gu
 
 /** The numbers a line states, without its list ordinal and its markers. */
@@ -789,6 +791,9 @@ export function reciteNumbers(text: string, blocks: ContextBlock[]): string {
     const words = lineWords(line)
     let best: number | null = null
     if (cited.every((n) => outlines.has(n))) {
+      // "Online Shops ist mit drei Seiten vertreten" is about the site's scope,
+      // which is what the page list is the source for.
+      if (SCOPE_WORDS.test(line)) return line
       // The page list shows what the site covers, never a fact on one of its
       // pages. "Webdesign-Agentur mit über 25 Jahren Erfahrung [1]" pointed at it.
       best = attributeLine(line.replace(CITATION_MARKERS, ''), [], candidates)
@@ -1088,7 +1093,7 @@ const OPENROUTER_PROVIDERS: Record<string, { order: string[] }> = {
 
 function openRouterRequest(input: ModelStreamInput, messages: unknown[], maxTokens: number) {
   const hosts = OPENROUTER_PROVIDERS[input.model]
-  const effort = REASONING_EFFORTS.has(input.reasoning ?? '') ? input.reasoning! : 'low'
+  const effort = REASONING_EFFORTS.has(input.reasoning ?? '') ? input.reasoning! : 'none'
   return fetch(OPENROUTER_URL, {
     method: 'POST',
     signal: input.signal,
@@ -1106,8 +1111,10 @@ function openRouterRequest(input: ModelStreamInput, messages: unknown[], maxToke
       // collection page must still fit after them.
       max_tokens: maxTokens + 4_000,
       temperature: 0.2,
-      // A little reasoning checks lists and markers before writing; the answer
-      // streams without it, since the reader has no use for the scratch work.
+      // Off by default: on six real cases (scripts/model-eval.test.ts, 28.09.2026)
+      // low effort wrote equally complete, equally cited answers but took up to
+      // 19 s instead of about 1 s to the first word. When on, the scratch work
+      // stays out of the stream.
       reasoning: effort === 'none' ? { enabled: false } : { effort, exclude: true },
       provider: {
         data_collection: 'deny',

@@ -28,7 +28,7 @@
   },
   "vars": {
     "GENERATION_MODEL": "deepseek/deepseek-v4.1-flash",
-    "GENERATION_REASONING": "low",
+    "GENERATION_REASONING": "none",
     // The three credit packages, as one-off prices in EUR. A price id is not a
     // secret, and keeping them here means the tariff the code charges is
     // visible in the diff that changes it. The amounts they must match are in

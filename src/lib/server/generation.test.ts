@@ -808,6 +808,9 @@ describe('checking citations against the cited page', () => {
       .toBe('* Webdesign-Agentur in Bremen mit über 25 Jahren Erfahrung [3]')
     const scope = 'Die Website umfasst Bereiche zu Webdesign und Software. [1]'
     expect(reciteNumbers(scope, glued)).toBe(scope)
+    // Found on the start page too, but a claim about what the site covers.
+    const pages = 'Der Bereich Webdesign ist mit vier Seiten vertreten, darunter Webdesign Bremen und über 25 Jahre Erfahrung. [1]'
+    expect(reciteNumbers(pages, glued)).toBe(pages)
   })
 
   it('attributes a short counter line by its number and word', async () => {
@@ -906,7 +909,7 @@ describe('platform model through OpenRouter', () => {
   it('asks DeepSeek on the allowed hosts only, with low reasoning hidden from the stream', async () => {
     const fetchMock = vi.fn().mockResolvedValue(answer('Anna [1]'))
     vi.stubGlobal('fetch', fetchMock)
-    const result = await streamGroundedAnswer(input())
+    const result = await streamGroundedAnswer({ ...input(), reasoning: 'low' })
     expect(await collect(result)).toBe('Anna [1]')
     expect(result).toMatchObject({ usedModel: 'deepseek/deepseek-v4.1-flash', fallback: false })
 
@@ -924,10 +927,10 @@ describe('platform model through OpenRouter', () => {
     expect(body.messages.at(-1).content).toContain('Frage:\nWer ist im Team?')
   })
 
-  it('turns reasoning off when configured', async () => {
+  it('reasons only when configured to', async () => {
     const fetchMock = vi.fn().mockResolvedValue(answer('Anna [1]'))
     vi.stubGlobal('fetch', fetchMock)
-    await collect(await streamGroundedAnswer({ ...input(), reasoning: 'none' }))
+    await collect(await streamGroundedAnswer(input()))
     expect(JSON.parse(fetchMock.mock.calls[0][1].body).reasoning).toEqual({ enabled: false })
   })
 

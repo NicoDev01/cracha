@@ -24,7 +24,7 @@ import {
 const KEY = process.env.OPENROUTER_API_KEY
 const MODELS = (process.env.EVAL_MODELS ?? 'deepseek/deepseek-v4.1-flash,openai/gpt-6-luna,qwen/qwen3.8-flash,google/gemini-2.5-flash-lite,meta-llama/llama-4-scout')
   .split(',').map((model) => model.trim()).filter(Boolean)
-const REASONING = process.env.EVAL_REASONING ?? 'low'
+const REASONING = process.env.EVAL_REASONING ?? 'none'
 
 /** USD per million tokens, input / output, OpenRouter list prices of 28.09.2026 at the hosts we allow. */
 const PRICES: Record<string, [number, number]> = {
@@ -71,6 +71,17 @@ const CASES: Case[] = [
       { url: 'https://www.webmen.de/', title: 'Full-Service-Digitalagentur in Bremen', maxCharacters: 8_000 },
     ],
     items: TEAM,
+  },
+  {
+    name: 'website · overview',
+    question: 'Fasse die wichtigsten Inhalte zusammen.',
+    pages: [
+      { url: 'https://www.webmen.de/', title: 'Full-Service-Digitalagentur in Bremen', maxCharacters: 8_000 },
+      { url: 'https://www.webmen.de/online-marketing/strategie-workshops', title: 'Online Marketing Workshops & Schulungen', maxCharacters: 4_000 },
+      { url: 'https://www.webmen.de/online-marketing/seo-agentur', title: 'SEO-Agentur aus Bremen', maxCharacters: 4_000 },
+      { url: 'https://www.webmen.de/software/mobile-app-agentur', title: 'Individuelle App-Entwicklung', maxCharacters: 4_000 },
+    ],
+    expect: [/1996/, /400/, /SEO/, /App/],
   },
   {
     name: 'website · figures',
@@ -131,7 +142,11 @@ interface Score {
 const FACTUAL_LINE = /\p{L}{3}.*\p{L}{3}/u
 
 function score(text: string, blocks: ContextBlock[], test: Case): Omit<Score, 'ok' | 'seconds' | 'firstTokenSeconds' | 'costPer1000' | 'usedModel' | 'text'> {
-  const lines = text.split('\n').map((line) => line.trim()).filter((line) => line && !/^#/.test(line) && !/^\|?\s*-{3}/.test(line))
+  let fence = false
+  const lines = text.split('\n').map((line) => line.trim()).filter((line) => {
+    if (/^(```|~~~)/.test(line)) { fence = !fence; return false }
+    return !fence && line && !/^#/.test(line) && !/^\|?\s*-{3}/.test(line)
+  })
   const factual = lines.filter((line) => FACTUAL_LINE.test(line) && line.replace(/^([-*+]|\d+[.)])\s+/u, '').length >= 20 && !line.endsWith(':'))
   const cited = factual.filter((line) => /\[\d+/.test(line))
   const numbers = new Set(blocks.map((block) => block.n))
@@ -146,7 +161,7 @@ function score(text: string, blocks: ContextBlock[], test: Case): Omit<Score, 'o
   const facts = test.items
     ? `${found}/${test.items.length} Namen${/\beinige\b/i.test(text) ? ', sagt "einige"' : ''}`
     : test.unanswerable
-      ? (/(nicht|keine)\b.{0,80}(angegeben|genannt|enthalten|finden|Information|Angabe|Preis)/i.test(text) ? 'sagt ehrlich: nicht belegt' : 'ERFINDET oder weicht aus')
+      ? (/\b(nicht|kein\w*)\b.{0,80}(angegeben|genannt|nennt|enthalten|finden|Information|Angabe|Preis)/i.test(text) ? 'sagt ehrlich: nicht belegt' : 'ERFINDET oder weicht aus')
       : `${(test.expect ?? []).filter((pattern) => pattern.test(text)).length}/${test.expect?.length ?? 0} Fakten`
   return {
     coverage: factual.length ? cited.length / factual.length : 1,
