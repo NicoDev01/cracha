@@ -1004,6 +1004,18 @@ describe('questions about the whole knowledge base', () => {
   })
 })
 
+describe('source snippets that start inside a word', () => {
+  it('drop the broken start up to the next capitalised word', () => {
+    expect(sourceSnippet('hinenoptimierung (SEO) kann eine entscheidende Rolle für den Erfolg Ihrer Website spielen.'))
+      .toBe('Rolle für den Erfolg Ihrer Website spielen.')
+  })
+
+  it('keep a start that is a short ordinary word', () => {
+    expect(sourceSnippet('the mixer plays animations. More follows.')).toBe('the mixer plays animations. More follows.')
+    expect(sourceSnippet('für den Erfolg Ihrer Website.')).toBe('für den Erfolg Ihrer Website.')
+  })
+})
+
 describe('source snippets', () => {
   it('start at the passage and end at a word', () => {
     const snippet = sourceSnippet(`# Social-Media-Marketing

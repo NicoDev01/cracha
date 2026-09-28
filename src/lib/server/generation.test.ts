@@ -772,6 +772,42 @@ describe('checking citations against the cited page', () => {
     expect(reciteNumbers(text, blocks)).toBe(text)
   })
 
+  // webmen.de writes its counters as `<span>4</span>studierte Biologen`, so the
+  // index holds "4studierte". The first check missed the 4 there and moved the
+  // marker to a page that had a stray 4 somewhere.
+  const glued: ContextBlock[] = [
+    { n: 1, title: 'Seitenübersicht (20 Seiten)', url: 'https://www.webmen.de/', text: '- /website (4 pages): Webdesign Bremen', outline: true },
+    { n: 2, title: 'Unser Team', url: 'https://www.webmen.de/agentur-bremen/team', text: 'Ein dynamisches Team.\nChristiane Niebuhr-Redder\nAnnie' },
+    { n: 3, title: 'Full-Service-Digitalagentur', url: 'https://www.webmen.de/', text: '33Persönlichkeiten\n73ältester Kollege\n4studierte Biologen und Biologinnen\nÜber 25 Jahre Erfahrung unterstreichen unsere Expertise im Webdesign.' },
+    { n: 4, title: 'Webentwicklung', url: 'https://www.webmen.de/software/webentwicklung-agentur', text: 'In 4 Schritten zur Webanwendung: Konzept, UI und UX, Backend.' },
+  ]
+
+  it('reads a number glued to its word as a number', () => {
+    expect(reciteNumbers('* 4 studierte Biologen und Biologinnen sind im Team [2]', glued))
+      .toBe('* 4 studierte Biologen und Biologinnen sind im Team [3]')
+    expect(reciteNumbers('Das Team besteht aus 33 Persönlichkeiten. [2]', glued))
+      .toBe('Das Team besteht aus 33 Persönlichkeiten. [3]')
+  })
+
+  it('never moves a marker to a page that only shares the number', () => {
+    const line = '* 4 Standorte in Norddeutschland [2]'
+    expect(reciteNumbers(line, glued)).toBe(line)
+  })
+
+  it('moves a fact off the page list onto the page that states it', () => {
+    expect(reciteNumbers('* Webdesign-Agentur in Bremen mit über 25 Jahren Erfahrung [1]', glued))
+      .toBe('* Webdesign-Agentur in Bremen mit über 25 Jahren Erfahrung [3]')
+    const scope = 'Die Website umfasst Bereiche zu Webdesign und Software. [1]'
+    expect(reciteNumbers(scope, glued)).toBe(scope)
+  })
+
+  it('attributes a short counter line by its number and word', async () => {
+    async function* from(chunks: string[]) { for (const chunk of chunks) yield chunk }
+    let text = ''
+    for await (const piece of attributeCitations(from(['## Team\n* 33 Persönlichkeiten\n* 73 ist das Alter des ältesten Kollegen\n']), glued)) text += piece
+    expect(text).toBe('## Team\n* 33 Persönlichkeiten [3]\n* 73 ist das Alter des ältesten Kollegen [3]\n')
+  })
+
   it('keeps a marker when no page holds the number', () => {
     expect(reciteNumbers('Rund 400 Kunden vertrauen Webmen. [2]', blocks)).toBe('Rund 400 Kunden vertrauen Webmen. [2]')
   })

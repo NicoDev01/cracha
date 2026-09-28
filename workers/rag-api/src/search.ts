@@ -1118,6 +1118,10 @@ export function sourceSnippet(text: string): string {
     .join('\n')
     .replace(/^\s*(Zum Inhalt springen|Skip to (main )?content)\b\s*/iu, '')
     .trim()
+    // A later chunk starts where the previous one ended, which can be inside a
+    // word: "hinenoptimierung (SEO) kann …". Such a start is dropped up to the
+    // next sentence or capitalised word.
+    .replace(/^[\p{Ll}][\p{L}\p{N}-]*[^\n]{0,60}?(?:[.!?:]\s+|\s+(?=\p{Lu}))/u, (lead) => (/^\p{Ll}{1,3}\s/u.test(lead) ? lead : ''))
   if (body.length <= SNIPPET_CHARACTERS) return body
   const cut = body.slice(0, SNIPPET_CHARACTERS)
   const lastSpace = cut.search(/\s\S*$/u)

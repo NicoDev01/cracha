@@ -386,6 +386,9 @@ function normalizeForMatch(value: string): string {
     .replace(/ß/gu, 'ss')
     .normalize('NFKD')
     .replace(/\p{M}/gu, '')
+    // A counter written `<span>4</span>studierte` reaches the index as
+    // "4studierte"; the number has to stay a word of its own.
+    .replace(/(\p{N})(\p{L})/gu, '$1 $2')
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim()
 }
@@ -593,6 +596,43 @@ interface AttributionBlock {
   title: string
 }
 
+/**
+ * The word, or its stem once an inflection ending is dropped: "Kollegen" in the
+ * answer, "Kollege" on the page. Only for words long enough that the stem is
+ * still specific.
+ */
+function hasWord(padded: string, token: string): boolean {
+  if (padded.includes(` ${token} `)) return true
+  return token.length >= 6 && padded.includes(` ${token.slice(0, token.length - 2)}`)
+}
+
+/** The words of a line that must be on a page for it to support the line. */
+function lineWords(line: string): string[] {
+  return matchTokens(line.replace(CITATION_MARKERS, '').replace(/^\s*(?:[-*+]|\d+[.)])\s+/u, '').replace(CODE_SPAN, ' '))
+    .filter((token) => !/^\d+$/u.test(token))
+}
+
+/**
+ * A page states the line's numbers and what they count — the word right after
+ * each number, "33 Persönlichkeiten" — or else at least half of its words.
+ */
+function supportsByNumbers(padded: string, numbers: string[], words: string[], counted: string[] = []): boolean {
+  if (!numbers.length || !numbers.every((number) => padded.includes(number))) return false
+  if (counted.length && counted.every((word) => hasWord(padded, word))) return true
+  const needed = Math.max(1, Math.ceil(words.length / 2))
+  return words.filter((word) => hasWord(padded, word)).length >= needed
+}
+
+/** The word each number of a line counts: the next word of four letters or more. */
+function countedWords(line: string): string[] {
+  const tokens = normalizeForMatch(line.replace(CITATION_MARKERS, '').replace(/^\s*(?:[-*+]|\d+[.)])\s+/u, '')).split(' ')
+  return tokens.flatMap((token, index) => {
+    if (!/^\d+$/u.test(token)) return []
+    const next = tokens.slice(index + 1, index + 3).find((candidate) => candidate.length >= 4 && !/^\d+$/u.test(candidate))
+    return next ? [next] : []
+  })
+}
+
 function matchTokens(value: string): string[] {
   return [...new Set(normalizeForMatch(value).split(' ').filter((token) => token.length >= ATTRIBUTION_MIN_TOKEN))]
 }
@@ -611,6 +651,8 @@ export function attributeLine(line: string, headings: string[], blocks: Attribut
     .filter((code) => code.replace(/\s/g, '').length >= 3)
   const words = matchTokens(line.replace(CODE_SPAN, ' '))
   const headingWords = headings.map(matchTokens).filter((tokens) => tokens.length > 0)
+  const numbers = claimNumbers(line)
+  const plainWords = lineWords(line)
   const frequency = (token: string) => blocks.filter((block) => block.padded.includes(` ${token} `)).length
   const weight = new Map(words.map((token) => [token, Math.log(1 + blocks.length / Math.max(frequency(token), 1))]))
   const totalWeight = [...weight.values()].reduce((sum, value) => sum + value, 0)
@@ -627,8 +669,11 @@ export function attributeLine(line: string, headings: string[], blocks: Attribut
     // a shared name, not evidence.
     const byCode = codes.length > 0 && codeMatches === codes.length
     const byWords = matched.length >= ATTRIBUTION_MIN_MATCHES && coverage >= ATTRIBUTION_MIN_COVERAGE
-    if (!byCode && !byWords) continue
-    const score = codeMatches * 3 + (headingMatch ? 2 : 0) + coverage * 2
+    // "33 Persönlichkeiten": too few words to decide on, but the number and the
+    // word together on one page are.
+    const byNumbers = supportsByNumbers(block.padded, numbers, plainWords, countedWords(line))
+    if (!byCode && !byWords && !byNumbers) continue
+    const score = codeMatches * 3 + (byNumbers ? 3 : 0) + (headingMatch ? 2 : 0) + coverage * 2
     if (!best || score > best.score) best = { n: block.n, score }
   }
   return best?.n ?? null
@@ -672,7 +717,7 @@ export async function* attributeCitations(
       return ''
     }
     if (!trimmed || trimmed.startsWith('|') || trimmed.endsWith(':') || HAS_MARKER.test(trimmed)) return ''
-    if (trimmed.replace(LIST_ITEM, '$2').length < 20 && !/`[^`\n]+`/u.test(trimmed)) return ''
+    if (trimmed.replace(LIST_ITEM, '$2').length < 20 && !/`[^`\n]+`|\d/u.test(trimmed)) return ''
     const n = attributeLine(trimmed, headings.filter(Boolean), candidates)
     return n ? ` [${n}]` : ''
   }
@@ -724,20 +769,31 @@ export function reciteNumbers(text: string, blocks: ContextBlock[]): string {
   const candidates = blocks
     .filter((block) => !block.outline)
     .map((block) => ({ n: block.n, padded: paddedBlockText(`${block.title}\n${block.text}`), title: block.title }))
-  if (candidates.length < 2) return text
+  const outlines = new Set(blocks.filter((block) => block.outline).map((block) => block.n))
+  if (!candidates.length) return text
   let inFence = false
   return text.split('\n').map((line) => {
     if (FENCE_LINE.test(line)) { inFence = !inFence; return line }
     if (inFence) return line
     const cited = citedNumbers(line)
+    if (!cited.length) return line
     const numbers = claimNumbers(line)
-    if (!cited.length || !numbers.length) return line
-    const holds = (padded: string) => numbers.every((number) => padded.includes(number))
-    const citedBlocks = candidates.filter((block) => cited.includes(block.n))
-    if (!citedBlocks.length || citedBlocks.some((block) => holds(block.padded))) return line
-    const supporting = candidates.filter((block) => holds(block.padded))
-    if (!supporting.length) return line
-    const best = supporting.length === 1 ? supporting[0].n : attributeLine(line.replace(CITATION_MARKERS, ''), [], supporting)
+    const words = lineWords(line)
+    let best: number | null = null
+    if (cited.every((n) => outlines.has(n))) {
+      // The page list shows what the site covers, never a fact on one of its
+      // pages. "Webdesign-Agentur mit über 25 Jahren Erfahrung [1]" pointed at it.
+      best = attributeLine(line.replace(CITATION_MARKERS, ''), [], candidates)
+    } else {
+      if (!numbers.length) return line
+      const citedBlocks = candidates.filter((block) => cited.includes(block.n))
+      if (!citedBlocks.length || citedBlocks.some((block) => numbers.every((number) => block.padded.includes(number)))) return line
+      // The page has to state the words around the number as well. A stray "4"
+      // on another page moved "4 studierte Biologen" to the web development page.
+      const supporting = candidates.filter((block) => supportsByNumbers(block.padded, numbers, words, countedWords(line)))
+      if (!supporting.length) return line
+      best = supporting.length === 1 ? supporting[0].n : attributeLine(line.replace(CITATION_MARKERS, ''), [], supporting)
+    }
     if (!best) return line
     let replaced = false
     return line.replace(MARKER_GROUP, (whole) => {
