@@ -75,7 +75,7 @@ const components: Options['components'] = {
     const label = Array.isArray(children) ? children.join('') : String(children)
     const citation = /^\[(\d+)\]$/.exec(label)
     if (citation) {
-      return <CitationLink index={Number(citation[1])} href={props.href} quote={props.title} className={className}>{children}</CitationLink>
+      return <CitationLink index={Number(citation[1])} href={props.href} anchorKey={props.title} className={className}>{children}</CitationLink>
     }
     return (
       <a

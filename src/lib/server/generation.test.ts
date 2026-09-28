@@ -736,6 +736,14 @@ describe('knowledge base kind', () => {
     expect(knowledgeBaseKind([{ url: 'https://example.com/leistungen', text: 'Wir bieten Webdesign.' }])).toBe('website')
   })
 
+  it('reads wikis, blogs and news as articles, not as developer docs', () => {
+    expect(knowledgeBaseKind([
+      { url: 'https://de.wikipedia.org/wiki/Bremen', text: 'Bremen ist eine Hansestadt.' },
+      { url: 'https://example.com/blog/2025/08/ki-suche', text: 'KI verändert die Suche.' },
+    ])).toBe('articles')
+    expect(knowledgeBaseKind([{ url: 'https://wiki.example.org/wiki/Setup', text: 'Run `npm i`, then `npm run dev`, set `PORT` and `HOST`.' }])).toBe('documentation')
+  })
+
   it('names the kind next to the question, not in a content check', () => {
     expect(finalUserText('Frage?', 'ctx', 'default', 'website')).toContain('Knowledge base kind: website\nFrage:\nFrage?')
     expect(finalUserText('Entwurf', 'ctx', 'verification', 'website')).not.toContain('Knowledge base kind')
@@ -816,6 +824,38 @@ describe('checking citations against the cited page', () => {
     expect(anchorFor('* Umsatzstarke Online-Shops mit Magento, WooCommerce oder Shopware [1]', blocks[0].text))
       .toEqual({ phrase: 'Umsatzstarke Online-Shops mit Magento, WooCommerce oder Shopware.', quote: 'Umsatzstarke Online-Shops mit Magento, WooCommerce oder Shopware.' })
     expect(anchorFor('2. Mark Hapke Reichardt [2]', blocks[1].text)?.phrase).toBe('Mark Hapke Reichardt')
+  })
+
+  // The link of 20:13 pointed "33 Persönlichkeiten" at a testimonial quote,
+  // prefixed with the markdown ">", and "4 Biologen" at "4studierte" — neither
+  // of which Chrome could find on the page (checked in headless Chrome).
+  const home = [
+    '# Full-Service-Digitalagentur in Bremen',
+    '> »Was mich persönlich sehr überzeugt hat, war die Arbeit mit dem Team von Webmen, das immer erreichbar war.«',
+    '## Team-Fakten',
+    '33Persönlichkeiten',
+    '4studierte Biologen und Biologinnen',
+    'Wir betreuen rund 400 Unternehmen, Selbstständige, Verbände oder Verwaltungen aus der ganzen Region und darüber hinaus.',
+  ].join('\n')
+
+  it('prefers the counter to a quote that merely shares words', () => {
+    const anchor = anchorFor('Das Team von Webmen besteht aus 33 Persönlichkeiten. [1]', home, 'Full-Service-Digitalagentur in Bremen')
+    expect(anchor).toMatchObject({ phrase: 'Persönlichkeiten', quote: '33Persönlichkeiten', section: 'Team-Fakten' })
+  })
+
+  it('starts the phrase after a counter glued to its word', () => {
+    expect(anchorFor('4 studierte Biologen und Biologinnen [1]', home)?.phrase).toBe('studierte Biologen und Biologinnen')
+  })
+
+  it('never puts markdown into the phrase', () => {
+    expect(anchorFor('Die Arbeit mit dem Team hat persönlich überzeugt. [1]', home)?.phrase).toMatch(/^»Was mich persönlich/)
+  })
+
+  it('gives a long sentence as a range to highlight whole', () => {
+    expect(anchorFor('Webmen betreut rund 400 Unternehmen und Verbände. [1]', home)).toMatchObject({
+      start: 'Wir betreuen rund 400',
+      end: 'Region und darüber hinaus.',
+    })
   })
 
   it('anchors every marker by line', () => {

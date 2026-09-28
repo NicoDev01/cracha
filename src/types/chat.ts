@@ -62,8 +62,14 @@ export interface ChatResponse {
 }
 
 export interface CitationAnchor {
+  /** A few words the page shows verbatim; the fallback text directive. */
   phrase: string
+  /** First and last words of the supporting sentence, to highlight all of it. */
+  start?: string
+  end?: string
   quote: string
+  /** The heading the sentence sits under on its page. */
+  section?: string
 }
 
 export interface QueryRequest {

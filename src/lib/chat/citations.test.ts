@@ -93,9 +93,16 @@ describe('lists citing one page throughout', () => {
 })
 
 describe('linking markers with anchors', () => {
-  it('links each line to its own passage and carries the quote', () => {
+  it('links each line to its own sentence and names its anchor', () => {
     const [source] = sources(1)
-    const text = linkifyCitations('Intro\nAnna leitet das Team. [1]', [source], { '1:1': { phrase: 'Anna leitet', quote: 'Anna leitet das "Team".' } })
-    expect(text).toBe('Intro\nAnna leitet das Team. [[1]](https://example.com/1#:~:text=Anna%20leitet "Anna leitet das  Team .")')
+    const text = linkifyCitations('Intro\nAnna leitet das Team. [1]', [source], { '1:1': { phrase: 'Anna leitet', quote: 'Anna leitet das Team.' } })
+    expect(text).toBe('Intro\nAnna leitet das Team. [[1]](https://example.com/1#:~:text=Anna%20leitet "1:1")')
+  })
+
+  it('highlights the whole sentence and keeps its phrase as a fallback', () => {
+    const [source] = sources(1)
+    const anchor = { phrase: 'rund 400 Unternehmen', start: 'Wir betreuen rund 400', end: 'oder Verwaltungen.', quote: '…' }
+    expect(linkifyCitations('Kunden [1]', [source], { '0:1': anchor }))
+      .toBe('Kunden [[1]](https://example.com/1#:~:text=Wir%20betreuen%20rund%20400,oder%20Verwaltungen.&text=rund%20400%20Unternehmen "0:1")')
   })
 })

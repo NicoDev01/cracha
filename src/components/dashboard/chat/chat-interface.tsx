@@ -666,9 +666,12 @@ export function ChatInterface() {
                   const uncitedSources = isUser
                     ? []
                     : getUncitedSources(messageSources, citedSources);
+                  const answerLines = isUser
+                    ? ''
+                    : collapseRepeatedCitations(message.isStreaming ? streamingMarkdown(message.content) : message.content);
                   const renderedContent = isUser
                     ? message.content
-                    : linkifyCitations(collapseRepeatedCitations(message.isStreaming ? streamingMarkdown(message.content) : message.content), messageSources, message.isStreaming ? undefined : message.metadata?.citation_anchors);
+                    : linkifyCitations(answerLines, messageSources, message.isStreaming ? undefined : message.metadata?.citation_anchors);
                   const metadata = !isUser && !message.isStreaming ? message.metadata : undefined;
                   const metaParts = answerMetaParts(metadata, messageSources.length, citedSources.length);
                   return (
@@ -716,7 +719,7 @@ export function ChatInterface() {
                                 : 'Formuliere Antwort …'}
                             </span>
                           ) : (
-                            <CitationSources.Provider value={messageSources}>
+                            <CitationSources.Provider value={{ sources: messageSources, anchors: message.isStreaming ? undefined : message.metadata?.citation_anchors, lines: answerLines.split('\n') }}>
                               <Response>{renderedContent}</Response>
                             </CitationSources.Provider>
                           )}

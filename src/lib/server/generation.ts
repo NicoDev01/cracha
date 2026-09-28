@@ -203,6 +203,7 @@ ANSWER STYLE
 STYLE BY KIND OF KNOWLEDGE BASE (the kind is named after the question)
 - documentation: write for a developer. Explain what a thing does and when to use it before listing its members. Name classes, methods, options and flags exactly, in inline code. For a how-to, give numbered steps and a code example only when the sources contain one. Mention version or deprecation notes the sources state.
 - website: write for a customer or visitor. Say what is offered, for whom, under which conditions and at what price, in plain language. Do not repeat marketing superlatives as facts. When the sources name a contact, a form or a page for the next step, end with it.
+- articles (a wiki, an encyclopedia, a blog, news or a knowledge base of articles): write like a careful reference. Define the subject first, then the facts that matter, with dates, names and figures as the sources give them. Keep the sources' own terminology, attribute opinions to whoever holds them, and where articles differ in date or in what they say, name that.
 
 OUTPUT
 - Answer in the language of the question, regardless of the language of the sources. Keep product names, UI labels, code and identifiers in their original form.
@@ -805,18 +806,32 @@ export function reciteNumbers(text: string, blocks: ContextBlock[]): string {
 }
 
 export interface CitationAnchor {
-  /** A few words the page shows verbatim, for a `#:~:text=` link. */
+  /**
+   * A few words the page shows verbatim. Always sent as its own text directive,
+   * so the page still scrolls to the passage when the sentence range misses.
+   */
   phrase: string
+  /** First and last words of the supporting sentence, so the whole of it is highlighted. */
+  start?: string
+  end?: string
   /** The sentence of the page that supports the line, shown on hover. */
   quote: string
+  /** The heading the sentence sits under, when it is not the page title. */
+  section?: string
 }
 
 const ANCHOR_WORDS = 8
+const ANCHOR_EDGE_WORDS = 4
 const ANCHOR_QUOTE_CHARACTERS = 280
+/** A number weighs more than a word: it is what a line is least likely to share by chance. */
+const ANCHOR_NUMBER_WEIGHT = 3
 
 function plainSegment(segment: string): string {
   return segment
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    // A blockquote marker is markdown, not page text; ">" in a text directive
+    // made the browser miss a testimonial it would otherwise have found.
+    .replace(/^\s*(?:>\s*)+/u, '')
     .replace(/^\s*(?:[-*+]|\d+[.)])\s+/u, '')
     .replace(/\\([\\`*_{}[\]()#+\-.!])/g, '$1')
     .replace(/[*_`#|]+/g, ' ')
@@ -825,44 +840,84 @@ function plainSegment(segment: string): string {
 }
 
 /**
+ * Words as a browser can find them. A counter styled as its own box —
+ * `<span>4</span>studierte Biologen` — is indexed as "4studierte", which the
+ * page never shows as one word: the phrase starts after the digits, or ends
+ * before a word glued to one.
+ */
+function findableWords(words: string[]): string[] {
+  const result: string[] = []
+  for (const word of words) {
+    const glued = /^\p{N}+(?=\p{L})/u.exec(word)
+    if (!glued) { result.push(word); continue }
+    if (result.length) break
+    result.push(word.slice(glued[0].length))
+  }
+  return result
+}
+
+/**
  * The sentence of a source that best supports one line of the answer. A link to
  * the page opened it at the top, or at the first sentence of the retrieved
  * passage whatever the line said — for eleven services on one start page, the
  * same intro sentence every time.
  */
-export function anchorFor(claim: string, sourceText: string): CitationAnchor | null {
+export function anchorFor(claim: string, sourceText: string, pageTitle = ''): CitationAnchor | null {
   const claimTokens = new Set(normalizeForMatch(claim.replace(CITATION_MARKERS, '')).split(' ').filter((token) => token.length >= 3 || /\d/u.test(token)))
   if (!claimTokens.size) return null
-  let best: { words: string[]; score: number; first: number; text: string } | null = null
+  const claimed = [...claimTokens]
+  const matches = (token: string) => claimTokens.has(token)
+    // Inflections share a stem, "Bremen" and "Bremens"; "persönlich" and
+    // "Persönlichkeiten" do not, so the ending may differ by a few letters only.
+    || (token.length >= 5 && claimed.some((other) => other.length >= 5
+      && Math.abs(other.length - token.length) <= 3
+      && (token.startsWith(other) || other.startsWith(token))))
+
+  let section = ''
+  let best: { words: string[]; score: number; first: number; text: string; section: string } | null = null
   for (const raw of sourceText.split(/\n+|(?<=[.!?])\s+/u)) {
     // Lines the indexer added — `Quelle: <url>`, `> Title › Section` — and
-    // table rules are not text the page shows.
-    if (/^\s*(Quelle:\s|---|> .* › )/u.test(raw)) continue
+    // table rules are not text the page shows, but they do say where it is.
+    const context = /^\s*> (.*› .*)$/u.exec(raw)
+    const heading = /^\s*#{1,6}\s+(.+)$/u.exec(raw)
+    if (context) { section = context[1].split('›').at(-1)!.trim(); continue }
+    if (/^\s*(Quelle:\s|---)/u.test(raw)) continue
     const text = plainSegment(raw)
+    if (heading) section = text
     const words = text.split(' ').filter(Boolean)
-    if (words.length < 2) continue
+    if (normalizeForMatch(text).split(' ').filter(Boolean).length < 2) continue
     let score = 0
     let first = -1
     words.forEach((word, index) => {
-      // Inflections share a stem: "Bremen" in the answer, "Bremens" on the page.
-      const hit = normalizeForMatch(word).split(' ').some((token) => claimTokens.has(token)
-        || (token.length >= 5 && [...claimTokens].some((claimed) => claimed.length >= 5
-          && (token.startsWith(claimed) || claimed.startsWith(token)))))
-      if (!hit) return
-      score += 1
+      const hits = normalizeForMatch(word).split(' ').filter(matches)
+      if (!hits.length) return
+      score += hits.reduce((sum, token) => sum + (/^\d+$/u.test(token) ? ANCHOR_NUMBER_WEIGHT : 1), 0)
       if (first === -1) first = index
     })
-    if (score > (best?.score ?? 0)) best = { words, score, first, text }
+    // The shorter of two equal matches is the more specific one.
+    if (score > (best?.score ?? 0) || (best && score === best.score && text.length < best.text.length)) {
+      best = { words, score, first, text, section: heading ? '' : section }
+    }
   }
   // One shared word is a coincidence unless the line is a name or a term.
   if (!best || best.score < Math.min(2, claimTokens.size)) return null
+
   // From the sentence start when the match is near it, so the highlight reads
   // as a sentence; otherwise one word before the first match.
   const from = best.first < ANCHOR_WORDS / 2 ? 0 : best.first - 1
-  const start = best.words.length <= ANCHOR_WORDS ? 0 : Math.min(from, best.words.length - ANCHOR_WORDS)
+  const offset = best.words.length <= ANCHOR_WORDS ? 0 : Math.min(from, best.words.length - ANCHOR_WORDS)
+  const phrase = findableWords(best.words.slice(offset, offset + ANCHOR_WORDS)).join(' ')
+  const sentence = findableWords(best.words)
+  const range = sentence.length > ANCHOR_WORDS && sentence.length === best.words.length
+    ? { start: sentence.slice(0, ANCHOR_EDGE_WORDS).join(' '), end: sentence.slice(-ANCHOR_EDGE_WORDS).join(' ') }
+    : {}
+  const title = normalizeForMatch(pageTitle)
+  const shownSection = best.section && !title.startsWith(normalizeForMatch(best.section)) ? best.section.slice(0, 80) : undefined
   return {
-    phrase: best.words.slice(start, start + ANCHOR_WORDS).join(' '),
+    phrase,
+    ...range,
     quote: best.text.length > ANCHOR_QUOTE_CHARACTERS ? `${best.text.slice(0, ANCHOR_QUOTE_CHARACTERS - 1).trimEnd()}…` : best.text,
+    ...(shownSection ? { section: shownSection } : {}),
   }
 }
 
@@ -880,7 +935,7 @@ export function citationAnchors(text: string, blocks: ContextBlock[]): Record<st
     if (inFence) return
     for (const n of new Set(citedNumbers(line))) {
       const block = byNumber.get(n)
-      const anchor = block ? anchorFor(line, block.text) : null
+      const anchor = block ? anchorFor(line, block.text, block.title) : null
       if (anchor) anchors[`${index}:${n}`] = anchor
     }
   })
@@ -907,9 +962,11 @@ export function finalUserText(
   return `Quellenkontext:\n${context}\n\n---\n\n${kind ? `Knowledge base kind: ${kind}\n` : ''}Frage:\n${question}\n\n(${reminder})`
 }
 
-export type KnowledgeBaseKind = 'documentation' | 'website'
+export type KnowledgeBaseKind = 'documentation' | 'website' | 'articles'
 
-const DOCUMENTATION_PATH = /\/(docs?|documentation|api|reference|manual|guides?|handbuch|developers?|sdk|learn|wiki|tutorials?)(\/|$)/i
+const DOCUMENTATION_PATH = /\/(docs?|documentation|api|reference|manual|guides?|handbuch|developers?|sdk|tutorials?)(\/|$)/i
+/** Wikis, encyclopedias, blogs and news: many articles, little code. */
+const ARTICLE_PATH = /\/(wiki|w|artikel|articles?|lexikon|glossar|glossary|encyclopedia|blog|news|nachrichten|magazin|magazine|posts?|\d{4}\/\d{2})(\/|$)/i
 
 /**
  * Documentation and a company website call for different answers — members and
@@ -919,14 +976,18 @@ const DOCUMENTATION_PATH = /\/(docs?|documentation|api|reference|manual|guides?|
  */
 export function knowledgeBaseKind(blocks: Array<Pick<ContextBlock, 'url' | 'text'>>): KnowledgeBaseKind | undefined {
   if (!blocks.length) return undefined
-  let evidence = 0
+  let documentation = 0
+  let articles = 0
   for (const block of blocks) {
     let path = ''
     try { path = new URL(block.url).pathname } catch { /* An unknown URL says nothing. */ }
     const codeSpans = block.text.match(/`[^`\n]{2,}`/g)?.length ?? 0
-    if (DOCUMENTATION_PATH.test(path) || /^\s*(```|~~~)/m.test(block.text) || codeSpans >= 4) evidence += 1
+    if (DOCUMENTATION_PATH.test(path) || /^\s*(```|~~~)/m.test(block.text) || codeSpans >= 4) documentation += 1
+    else if (ARTICLE_PATH.test(path)) articles += 1
   }
-  return evidence / blocks.length >= 0.5 ? 'documentation' : 'website'
+  // A wiki about software has code on most pages, so code decides first.
+  if (documentation / blocks.length >= 0.5) return 'documentation'
+  return articles / blocks.length >= 0.5 ? 'articles' : 'website'
 }
 
 export function formatGeminiContents(

@@ -1,3 +1,5 @@
+import type { CitationAnchor } from '@/types/chat'
+
 /**
  * How a retrieved page is named in the source list.
  *
@@ -124,11 +126,29 @@ export function passageLink(url: string, snippet: string): string {
   return phrase ? fragmentLink(url, phrase) : url
 }
 
-/** `url#:~:text=<phrase>`, with the characters the directive reserves escaped. */
-export function fragmentLink(url: string, phrase: string): string {
+/** A text directive value, with the characters the directive reserves escaped. */
+function directive(text: string): string {
   // The spec reserves `-`, `,` and `&` inside a directive.
-  const encoded = encodeURIComponent(phrase).replace(/-/g, '%2D').replace(/[()]/g, (c) => (c === '(' ? '%28' : '%29'))
-  return `${url}${url.includes('#') ? '' : '#'}:~:text=${encoded}`
+  return encodeURIComponent(text).replace(/-/g, '%2D').replace(/[()]/g, (c) => (c === '(' ? '%28' : '%29'))
+}
+
+/** `url#:~:text=<phrase>`. */
+export function fragmentLink(url: string, phrase: string): string {
+  return `${url}${url.includes('#') ? '' : '#'}:~:text=${directive(phrase)}`
+}
+
+/**
+ * Highlights the whole supporting sentence (`text=start,end`) and, as a second
+ * directive, its core phrase: when the range misses because the page differs
+ * slightly from its crawled text, the browser still scrolls to the phrase.
+ * Measured in Chrome on webmen.de: both forms highlight, and a failing first
+ * directive does not stop the second.
+ */
+export function anchorLink(url: string, anchor: Pick<CitationAnchor, 'phrase' | 'start' | 'end'>): string {
+  const directives = anchor.start && anchor.end
+    ? [`text=${directive(anchor.start)},${directive(anchor.end)}`, `text=${directive(anchor.phrase)}`]
+    : [`text=${directive(anchor.phrase)}`]
+  return `${url}${url.includes('#') ? '' : '#'}:~:${directives.join('&')}`
 }
 
 /** Up to two distinct sites, for the collapsed source list. */

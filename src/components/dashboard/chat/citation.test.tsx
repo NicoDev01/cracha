@@ -17,7 +17,7 @@ const sources: Source[] = [{
 describe('citation markers', () => {
   it('name their page and open it at the cited passage', () => {
     render(
-      <CitationSources.Provider value={sources}>
+      <CitationSources.Provider value={{ sources }}>
         <CitationLink index={1} href={/\]\((.*)\)$/.exec(linkifyCitations('[1]', sources))![1]}>[1]</CitationLink>
       </CitationSources.Provider>,
     )

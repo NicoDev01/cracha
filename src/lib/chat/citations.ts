@@ -1,6 +1,6 @@
 import type { Source } from '@/types/chat'
 import type { CitationAnchor } from '@/types/chat'
-import { fragmentLink, passageLink } from './source-display'
+import { anchorLink, passageLink } from './source-display'
 
 export interface IndexedSource {
   index: number
@@ -59,10 +59,11 @@ export function linkifyCitations(content: string, sources: Source[], anchors?: R
         if (url.protocol !== 'https:' && url.protocol !== 'http:') return `[${index}]`
         const base = encodeURI(url.toString()).replace(/\(/g, '%28').replace(/\)/g, '%29')
         if (isOutlineSource(source)) return `[[${index}]](${base})`
-        const anchor = anchors?.[`${lineIndex}:${index}`]
-        const href = anchor ? fragmentLink(base, anchor.phrase) : passageLink(base, source.snippet)
-        const title = anchor ? ` "${anchor.quote.replace(/["\\\n]/g, ' ')}"` : ''
-        return `[[${index}]](${href}${title})`
+        const key = `${lineIndex}:${index}`
+        const anchor = anchors?.[key]
+        const href = anchor ? anchorLink(base, anchor) : passageLink(base, source.snippet)
+        // The title names the anchor, which the chat looks up for its card.
+        return `[[${index}]](${href}${anchor ? ` "${key}"` : ''})`
       } catch {
         return `[${index}]`
       }
