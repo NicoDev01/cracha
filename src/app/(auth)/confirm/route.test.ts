@@ -27,3 +27,8 @@ it('shows the error page on expired confirmation', async () => {
   const response = await GET(new NextRequest('https://cracha-app.com/confirm?token_hash=test&type=signup'))
   expect(response.headers.get('location')).toBe('https://cracha-app.com/auth-code-error')
 })
+it('verifies the token hash from the mail templates and keeps next', async () => {
+  const response = await GET(new NextRequest('https://cracha-app.com/confirm?token_hash=pkce_test&type=recovery&next=/reset-password/new-password'))
+  expect(auth.verifyOtp).toHaveBeenCalledExactlyOnceWith({ type: 'recovery', token_hash: 'pkce_test' })
+  expect(response.headers.get('location')).toBe('https://cracha-app.com/reset-password/new-password')
+})
