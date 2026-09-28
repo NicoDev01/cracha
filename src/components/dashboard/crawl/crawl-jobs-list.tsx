@@ -1,6 +1,6 @@
 "use client"
 
-import { CheckCircle2, Clock3, Database, File, Globe2, ListTree, Loader2, Search, Trash2, XCircle } from "lucide-react"
+import { Database, Loader2, Search, Trash2 } from "lucide-react"
 import { useMemo, useState } from "react"
 
 import { Button } from "@/components/ui/button"
@@ -9,39 +9,35 @@ import { cn } from "@/lib/utils"
 import { useCrawlStore, type CrawlJob } from "@/stores/crawl-store"
 import { crawlResultLabel } from "./crawl-progress"
 
-const modeCopy = {
-  single: { label: "Einzelseite", icon: File },
-  recursive: { label: "Website", icon: Globe2 },
-  sitemap: { label: "Sitemap", icon: ListTree },
-}
-
 function hostname(url: string) {
   try { return new URL(url).hostname.replace(/^www\./, "") } catch { return url }
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value))
+  return new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(value))
 }
 
 function formatDuration(job: CrawlJob) {
   const end = job.completed_at ? new Date(job.completed_at).getTime() : Date.now()
   const seconds = Math.max(0, Math.floor((end - new Date(job.created_at).getTime()) / 1000))
-  if (seconds < 60) return `${seconds}s`
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`
+  if (seconds < 60) return `${seconds} s`
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}:${(seconds % 60).toString().padStart(2, "0")} min`
   return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`
 }
 
 function JobStatus({ job }: { job: CrawlJob }) {
-  if (["pending", "queued", "running", "processing"].includes(job.status)) {
-    return <span className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-600"><Loader2 className="size-3.5 animate-spin" />Läuft</span>
-  }
-  if (job.status === "completed") {
-    return <span className="inline-flex items-center gap-1.5 text-xs font-medium text-success-600"><CheckCircle2 className="size-3.5" />Fertig</span>
-  }
-  if (job.status === "cancelled") {
-    return <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500"><Clock3 className="size-3.5" />Abgebrochen</span>
-  }
-  return <span className="inline-flex items-center gap-1.5 text-xs font-medium text-error-600"><XCircle className="size-3.5" />Fehlgeschlagen</span>
+  const [label, dot] = ["pending", "queued", "running", "processing"].includes(job.status)
+    ? ["Läuft", "animate-pulse bg-brand-500"]
+    : job.status === "completed"
+      ? ["Fertig", "bg-success-500"]
+      : job.status === "cancelled"
+        ? ["Abgebrochen", "bg-gray-400"]
+        : ["Fehlgeschlagen", "bg-error-500"]
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+      <span className={cn("size-1.5 rounded-full", dot)} />{label}
+    </span>
+  )
 }
 
 export function CrawlJobsList() {
@@ -82,28 +78,22 @@ export function CrawlJobsList() {
         )}
       </div>
 
-      <div className="divide-y divide-gray-100 overflow-hidden rounded-2xl border border-gray-200 bg-white dark:divide-gray-800 dark:border-gray-700 dark:bg-gray-900">
+      <div className="divide-y divide-gray-100 dark:divide-gray-800">
         {filteredJobs.map((job) => {
-          const mode = modeCopy[job.type]
-          const ModeIcon = mode.icon
           const active = job.id === currentJob?.id && isRunning
           return (
-            <article key={job.id} className="group flex items-center gap-3 p-4 sm:gap-4">
-              <div className={cn("flex size-10 shrink-0 items-center justify-center rounded-xl", active ? "bg-brand-50 text-brand-600 dark:bg-brand-500/10" : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400")}>
-                {active ? <Loader2 className="size-4 animate-spin" /> : <ModeIcon className="size-4" />}
+            <article key={job.id} className="group flex items-center gap-3 py-4 sm:gap-4">
+              <div className={cn("flex size-10 shrink-0 items-center justify-center rounded-xl font-urban text-base font-semibold uppercase", active ? "bg-brand-50 text-brand-600 dark:bg-brand-500/10" : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300")}>
+                {active ? <Loader2 className="size-4 animate-spin" /> : hostname(job.url).slice(0, 1)}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="flex min-w-0 items-center gap-2">
+                <div className="flex min-w-0 items-center justify-between gap-3">
                   <h3 className="truncate text-sm font-semibold text-gray-900 dark:text-white">{job.name}</h3>
                   <JobStatus job={job} />
                 </div>
-                <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">{hostname(job.url)}</p>
-                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-400">
-                  <span>{mode.label}</span>
-                  {job.status === "completed" && <span>{crawlResultLabel(job)}</span>}
-                  <span>{formatDuration(job)}</span>
-                  <span>{formatDate(job.created_at)}</span>
-                </div>
+                <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">
+                  {[hostname(job.url), job.status === "completed" ? crawlResultLabel(job) : null, formatDuration(job), formatDate(job.created_at)].filter(Boolean).join(" · ")}
+                </p>
               </div>
               <Button
                 type="button"

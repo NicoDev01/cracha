@@ -32,8 +32,10 @@ function CrawlConfigWithParams({ onStarted }: { onStarted: () => void }) {
 }
 
 export function CrawlInterface() {
-  const [activeTab, setActiveTab] = useState("new")
   const { isRunning, resumeCurrentCrawl } = useCrawlStore()
+  // Coming back while a crawl runs means coming back to watch it, not to a
+  // form that is locked until it ends.
+  const [activeTab, setActiveTab] = useState(() => (isRunning ? "status" : "new"))
 
   useEffect(() => {
     resumeCurrentCrawl()
@@ -79,26 +81,24 @@ export function CrawlInterface() {
         </Tabs>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto bg-gradient-to-b from-gray-25 to-white dark:from-gray-950 dark:to-gray-900">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="min-h-full">
           <TabsContent value="new" className="m-0">
-            <div className="mx-auto w-full max-w-3xl p-4 sm:p-6 lg:p-8">
-              <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-theme-xs sm:p-7 dark:border-gray-700 dark:bg-gray-900">
-                <Suspense fallback={<div className="h-64 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800" />}>
-                  <CrawlConfigWithParams onStarted={() => setActiveTab("status")} />
-                </Suspense>
-              </div>
+            <div className="mx-auto w-full max-w-2xl px-4 py-8 sm:px-6 sm:py-12">
+              <Suspense fallback={<div className="h-64 animate-pulse rounded-2xl bg-gray-100 dark:bg-gray-800" />}>
+                <CrawlConfigWithParams onStarted={() => setActiveTab("status")} />
+              </Suspense>
             </div>
           </TabsContent>
 
           <TabsContent value="status" className="m-0">
-            <div className="mx-auto w-full max-w-3xl p-4 sm:p-6 lg:p-8">
-              <CrawlMonitor />
+            <div className="mx-auto w-full max-w-2xl px-4 py-8 sm:px-6 sm:py-12">
+              <CrawlMonitor onNew={() => setActiveTab("new")} />
             </div>
           </TabsContent>
 
           <TabsContent value="history" className="m-0">
-            <div className="mx-auto w-full max-w-5xl p-4 sm:p-6 lg:p-8">
+            <div className="mx-auto w-full max-w-2xl px-4 py-8 sm:px-6 sm:py-12">
               <CrawlJobsList />
             </div>
           </TabsContent>

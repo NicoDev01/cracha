@@ -3,6 +3,7 @@ import hmac
 import os
 import time
 import uuid
+from collections import deque
 from datetime import UTC, datetime
 from typing import Annotated
 
@@ -37,6 +38,8 @@ CRAWL_INDEX_WAIT_SECONDS = 150
 # the click and the first page. The crawl form wakes one while it is being
 # filled in (POST /warm), and it waits this long for the crawl to arrive.
 WARM_CRAWLER_SECONDS = 180
+# How many of the latest pages the status carries for the crawl view.
+RECENT_PAGES = 8
 _last_warm = 0.0
 image = (
     modal.Image.debian_slim(python_version="3.12")
@@ -238,8 +241,15 @@ async def process_crawl(payload: dict, job_id: str) -> dict:
     request = CrawlRequest.model_validate(payload)
     ingest_client = RagIngestClient()
 
+    # The last pages read, newest first, so the crawl view can show which pages
+    # are being read. The job record keeps only the latest progress line, and
+    # one URL every few seconds of polling said little about what was happening.
+    recent_pages: deque[dict[str, str]] = deque(maxlen=RECENT_PAGES)
+
     async def report_progress(progress: dict[str, object]) -> None:
-        result = {}
+        result: dict[str, object] = {}
+        if recent_pages and progress.get("stage") == "crawling":
+            result["recent_pages"] = list(recent_pages)
         if "pages_count" in progress:
             result["pages_count"] = progress["pages_count"]
         if "skipped_count" in progress:
@@ -298,6 +308,7 @@ async def process_crawl(payload: dict, job_id: str) -> dict:
         upload_tasks.append(asyncio.create_task(upload_batch(batch, first)))
 
     async def accept_page(page: Page) -> None:
+        recent_pages.appendleft({"url": page.url[:300], "title": page.title[:120]})
         send(buffer.add(page, time.monotonic()) or [])
 
     async def flush_when_stale() -> None:

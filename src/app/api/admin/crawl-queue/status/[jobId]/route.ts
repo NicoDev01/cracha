@@ -9,6 +9,21 @@ export const dynamic = 'force-dynamic'
 const TERMINAL = new Set(['completed', 'failed', 'cancelled'])
 const STATUS_TIMEOUT_MS = 8_000
 
+/**
+ * The latest pages the crawler read, for the live list in the crawl view. The
+ * titles come from other people's websites, so only plain strings of bounded
+ * length and http(s) URLs pass.
+ */
+function recentPages(value: unknown): Array<{ url: string; title: string }> | undefined {
+  if (!Array.isArray(value)) return undefined
+  return value.slice(0, 8).flatMap((entry) => {
+    if (!entry || typeof entry !== 'object') return []
+    const { url, title } = entry as { url?: unknown; title?: unknown }
+    if (typeof url !== 'string' || !/^https?:\/\//.test(url)) return []
+    return [{ url: url.slice(0, 300), title: typeof title === 'string' ? title.slice(0, 120) : '' }]
+  })
+}
+
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ jobId: string }> }) {
   const user = await getAuthenticatedUser()
   if (!user) return NextResponse.json({ success: false, error: 'Authentifizierung erforderlich.' }, { status: 401 })
@@ -44,6 +59,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       indexed_pages?: number
       indexing_pending?: number
       indexing_complete?: boolean
+      recent_pages?: unknown
     }
     progress?: {
       stage?: string
@@ -95,6 +111,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
           indexed_pages: result.result.indexed_pages,
           indexing_pending: result.result.indexing_pending,
           indexing_complete: result.result.indexing_complete,
+          recent_pages: recentPages(result.result.recent_pages),
         }
       : undefined,
   })

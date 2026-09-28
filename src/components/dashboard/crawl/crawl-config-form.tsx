@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
-import { ChevronDown, File, Globe2, ListTree, Loader2, Play, Search, Settings2 } from "lucide-react"
+import { ArrowRight, ChevronDown, File, Globe2, ListTree, Loader2, Search, Settings2 } from "lucide-react"
+import { motion } from "motion/react"
 import { toast } from "sonner"
 
 import Link from "next/link"
@@ -14,7 +15,7 @@ import { useCredits } from "@/hooks/use-credits"
 import { apiFetch } from "@/lib/api/request"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
@@ -58,9 +59,9 @@ function isCrawlableUrl(value: string) {
 }
 
 const modes = [
-  { value: "single" as const, label: "Einzelne Seite", icon: File },
-  { value: "recursive" as const, label: "Verlinkte Seiten", icon: Globe2 },
-  { value: "sitemap" as const, label: "Sitemap", icon: ListTree },
+  { value: "single" as const, label: "Einzelne Seite", short: "Einzelseite", icon: File },
+  { value: "recursive" as const, label: "Verlinkte Seiten", short: "Verlinkt", icon: Globe2 },
+  { value: "sitemap" as const, label: "Sitemap", short: "Sitemap", icon: ListTree },
 ]
 
 export function CrawlConfigForm({
@@ -203,24 +204,36 @@ export function CrawlConfigForm({
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-7">
         <FormField
           control={form.control}
           name="url"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Quelle</FormLabel>
+              <FormLabel className="sr-only">Website</FormLabel>
               <FormControl>
-                <div className="relative">
-                  <Globe2 className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-gray-400" />
+                <div className="group relative">
+                  <Globe2 className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-gray-400 transition-colors group-focus-within:text-brand-500" />
                   <Input
                     {...field}
                     type="url"
-                    placeholder="https://example.com"
+                    placeholder="https://deine-website.de"
                     autoComplete="url"
                     disabled={isRunning}
-                    className="h-12 rounded-xl pl-10 text-base"
+                    className={cn("h-14 rounded-2xl pl-12 text-base shadow-theme-xs", crawlType !== "single" && "pr-14 sm:pr-36")}
                   />
+                  {crawlType !== "single" && (
+                    <button
+                      type="button"
+                      aria-label="Website analysieren"
+                      onClick={handleAnalyze}
+                      disabled={isRunning || analysis.status === "loading" || !isCrawlableUrl(url)}
+                      className="absolute right-2 top-1/2 inline-flex h-10 -translate-y-1/2 items-center gap-1.5 rounded-xl px-3 text-sm font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 disabled:pointer-events-none disabled:opacity-40 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
+                    >
+                      {analysis.status === "loading" ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" />}
+                      <span className="hidden sm:inline">Analysieren</span>
+                    </button>
+                  )}
                 </div>
               </FormControl>
               <FormMessage />
@@ -228,77 +241,42 @@ export function CrawlConfigForm({
           )}
         />
 
-        {crawlType !== "single" && (
-          <div className="space-y-3">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleAnalyze}
-              disabled={isRunning || analysis.status === "loading" || !isCrawlableUrl(url)}
-              className="h-9 gap-2 rounded-xl"
-            >
-              {analysis.status === "loading" ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" />}
-              {analysis.status === "loading" ? "Analysiere Website" : "Website analysieren"}
-            </Button>
-
-            {analysis.status === "error" && (
-              <p className="rounded-xl border border-error-200 bg-error-50 px-3 py-2 text-sm text-error-700 dark:border-error-800 dark:bg-error-500/10 dark:text-error-300">
-                {analysis.message}
-              </p>
-            )}
-
-            {analysis.status === "done" && discovered === null && (
-              <p className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-800/40 dark:text-gray-300">
-                Keine Sitemap gefunden. Die Gesamtzahl der Seiten lässt sich vorab nicht bestimmen —
-                sie steht erst fest, wenn beim Einlesen keine neuen Links mehr auftauchen. Stelle Seitenanzahl
-                und Tiefe unten selbst ein.
-              </p>
-            )}
-
-            {analysis.status === "done" && discovered !== null && (
-              <div className="space-y-3 rounded-xl border border-brand-200 bg-brand-50/70 p-3 dark:border-brand-800 dark:bg-brand-500/10">
-                <p className="text-sm text-gray-700 dark:text-gray-200">
-                  <span className="font-semibold tabular-nums text-brand-700 dark:text-brand-300">
-                    {new Intl.NumberFormat("de-DE").format(discovered)}
+        {crawlType !== "single" && analysis.status === "error" && (
+          <p className="-mt-4 text-sm text-error-600 dark:text-error-400">{analysis.message}</p>
+        )}
+        {crawlType !== "single" && analysis.status === "done" && discovered === null && (
+          <p className="-mt-4 text-sm text-gray-500 dark:text-gray-400">Keine Sitemap gefunden. Seiten und Tiefe legst du unten fest.</p>
+        )}
+        {crawlType !== "single" && analysis.status === "done" && discovered !== null && (
+          <FormField
+            control={form.control}
+            name="crawl_all"
+            render={({ field }) => (
+              <FormItem className="-mt-3 flex items-center justify-between gap-4 rounded-xl bg-brand-50 px-4 py-3 dark:bg-brand-500/10">
+                <FormLabel className="text-sm font-normal text-gray-700 dark:text-gray-200">
+                  <span>
+                    <span className="font-semibold tabular-nums text-brand-600 dark:text-brand-300">{new Intl.NumberFormat("de-DE").format(discovered)}</span>
+                    {discovered === 1 ? " Seite" : " Seiten"} in der Sitemap{analysis.truncated && " und mehr"}
+                    {discovered > MAX_PAGES_PER_CRAWL && ` · ${MAX_PAGES_PER_CRAWL} pro Durchgang`}
                   </span>
-                  {discovered === 1 ? " Seite" : " Seiten"} in der Sitemap gefunden
-                  {analysis.truncated && " (Zählung abgebrochen, es sind mehr)"}.
-                  {discovered > MAX_PAGES_PER_CRAWL
-                    && ` Pro Durchgang werden derzeit höchstens ${MAX_PAGES_PER_CRAWL} davon eingelesen.`}
-                </p>
-
-                <FormField
-                  control={form.control}
-                  name="crawl_all"
-                  render={({ field }) => (
-                    <FormItem className="flex items-center justify-between gap-4 rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900">
-                      <div className="min-w-0">
-                        <FormLabel>
-                          {`Bis zu ${new Intl.NumberFormat("de-DE").format(cappedTotal)} Seiten der Sitemap einlesen`}
-                        </FormLabel>
-                        <FormDescription>
-                          {discovered > MAX_PAGES_PER_CRAWL
-                            ? `Pro Durchgang sind derzeit ${MAX_PAGES_PER_CRAWL} Seiten möglich — ${new Intl.NumberFormat("de-DE").format(discovered - MAX_PAGES_PER_CRAWL)} bleiben außen vor.`
-                            : "Erfasst auch Seiten, auf die nichts verlinkt. Eine Sitemap darf unvollständig sein — führt die Website mehr Seiten, findet „Verlinkte Seiten“ über die Links mehr."}
-                        </FormDescription>
-                      </div>
-                      <FormControl>
-                        <Switch
-                          checked={field.value}
-                          disabled={isRunning}
-                          onCheckedChange={(checked) => {
-                            field.onChange(checked)
-                            if (checked) form.setValue("limit", cappedTotal)
-                          }}
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-              </div>
+                </FormLabel>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="text-xs text-gray-500 dark:text-gray-400">Alle einlesen</span>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      disabled={isRunning}
+                      aria-label="Alle Seiten der Sitemap einlesen"
+                      onCheckedChange={(checked) => {
+                        field.onChange(checked)
+                        if (checked) form.setValue("limit", cappedTotal)
+                      }}
+                    />
+                  </FormControl>
+                </div>
+              </FormItem>
             )}
-          </div>
+          />
         )}
 
         <FormField
@@ -306,11 +284,10 @@ export function CrawlConfigForm({
           name="name"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Name der Wissensbasis</FormLabel>
+              <FormLabel className="text-sm font-medium text-gray-700 dark:text-gray-300">Name</FormLabel>
               <FormControl>
                 <Input {...field} placeholder="z. B. Produktdokumentation" autoComplete="off" disabled={isRunning} className="h-11 rounded-xl" />
               </FormControl>
-              <FormDescription>Dieser Name erscheint später im Chat und unter Wissensbasen.</FormDescription>
               <FormMessage />
             </FormItem>
           )}
@@ -321,9 +298,9 @@ export function CrawlConfigForm({
           name="type"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Umfang</FormLabel>
+              <FormLabel className="text-sm font-medium text-gray-700 dark:text-gray-300">Umfang</FormLabel>
               <FormControl>
-                <div className="grid gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Umfang">
+                <div className="grid grid-cols-3 gap-1 rounded-xl bg-gray-100 p-1 dark:bg-gray-800/70" role="radiogroup" aria-label="Umfang">
                   {modes.map((mode) => {
                     const Icon = mode.icon
                     const selected = field.value === mode.value
@@ -336,15 +313,20 @@ export function CrawlConfigForm({
                         disabled={isRunning}
                         onClick={() => field.onChange(mode.value)}
                         className={cn(
-                          "flex min-h-12 items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-center transition-colors",
-                          selected
-                            ? "border-brand-500 bg-brand-50 text-brand-700 ring-1 ring-brand-500/20 dark:bg-brand-500/10 dark:text-brand-300"
-                            : "border-gray-200 bg-white text-gray-700 hover:border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200",
-                          "disabled:cursor-not-allowed disabled:opacity-60",
+                          "relative flex h-10 items-center justify-center gap-2 rounded-lg px-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+                          selected ? "text-gray-900 dark:text-white" : "text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200",
                         )}
                       >
-                        <Icon className="size-4 shrink-0" />
-                        <span className="text-sm font-semibold">{mode.label}</span>
+                        {selected && (
+                          <motion.span
+                            layoutId="crawl-mode"
+                            className="absolute inset-0 rounded-lg bg-white shadow-theme-xs dark:bg-gray-900"
+                            transition={{ type: "spring", stiffness: 500, damping: 38 }}
+                          />
+                        )}
+                        <Icon className="relative hidden size-4 shrink-0 sm:block" />
+                        <span className="relative truncate sm:hidden">{mode.short}</span>
+                        <span className="relative hidden truncate sm:inline">{mode.label}</span>
                       </button>
                     )
                   })}
@@ -357,29 +339,19 @@ export function CrawlConfigForm({
 
         {/* Both sliders are meaningless once the exact page list is known. */}
         {crawlType !== "single" && !crawlAll && (
-          <div className={cn("grid gap-5 rounded-xl border border-gray-200 bg-gray-50/60 p-4 dark:border-gray-700 dark:bg-gray-800/30", crawlType === "recursive" && "sm:grid-cols-2 sm:gap-7")}>
+          <div className={cn("grid gap-6", crawlType === "recursive" && "sm:grid-cols-2 sm:gap-8")}>
             <FormField
               control={form.control}
               name="limit"
               render={({ field }) => (
                 <FormItem>
-                  <div className="flex items-center justify-between gap-3">
-                    <FormLabel>Seitenanzahl</FormLabel>
-                    <span className="text-xs tabular-nums text-gray-500">{field.value} · Max. 500</span>
+                  <div className="flex items-baseline justify-between gap-3">
+                    <FormLabel className="text-sm font-medium text-gray-700 dark:text-gray-300">Seiten</FormLabel>
+                    <span className="text-sm font-semibold tabular-nums text-gray-900 dark:text-white">{field.value}</span>
                   </div>
                   <FormControl>
-                    <Slider
-                      min={1}
-                      max={500}
-                      step={1}
-                      value={[field.value]}
-                      disabled={isRunning}
-                      onValueChange={(value) => field.onChange(value[0])}
-                      aria-label="Seitenanzahl"
-                      className="py-2"
-                    />
+                    <Slider min={1} max={500} step={1} value={[field.value]} disabled={isRunning} onValueChange={(value) => field.onChange(value[0])} aria-label="Seitenanzahl" className="py-2" />
                   </FormControl>
-                  <FormDescription>Für den ersten Test empfehlen wir 20 Seiten. Eine indexierte Seite kostet {CREDITS.perPage} Credit, eine Antwort {CREDITS.perChatMessage} Credits.</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -391,21 +363,12 @@ export function CrawlConfigForm({
                 name="max_depth"
                 render={({ field }) => (
                   <FormItem>
-                    <div className="flex items-center justify-between gap-3">
-                      <FormLabel>Tiefe</FormLabel>
-                      <span className="text-xs tabular-nums text-gray-500">{field.value} · Max. 5</span>
+                    <div className="flex items-baseline justify-between gap-3">
+                      <FormLabel className="text-sm font-medium text-gray-700 dark:text-gray-300">Tiefe</FormLabel>
+                      <span className="text-sm font-semibold tabular-nums text-gray-900 dark:text-white">{field.value}</span>
                     </div>
                     <FormControl>
-                      <Slider
-                        min={1}
-                        max={5}
-                        step={1}
-                        value={[field.value]}
-                        disabled={isRunning}
-                        onValueChange={(value) => field.onChange(value[0])}
-                        aria-label="Link-Tiefe"
-                        className="py-2"
-                      />
+                      <Slider min={1} max={5} step={1} value={[field.value]} disabled={isRunning} onValueChange={(value) => field.onChange(value[0])} aria-label="Link-Tiefe" className="py-2" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -417,21 +380,21 @@ export function CrawlConfigForm({
 
         <Collapsible open={showAdvanced} onOpenChange={setShowAdvanced}>
           <CollapsibleTrigger asChild>
-            <Button type="button" variant="ghost" className="h-9 gap-2 rounded-lg px-2 text-gray-500" disabled={isRunning}>
+            <button type="button" disabled={isRunning} className="inline-flex items-center gap-1.5 text-sm text-gray-500 transition-colors hover:text-gray-900 disabled:opacity-50 dark:text-gray-400 dark:hover:text-white">
               <Settings2 className="size-4" />
-              Erweiterte Einstellungen
+              Erweitert
               <ChevronDown className={cn("size-4 transition-transform", showAdvanced && "rotate-180")} />
-            </Button>
+            </button>
           </CollapsibleTrigger>
-          <CollapsibleContent className="mt-3 space-y-4 rounded-xl border border-gray-200 bg-gray-50/70 p-4 dark:border-gray-700 dark:bg-gray-800/40">
+          <CollapsibleContent className="mt-4 space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
               <FormField
                 control={form.control}
                 name="include_patterns"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Nur URLs mit</FormLabel>
-                    <FormControl><Textarea {...field} placeholder={"*docs*\n*guide*"} className="min-h-20 font-mono text-xs" /></FormControl>
+                    <FormLabel className="text-sm font-medium text-gray-700 dark:text-gray-300">Nur URLs mit</FormLabel>
+                    <FormControl><Textarea {...field} placeholder={"*docs*\n*guide*"} className="min-h-20 rounded-xl font-mono text-xs" /></FormControl>
                   </FormItem>
                 )}
               />
@@ -440,21 +403,18 @@ export function CrawlConfigForm({
                 name="exclude_domains"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Domains ausschließen</FormLabel>
-                    <FormControl><Textarea {...field} placeholder={"ads.example.com"} className="min-h-20 font-mono text-xs" /></FormControl>
+                    <FormLabel className="text-sm font-medium text-gray-700 dark:text-gray-300">Domains ausschließen</FormLabel>
+                    <FormControl><Textarea {...field} placeholder={"ads.example.com"} className="min-h-20 rounded-xl font-mono text-xs" /></FormControl>
                   </FormItem>
                 )}
               />
             </div>
-
             <FormField
               control={form.control}
               name="respect_robots_txt"
               render={({ field }) => (
-                <FormItem className="flex items-center justify-between gap-4 rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900">
-                  <div>
-                    <FormLabel>robots.txt beachten</FormLabel>
-                  </div>
+                <FormItem className="flex items-center justify-between gap-4">
+                  <FormLabel className="text-sm font-medium text-gray-700 dark:text-gray-300">robots.txt beachten</FormLabel>
                   <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
                 </FormItem>
               )}
@@ -462,19 +422,28 @@ export function CrawlConfigForm({
           </CollapsibleContent>
         </Collapsible>
 
-        <div role="status" className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm dark:border-gray-700 dark:bg-gray-800/40">
-          <p className="font-medium">Maximal {maximumCost} Credits für bis zu {allowedPages} Seiten</p>
-          <p className="mt-1 text-gray-500">Abgerechnet werden nur indexierte Seiten. Nicht benötigtes reserviertes Guthaben wird freigegeben. Auch vollständig eingelesen kann eine Wissensbasis nur einen Teil der Website abbilden.</p>
-          {credits && <p className="mt-2">Verfügbar: {credits.balance} Credits. Danach bleiben mindestens {remainingQuestions} bezahlbare Fragen, sofern du zwischenzeitlich kein weiteres Guthaben verbrauchst.</p>}
-          {credits && allowedPages < requestedPages && <p className="mt-2 text-amber-700 dark:text-amber-400">Dein Guthaben begrenzt das Einlesen auf {allowedPages} statt {requestedPages} Seiten. <Link className="underline" href="/dashboard#guthaben">Guthaben aufladen</Link></p>}
-          {remainingQuestions === 0 && allowedPages > 0 && <p className="mt-2 text-amber-700 dark:text-amber-400">Bei voller Ausschöpfung bleibt kein Guthaben für Fragen. Reduziere die Seitenzahl oder lade Guthaben auf.</p>}
-          {creditError && <p className="mt-2">{creditError} <button type="button" className="underline" onClick={() => void refresh()}>Erneut laden</button></p>}
-          {!credits && !creditError && <p className="mt-2">Dein verfügbares Guthaben wird geladen. Der Server prüft das endgültige Limit beim Start.</p>}
+        {/* The price stays next to the button: prepaid credits are only fair if
+            the cost of the next action is visible before it is taken. */}
+        <div className="flex flex-col-reverse gap-3 border-t border-gray-100 pt-6 sm:flex-row sm:items-center sm:justify-between dark:border-gray-800">
+          <div role="status" className="text-sm text-gray-500 dark:text-gray-400">
+            <p>
+              <span className="font-medium tabular-nums text-gray-900 dark:text-white">max. {maximumCost} Credits</span>
+              {credits && <span className="tabular-nums"> · {credits.balance} verfügbar</span>}
+            </p>
+            {credits && allowedPages < requestedPages && (
+              <p className="mt-1 text-xs text-warning-600 dark:text-warning-400">Reicht für {allowedPages} von {requestedPages} Seiten. <Link className="underline" href="/dashboard#guthaben">Aufladen</Link></p>
+            )}
+            {credits && allowedPages >= requestedPages && remainingQuestions === 0 && allowedPages > 0 && (
+              <p className="mt-1 text-xs text-warning-600 dark:text-warning-400">Danach bleibt kein Guthaben für Fragen.</p>
+            )}
+            {creditError && <p className="mt-1 text-xs">{creditError} <button type="button" className="underline" onClick={() => void refresh()}>Erneut laden</button></p>}
+          </div>
+          <Button type="submit" disabled={isRunning || (credits !== null && allowedPages === 0)} className="h-11 gap-2 rounded-full bg-brand-500 px-6 !text-white shadow-theme-xs hover:bg-brand-600">
+            {isRunning && <Loader2 className="size-4 animate-spin" />}
+            {isRunning ? "Wird eingelesen" : "Einlesen starten"}
+            {!isRunning && <ArrowRight className="size-4" />}
+          </Button>
         </div>
-        <Button type="submit" disabled={isRunning || (credits !== null && allowedPages === 0)} className="h-11 w-full gap-2 rounded-xl bg-brand-500 !text-white hover:bg-brand-600 sm:w-auto sm:min-w-44">
-          {isRunning ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" />}
-          {isRunning ? "Wird eingelesen" : "Einlesen starten"}
-        </Button>
       </form>
     </Form>
   )

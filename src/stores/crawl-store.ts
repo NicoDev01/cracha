@@ -53,7 +53,14 @@ interface CrawlStatusResponse {
     indexed_pages?: number
     indexing_pending?: number
     indexing_complete?: boolean
+    recent_pages?: CrawledPage[]
   }
+}
+
+/** One page the crawler read, as the live list in the crawl view shows it. */
+export interface CrawledPage {
+  url: string
+  title: string
 }
 
 export interface CrawlJob {
@@ -77,6 +84,8 @@ export interface CrawlJob {
   indexing_pending?: number
   indexing_complete?: boolean
   progress?: CrawlProgress
+  /** The latest pages read, newest first. */
+  recent_pages?: CrawledPage[]
   created_at: string
   updated_at: string
   completed_at?: string
@@ -182,6 +191,7 @@ function migrateJob(value: unknown): CrawlJob | null {
     indexing_pending: job.indexing_pending,
     indexing_complete: job.indexing_complete,
     progress: job.progress,
+    recent_pages: Array.isArray(job.recent_pages) ? job.recent_pages : undefined,
     created_at: job.created_at,
     updated_at: job.updated_at ?? job.created_at,
     completed_at: job.completed_at,
@@ -348,6 +358,7 @@ export const useCrawlStore = create<CrawlState>()(
                 indexing_pending: result.result?.indexing_pending ?? current.indexing_pending,
                 indexing_complete: result.result?.indexing_complete ?? current.indexing_complete,
                 progress: result.progress ?? current.progress,
+                recent_pages: result.result?.recent_pages ?? current.recent_pages,
                 error: result.error,
                 updated_at: new Date().toISOString(),
                 completed_at: terminal ? new Date().toISOString() : undefined,

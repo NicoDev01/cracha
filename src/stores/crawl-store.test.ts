@@ -45,6 +45,17 @@ it('retries a failed knowledge base through the re-crawl route and follows the n
   expect(String(mocks.fetch.mock.calls[1][0])).toBe('/api/admin/crawl-queue/status/job-2')
 })
 
+it('keeps the latest pages the crawler reported for the live list', async () => {
+  const pages = [{ url: 'https://www.simba.de/kontakt/', title: 'Kontakt' }, { url: 'https://www.simba.de/', title: 'Start' }]
+  mocks.fetch.mockResolvedValueOnce(reply({ success: true, job_id: 'job-2', status: 'queued' }, 202))
+  mocks.fetch.mockResolvedValue(reply({ success: true, status: 'running', phase: 'crawling', result: { pages_count: 2, recent_pages: pages } }, 202))
+
+  await useCrawlStore.getState().retryCrawl()
+  await vi.advanceTimersByTimeAsync(0)
+
+  expect(useCrawlStore.getState().currentJob?.recent_pages).toEqual(pages)
+})
+
 it('shows why a retry could not start', async () => {
   mocks.fetch.mockResolvedValueOnce(reply({ success: false, error: 'Dein Guthaben reicht nicht.' }, 402))
 
