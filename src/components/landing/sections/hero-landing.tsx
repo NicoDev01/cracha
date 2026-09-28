@@ -1,5 +1,5 @@
 import Link from "next/link";
-import Image from "next/image";
+import ReactDOM from "react-dom";
 import { HeroStartButton } from "@/components/landing/hero-start-button";
 
 /**
@@ -9,16 +9,13 @@ import { HeroStartButton } from "@/components/landing/hero-start-button";
  * sections below show; in the first lines they confused more than they told.
  */
 export default function HeroLanding() {
+  ReactDOM.preload("/images/landing-eclipse.jpg", { as: "image" });
+
   return (
-    <section className="relative isolate flex min-h-[630px] items-center overflow-hidden bg-black text-white sm:min-h-[640px]">
-      <Image
-        src="/images/landing-eclipse.jpg"
-        alt=""
-        fill
-        priority
-        sizes="100vw"
-        className="-z-20 object-cover object-center"
-      />
+    <section
+      style={{ backgroundImage: "url('/images/landing-eclipse.jpg')" }}
+      className="relative isolate flex min-h-[630px] items-center overflow-hidden bg-black bg-cover bg-center text-white sm:min-h-[640px]"
+    >
       <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-b from-black/55 via-black/35 to-black" />
       <div className="mx-auto flex w-full max-w-5xl flex-col items-center gap-6 px-4 pb-12 pt-44 text-center sm:px-6 sm:pb-14 sm:pt-36 lg:px-8">
         <h1 className="text-balance font-urban text-4xl font-semibold leading-[1.08] tracking-tight sm:text-5xl md:text-6xl lg:text-[70px]">
