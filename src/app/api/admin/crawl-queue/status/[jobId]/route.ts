@@ -24,6 +24,17 @@ function recentPages(value: unknown): Array<{ url: string; title: string }> | un
   })
 }
 
+/** Pages the crawl reached and did not index, with the crawler's reason. */
+function skippedPages(value: unknown): Array<{ url: string; reason: string }> | undefined {
+  if (!Array.isArray(value)) return undefined
+  return value.slice(0, 50).flatMap((entry) => {
+    if (!entry || typeof entry !== 'object') return []
+    const { url, reason } = entry as { url?: unknown; reason?: unknown }
+    if (typeof url !== 'string' || !/^https?:\/\//.test(url)) return []
+    return [{ url: url.slice(0, 300), reason: typeof reason === 'string' ? reason.slice(0, 120) : '' }]
+  })
+}
+
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ jobId: string }> }) {
   const user = await getAuthenticatedUser()
   if (!user) return NextResponse.json({ success: false, error: 'Authentifizierung erforderlich.' }, { status: 401 })
@@ -60,6 +71,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       indexing_pending?: number
       indexing_complete?: boolean
       recent_pages?: unknown
+      skipped_pages?: unknown
     }
     progress?: {
       stage?: string
@@ -112,6 +124,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
           indexing_pending: result.result.indexing_pending,
           indexing_complete: result.result.indexing_complete,
           recent_pages: recentPages(result.result.recent_pages),
+          skipped_pages: skippedPages(result.result.skipped_pages),
         }
       : undefined,
   })

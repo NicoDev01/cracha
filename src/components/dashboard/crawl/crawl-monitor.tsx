@@ -1,25 +1,21 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import * as Popover from "@radix-ui/react-popover"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
-import { ArrowRight, Check, ExternalLink, Globe, Loader2, MessagesSquare, Plus, RotateCcw, X } from "lucide-react"
+import { ArrowRight, Check, ExternalLink, Globe, Info, Loader2, MessagesSquare, Plus, RotateCcw, X } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { chatHref } from "@/lib/databases"
 import { cn } from "@/lib/utils"
-import { useCrawlStore, type CrawledPage, type CrawlJob, type CrawlPhase } from "@/stores/crawl-store"
-import { crawlPageLimit, crawlResultLabel } from "./crawl-progress"
+import { useCrawlStore, type CrawledPage, type SkippedPage } from "@/stores/crawl-store"
+import { crawlIndexedLabel, crawlPageLimit, crawlStepProgress } from "./crawl-progress"
 
 const number = new Intl.NumberFormat("de-DE")
 
-const steps = [
-  { phase: "queued" as const, label: "Vorbereiten" },
-  { phase: "crawling" as const, label: "Seiten einlesen" },
-  { phase: "indexing" as const, label: "Wissensbasis aufbauen" },
-]
-const stepOrder: CrawlPhase[] = ["queued", "crawling", "indexing", "completed"]
+const steps = ["Vorbereiten", "Seiten crawlen", "Durchsuchbar machen"]
 
 function formatDuration(seconds: number) {
   if (seconds < 60) return `${seconds} s`
@@ -33,65 +29,58 @@ function hostname(url: string) {
 function pagePath(url: string) {
   try {
     const { pathname } = new URL(url)
-    return pathname === "/" ? "Startseite" : decodeURIComponent(pathname.replace(/\/$/, ""))
+    return pathname === "/" ? "/" : decodeURIComponent(pathname.replace(/\/$/, ""))
   } catch {
     return url
   }
 }
 
-/** Seconds since the job started, ticking while it runs. */
-function useElapsed(job: CrawlJob | null, running: boolean) {
-  const [elapsed, setElapsed] = useState(0)
+/** The current time, ticking while `running`. */
+function useNow(running: boolean, interval = 250) {
+  const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
-    if (!job) return
-    const update = () => {
-      const end = job.completed_at ? new Date(job.completed_at).getTime() : Date.now()
-      setElapsed(Math.max(0, Math.floor((end - new Date(job.created_at).getTime()) / 1000)))
-    }
-    update()
     if (!running) return
-    const timer = window.setInterval(update, 1000)
+    const timer = window.setInterval(() => setNow(Date.now()), interval)
     return () => window.clearInterval(timer)
-  }, [job, running])
-  return elapsed
+  }, [running, interval])
+  return now
 }
 
 /**
- * Three segments that fill as the crawl moves on. The active one carries a
- * light sweep instead of a percentage: during crawling only a ceiling is known,
- * and the index reports all its pages at once, so a number would jump.
+ * Three bars that fill from 0 to 100 one after the other. The width glides to
+ * each new value instead of jumping, and a finished step gets its check mark.
  */
-function StepBar({ phase }: { phase: CrawlPhase }) {
-  const current = stepOrder.indexOf(phase)
+function StepBar({ progress, current }: { progress: [number, number, number]; current: number }) {
   const reduceMotion = useReducedMotion()
   return (
-    <div className="grid grid-cols-3 gap-1.5" aria-label="Fortschritt">
-      {steps.map((step, index) => {
-        const done = current > index
-        const active = current === index
+    <div className="grid grid-cols-3 gap-2" aria-label="Fortschritt">
+      {steps.map((label, index) => {
+        const done = progress[index] >= 1
+        const active = index === current && !done
         return (
-          <div key={step.phase} className="min-w-0">
-            <div className="relative h-1 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
+          <div key={label} className="min-w-0">
+            <div className="relative h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
               <motion.div
-                className="absolute inset-y-0 left-0 rounded-full bg-brand-500"
+                className={cn("absolute inset-y-0 left-0 rounded-full", done ? "bg-success-500" : "bg-brand-500")}
                 initial={false}
-                animate={{ width: done ? "100%" : active ? "35%" : "0%" }}
-                transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+                animate={{ width: `${Math.round(progress[index] * 1000) / 10}%` }}
+                transition={reduceMotion ? { duration: 0 } : { duration: 0.9, ease: "easeOut" }}
               />
               {active && !reduceMotion && (
                 <motion.div
-                  className="absolute inset-y-0 w-1/3 rounded-full bg-gradient-to-r from-transparent via-brand-400/70 to-transparent"
-                  initial={{ left: "-35%" }}
+                  className="absolute inset-y-0 w-1/4 bg-gradient-to-r from-transparent via-white/50 to-transparent dark:via-white/25"
+                  initial={{ left: "-25%" }}
                   animate={{ left: "100%" }}
-                  transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+                  transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
                 />
               )}
             </div>
             <p className={cn(
-              "mt-2 truncate text-xs",
+              "mt-2 flex items-center gap-1 truncate text-xs",
               active ? "font-medium text-gray-900 dark:text-white" : done ? "text-gray-500 dark:text-gray-400" : "text-gray-400 dark:text-gray-600",
             )}>
-              {step.label}
+              {done && <Check className="size-3 shrink-0 text-success-500" strokeWidth={3} />}
+              <span className="truncate">{label}</span>
             </p>
           </div>
         )
@@ -100,85 +89,146 @@ function StepBar({ phase }: { phase: CrawlPhase }) {
   )
 }
 
-/** The pages as they arrive, newest on top. */
-function PageFeed({ pages, dimmed }: { pages: CrawledPage[]; dimmed?: boolean }) {
+/**
+ * The pages as a running log, newest at the bottom. Pages arrive in groups
+ * with every status answer; they are let in one at a time so the log flows
+ * instead of jumping. What was already there when the view opened shows at once.
+ */
+function PageLog({ pages, running, scanning }: { pages: CrawledPage[]; running: boolean; scanning: boolean }) {
   const reduceMotion = useReducedMotion()
+  const [shown, setShown] = useState(pages.length)
+  const box = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (shown >= pages.length) return
+    const timer = window.setTimeout(() => setShown((count) => count + 1), reduceMotion ? 0 : 220)
+    return () => window.clearTimeout(timer)
+  }, [shown, pages.length, reduceMotion])
+
+  useEffect(() => {
+    // Smooth through the box's own CSS, which reduced motion switches off.
+    if (box.current) box.current.scrollTop = box.current.scrollHeight
+  }, [shown])
+
+  const visible = pages.slice(0, Math.min(shown, pages.length))
   return (
-    <ul className={cn("space-y-0.5 transition-opacity duration-500", dimmed && "opacity-60")} aria-label="Zuletzt eingelesene Seiten">
-      <AnimatePresence initial={false}>
-        {pages.map((page, index) => (
-          <motion.li
-            key={page.url}
-            layout={!reduceMotion}
-            initial={reduceMotion ? false : { opacity: 0, y: -6 }}
-            animate={{ opacity: 1 - index * 0.09, y: 0 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.3, ease: "easeOut" }}
-            className="flex min-w-0 items-center gap-3 rounded-lg px-2 py-1.5"
-          >
-            <span className={cn(
-              "flex size-4 shrink-0 items-center justify-center rounded-full",
-              index === 0 && !dimmed ? "bg-brand-500/15 text-brand-500" : "text-success-500",
-            )}>
-              {index === 0 && !dimmed ? <span className="size-1.5 animate-pulse rounded-full bg-brand-500" /> : <Check className="size-3" strokeWidth={3} />}
-            </span>
-            <span className="min-w-0 flex-1 truncate text-sm text-gray-700 dark:text-gray-200">{page.title || pagePath(page.url)}</span>
-            <span className="hidden max-w-[40%] shrink-0 truncate font-mono text-[11px] text-gray-400 sm:block">{pagePath(page.url)}</span>
-          </motion.li>
-        ))}
-      </AnimatePresence>
-    </ul>
+    <div className="relative overflow-hidden rounded-xl border border-gray-100 bg-gray-50/80 dark:border-gray-800 dark:bg-gray-950/40">
+      <div
+        ref={box}
+        className="h-52 overflow-y-auto scroll-smooth px-3 py-3 font-mono text-xs motion-reduce:scroll-auto leading-6 [mask-image:linear-gradient(to_bottom,transparent,black_28px)] [scrollbar-width:none]"
+        aria-label="Gecrawlte Seiten"
+      >
+        <ul>
+          {visible.map((page, index) => {
+            const last = index === visible.length - 1
+            return (
+              <motion.li
+                key={page.url}
+                initial={reduceMotion ? false : { opacity: 0, x: -4 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.25, ease: "easeOut" }}
+                className="flex min-w-0 items-center gap-2"
+              >
+                <span className={cn("shrink-0", last && running && !scanning ? "text-brand-500" : "text-success-500")}>
+                  {last && running && !scanning ? "›" : "✓"}
+                </span>
+                <span className="shrink-0 text-gray-400 dark:text-gray-500">{pagePath(page.url)}</span>
+                {page.title && <span className="min-w-0 truncate text-gray-700 dark:text-gray-300">{page.title}</span>}
+              </motion.li>
+            )
+          })}
+          {running && !scanning && (
+            <li className="flex items-center gap-2 text-gray-400">
+              <span className="inline-block h-3.5 w-1.5 animate-pulse bg-brand-500/70" />
+            </li>
+          )}
+        </ul>
+      </div>
+      {/* While the index is built nothing reports progress, so a light passes
+          over the pages to show that they are being worked on. */}
+      {scanning && !reduceMotion && (
+        <motion.div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 h-16 bg-gradient-to-b from-transparent via-brand-500/10 to-transparent"
+          initial={{ top: "-4rem" }}
+          animate={{ top: "100%" }}
+          transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
+        />
+      )}
+    </div>
   )
 }
 
-function Running({ job }: { job: CrawlJob }) {
-  const pages = job.recent_pages ?? []
-  const found = job.progress?.current ?? job.pages_crawled
-  const limit = crawlPageLimit(job)
-
-  if (job.phase === "queued") {
-    return <p className="text-sm text-gray-500 dark:text-gray-400">Der Crawler startet …</p>
+/** "· 2 übersprungen" with a small (i) that says which pages and why. */
+function SkippedInfo({ count, pages }: { count: number; pages: SkippedPage[] }) {
+  const [open, setOpen] = useState(false)
+  const closing = useRef<number | null>(null)
+  const hold = (next: boolean) => {
+    if (closing.current) window.clearTimeout(closing.current)
+    if (next) setOpen(true)
+    else closing.current = window.setTimeout(() => setOpen(false), 120)
   }
-
-  if (job.phase === "indexing") {
-    const total = job.progress?.total || job.pages_crawled
-    return (
-      <div className="space-y-4">
-        <div>
-          <p className="text-sm font-medium text-gray-900 dark:text-white">
-            {number.format(total)} {total === 1 ? "Seite wird" : "Seiten werden"} für die Suche aufbereitet
-          </p>
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Das dauert meist etwa eine Minute.</p>
-        </div>
-        {pages.length > 0 && <PageFeed pages={pages} dimmed />}
-      </div>
-    )
-  }
-
   return (
-    <div className="space-y-4">
-      <p className="flex items-baseline gap-2">
-        <span className="font-urban text-4xl font-semibold tabular-nums tracking-tight text-gray-900 dark:text-white">{number.format(found)}</span>
-        <span className="text-sm text-gray-500 dark:text-gray-400">
-          {limit ? `von max. ${number.format(limit)} Seiten` : found === 1 ? "Seite" : "Seiten"}
-        </span>
-      </p>
-      {pages.length > 0
-        ? <PageFeed pages={pages} />
-        : <p className="text-sm text-gray-500 dark:text-gray-400">Die ersten Seiten werden geladen …</p>}
-    </div>
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <span className="whitespace-nowrap">
+        {" · "}{number.format(count)} übersprungen
+        <Popover.Trigger
+          aria-label="Welche Seiten wurden übersprungen?"
+          onMouseEnter={() => hold(true)}
+          onMouseLeave={() => hold(false)}
+          className="ml-1 inline-flex size-4 translate-y-[3px] items-center justify-center rounded-full text-gray-400 transition-colors hover:text-gray-700 focus-visible:outline-2 focus-visible:outline-brand-500 dark:hover:text-gray-200"
+        >
+          <Info className="size-3.5" />
+        </Popover.Trigger>
+      </span>
+      <Popover.Portal>
+        <Popover.Content
+          side="bottom"
+          align="start"
+          sideOffset={8}
+          collisionPadding={16}
+          onMouseEnter={() => hold(true)}
+          onMouseLeave={() => hold(false)}
+          className="z-50 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-gray-200 bg-white p-4 text-sm shadow-theme-lg dark:border-gray-800 dark:bg-gray-900"
+        >
+          <p className="font-medium text-gray-900 dark:text-white">Übersprungene Seiten</p>
+          <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">
+            Diese Seiten wurden gefunden, aber nicht in die Wissensbasis aufgenommen. Sie kosten keine Credits.
+          </p>
+          {pages.length > 0 ? (
+            <ul className="mt-3 max-h-56 space-y-2 overflow-y-auto">
+              {pages.map((page) => (
+                <li key={page.url} className="min-w-0">
+                  <a href={page.url} target="_blank" rel="noreferrer" className="block truncate font-mono text-xs text-gray-700 hover:text-brand-600 dark:text-gray-300">
+                    {pagePath(page.url)}
+                  </a>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{page.reason}</p>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">Welche es waren, zeigen Crawls ab jetzt hier an.</p>
+          )}
+          {pages.length > 0 && pages.length < count && (
+            <p className="mt-2 text-xs text-gray-400">und {number.format(count - pages.length)} weitere</p>
+          )}
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
   )
 }
 
 export function CrawlMonitor({ onNew }: { onNew?: () => void }) {
   const { currentJob, isRunning, statusError, quotaNotice, cancelCrawl, retryCrawl } = useCrawlStore()
-  const elapsed = useElapsed(currentJob, isRunning)
+  const now = useNow(isRunning)
   const [retrying, setRetrying] = useState(false)
   const reduceMotion = useReducedMotion()
 
+  const jobId = currentJob?.id
+  const jobStatus = currentJob?.status
   useEffect(() => {
-    if (currentJob && ["completed", "failed", "cancelled"].includes(currentJob.status)) window.dispatchEvent(new Event("cracha:credits-changed"))
-  }, [currentJob?.id, currentJob?.status])
+    if (jobStatus && ["completed", "failed", "cancelled"].includes(jobStatus)) window.dispatchEvent(new Event("cracha:credits-changed"))
+  }, [jobId, jobStatus])
 
   if (!currentJob) {
     return (
@@ -186,11 +236,11 @@ export function CrawlMonitor({ onNew }: { onNew?: () => void }) {
         <div className="flex size-11 items-center justify-center rounded-2xl bg-gray-100 text-gray-400 dark:bg-gray-800">
           <Globe className="size-5" />
         </div>
-        <h2 className="mt-4 text-sm font-semibold text-gray-900 dark:text-white">Noch nichts eingelesen</h2>
-        <p className="mt-1 max-w-60 text-xs leading-5 text-gray-500 dark:text-gray-400">Sobald du eine Website einliest, siehst du hier, welche Seiten gerade dazukommen.</p>
+        <h2 className="mt-4 text-sm font-semibold text-gray-900 dark:text-white">Noch kein Crawl</h2>
+        <p className="mt-1 max-w-60 text-xs leading-5 text-gray-500 dark:text-gray-400">Sobald du eine Website crawlst, siehst du hier jede Seite, die dazukommt.</p>
         {onNew && (
           <Button type="button" size="sm" onClick={onNew} className="mt-5 gap-2 rounded-full bg-brand-500 px-4 !text-white hover:bg-brand-600">
-            <Plus className="size-4" />Website einlesen
+            <Plus className="size-4" />Website crawlen
           </Button>
         )}
       </div>
@@ -199,6 +249,13 @@ export function CrawlMonitor({ onNew }: { onNew?: () => void }) {
 
   const terminal = ["completed", "failed", "cancelled"].includes(currentJob.status)
   const successful = currentJob.status === "completed"
+  const end = currentJob.completed_at ? new Date(currentJob.completed_at).getTime() : now
+  const elapsed = Math.max(0, Math.floor((end - new Date(currentJob.created_at).getTime()) / 1000))
+  const progress = crawlStepProgress(currentJob, now)
+  const currentStep = currentJob.phase === "queued" ? 0 : currentJob.phase === "crawling" ? 1 : 2
+  const pages = currentJob.crawled_pages ?? [...(currentJob.recent_pages ?? [])].reverse()
+  const found = currentJob.progress?.current ?? currentJob.pages_crawled
+  const limit = crawlPageLimit(currentJob)
   // A failed crawl used to be a dead end: the only way on was deleting the
   // knowledge base and setting it up again. Needs the knowledge base id, which
   // a crawl refused before the server assigned one never had.
@@ -209,7 +266,7 @@ export function CrawlMonitor({ onNew }: { onNew?: () => void }) {
     try {
       await retryCrawl()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Einlesen konnte nicht neu gestartet werden.")
+      toast.error(error instanceof Error ? error.message : "Crawl konnte nicht neu gestartet werden.")
     } finally {
       setRetrying(false)
     }
@@ -218,9 +275,9 @@ export function CrawlMonitor({ onNew }: { onNew?: () => void }) {
   const handleCancel = async () => {
     try {
       await cancelCrawl()
-      toast.success("Einlesen abgebrochen.")
+      toast.success("Crawl abgebrochen.")
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Einlesen konnte nicht abgebrochen werden.")
+      toast.error(error instanceof Error ? error.message : "Crawl konnte nicht abgebrochen werden.")
     }
   }
 
@@ -251,10 +308,31 @@ export function CrawlMonitor({ onNew }: { onNew?: () => void }) {
             initial={reduceMotion ? false : { opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="space-y-7"
+            className="space-y-6"
           >
-            <StepBar phase={currentJob.phase} />
-            <Running job={currentJob} />
+            <StepBar progress={progress} current={currentStep} />
+
+            {currentJob.phase === "indexing" ? (
+              <div>
+                <p className="text-sm font-medium text-gray-900 dark:text-white">
+                  {number.format(currentJob.progress?.total || currentJob.pages_crawled)} Seiten werden durchsuchbar gemacht
+                </p>
+                <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">
+                  Sie werden in Abschnitte zerlegt und so gespeichert, dass der Chat passende Stellen findet. Meist dauert das etwa eine Minute.
+                </p>
+              </div>
+            ) : currentJob.phase === "crawling" ? (
+              <p className="flex items-baseline gap-2">
+                <span className="font-urban text-4xl font-semibold tabular-nums tracking-tight text-gray-900 dark:text-white">{number.format(found)}</span>
+                <span className="text-sm text-gray-500 dark:text-gray-400">{limit ? `von max. ${number.format(limit)} Seiten` : found === 1 ? "Seite" : "Seiten"}</span>
+              </p>
+            ) : (
+              <p className="text-sm text-gray-500 dark:text-gray-400">Der Crawler startet …</p>
+            )}
+
+            {currentJob.phase !== "queued" && (
+              <PageLog key={currentJob.id} pages={pages} running={isRunning} scanning={currentJob.phase === "indexing"} />
+            )}
           </motion.div>
         ) : (
           <motion.div
@@ -280,11 +358,14 @@ export function CrawlMonitor({ onNew }: { onNew?: () => void }) {
                 {successful ? "Bereit" : currentJob.status === "cancelled" ? "Abgebrochen" : "Fehlgeschlagen"}
               </h3>
               <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                {successful
-                  ? crawlResultLabel(currentJob)
-                  : currentJob.status === "cancelled"
-                    ? "Das Einlesen wurde beendet."
-                    : currentJob.error || "Das Einlesen konnte nicht abgeschlossen werden."}
+                {successful ? (
+                  <>
+                    {crawlIndexedLabel(currentJob)}
+                    {currentJob.pages_skipped > 0 && <SkippedInfo count={currentJob.pages_skipped} pages={currentJob.skipped_pages ?? []} />}
+                  </>
+                ) : currentJob.status === "cancelled"
+                  ? "Der Crawl wurde beendet."
+                  : currentJob.error || "Der Crawl konnte nicht abgeschlossen werden."}
               </p>
             </div>
           </motion.div>
@@ -320,7 +401,7 @@ export function CrawlMonitor({ onNew }: { onNew?: () => void }) {
             <Button type="button" variant="ghost" size="sm" onClick={handleCancel} className="h-9 rounded-full px-3 text-gray-500 hover:text-error-600">
               Abbrechen
             </Button>
-            <span className="text-xs text-gray-400">Du kannst die Seite verlassen, das Einlesen läuft weiter.</span>
+            <span className="text-xs text-gray-400">Du kannst die Seite verlassen, der Crawl läuft weiter.</span>
           </>
         )}
       </footer>

@@ -210,7 +210,7 @@ export function DataDashboard() {
             Aktualisieren
           </Button>
           <Button asChild size="sm" className="h-10 gap-2 rounded-xl bg-brand-500 !text-white hover:bg-brand-600">
-            <Link href="/dashboard/crawl"><Globe className="size-4" />Website einlesen</Link>
+            <Link href="/dashboard/crawl"><Globe className="size-4" />Website crawlen</Link>
           </Button>
         </div>
       </div>

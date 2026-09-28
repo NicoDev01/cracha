@@ -18,7 +18,7 @@ type NavItem = {
 const navItems: NavItem[] = [
   { icon: LayoutDashboard, name: "Übersicht", path: "/dashboard" },
   { icon: MessagesSquare, name: "Chat", path: "/dashboard/chat" },
-  { icon: Globe, name: "Website einlesen", path: "/dashboard/crawl" },
+  { icon: Globe, name: "Crawling", path: "/dashboard/crawl" },
   { icon: Library, name: "Wissensbasen", path: "/dashboard/data" },
 ];
 

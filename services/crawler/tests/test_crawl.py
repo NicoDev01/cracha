@@ -607,7 +607,9 @@ async def test_a_crawl_that_saw_the_whole_site_is_complete(monkeypatch) -> None:
     pages, _ = await crawl._http_fallback_pages(recursive(), stats=stats)
 
     assert len(pages) == 2
-    assert stats == crawl.CrawlStats(failed=0, truncated=False, timed_out=False)
+    assert (stats.failed, stats.truncated, stats.timed_out) == (0, False, False)
+    # The reader of "1 übersprungen" learns which page and why.
+    assert stats.skipped_pages == [("https://example.com/gone", "Seite nicht gefunden")]
     assert stats.complete(len(pages))
 
 
@@ -769,3 +771,26 @@ def test_links_in_the_article_come_before_the_menus_around_it() -> None:
 )
 def test_wiki_housekeeping_pages_are_recognised(url: str, meta: bool) -> None:
     assert crawl._wiki_meta_page(url) is meta
+
+
+def test_skip_reasons_speak_the_readers_language() -> None:
+    def refused(status: int) -> httpx.HTTPStatusError:
+        response = httpx.Response(status, request=httpx.Request("GET", "https://example.com/"))
+        return httpx.HTTPStatusError(str(status), request=response.request, response=response)
+
+    assert crawl._skip_reason(refused(403)) == "Zugriff verweigert"
+    assert crawl._skip_reason(refused(503)) == "Fehler auf der Website"
+    assert crawl._skip_reason(ValueError("Sitemap response is not XML or text.")) == (
+        "Keine Textseite (z. B. Bild oder PDF)"
+    )
+    assert crawl._skip_reason(httpx.ConnectError("refused")) == "Nicht erreichbar"
+
+
+def test_a_skipped_page_is_named_once_and_the_list_stays_bounded() -> None:
+    stats = crawl.CrawlStats()
+    for index in range(crawl.MAX_SKIPPED_PAGES + 10):
+        stats.skip(f"https://example.com/{index}", "Seite nicht gefunden")
+    stats.skip("https://example.com/0", "Zugriff verweigert")
+
+    assert len(stats.skipped_pages) == crawl.MAX_SKIPPED_PAGES
+    assert stats.skipped_pages[0] == ("https://example.com/0", "Seite nicht gefunden")

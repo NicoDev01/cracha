@@ -127,7 +127,10 @@ export interface Settlement {
 export async function settleCrawlCredits(jobReference: string, pages: number): Promise<Settlement> {
   const result = await rpc<{ settled?: boolean; spent?: number; refunded?: number }>('credit_settle', {
     p_reference: jobReference,
-    p_actual: Math.max(0, Math.floor(pages)),
+    // The hold was taken in credits (crawlCost), so the settlement must be too.
+    // Pages happened to equal credits at one credit per page; any other price
+    // would have charged the page count instead.
+    p_actual: crawlCost(Math.max(0, Math.floor(pages))),
   })
   return {
     settled: result?.settled === true,

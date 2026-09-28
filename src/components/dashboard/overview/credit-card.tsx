@@ -21,7 +21,7 @@ const LEDGER_LABELS: Record<string, string> = {
   welcome: 'Startguthaben',
   purchase: 'Kauf',
   chat: 'Chat',
-  crawl: 'Website einlesen',
+  crawl: 'Crawl',
   refund: 'Erstattung',
   adjustment: 'Korrektur',
 }

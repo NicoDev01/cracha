@@ -54,6 +54,21 @@ it('keeps the latest pages the crawler reported for the live list', async () => 
   await vi.advanceTimersByTimeAsync(0)
 
   expect(useCrawlStore.getState().currentJob?.recent_pages).toEqual(pages)
+  // The live list keeps every page seen, oldest first.
+  expect(useCrawlStore.getState().currentJob?.crawled_pages).toEqual([...pages].reverse())
+})
+
+it('builds the live list from answer to answer without repeating pages', async () => {
+  const first = [{ url: 'https://a.de/2', title: '2' }, { url: 'https://a.de/1', title: '1' }]
+  const second = [{ url: 'https://a.de/3', title: '3' }, { url: 'https://a.de/2', title: '2' }]
+  mocks.fetch.mockResolvedValueOnce(reply({ success: true, job_id: 'job-2', status: 'queued' }, 202))
+  mocks.fetch.mockResolvedValueOnce(reply({ success: true, status: 'running', phase: 'crawling', result: { recent_pages: first } }, 202))
+  mocks.fetch.mockResolvedValue(reply({ success: true, status: 'running', phase: 'crawling', result: { recent_pages: second } }, 202))
+
+  await useCrawlStore.getState().retryCrawl()
+  await vi.advanceTimersByTimeAsync(3_100)
+
+  expect(useCrawlStore.getState().currentJob?.crawled_pages?.map((page) => page.title)).toEqual(['1', '2', '3'])
 })
 
 it('shows why a retry could not start', async () => {

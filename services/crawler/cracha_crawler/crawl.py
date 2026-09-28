@@ -3,7 +3,7 @@ import hashlib
 import re
 from collections import deque
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from urllib import robotparser
 from urllib.parse import parse_qs, unquote, urljoin, urlsplit, urlunsplit
@@ -76,6 +76,45 @@ MAX_FAILURE_RATIO = 0.1
 # Refusals and outages, as opposed to a page that is gone. A 404 or 410 is the
 # site saying the page no longer exists, which is exactly what pruning is for.
 FAILED_STATUS_CODES = frozenset({401, 403, 408, 429})
+# How many skipped pages are named individually; the count covers the rest.
+MAX_SKIPPED_PAGES = 50
+
+
+def _status_reason(status: int) -> str:
+    """What an HTTP refusal means, in the reader's words."""
+    if status in {404, 410}:
+        return "Seite nicht gefunden"
+    if status in {401, 403}:
+        return "Zugriff verweigert"
+    if status == 429:
+        return "Zu viele Anfragen, von der Website gebremst"
+    if status >= 500:
+        return "Fehler auf der Website"
+    return f"Von der Website abgelehnt (HTTP {status})"
+
+
+def _skip_reason(error: Exception) -> str:
+    """Why a page could not be read, in the reader's words."""
+    status = getattr(getattr(error, "response", None), "status_code", None)
+    if isinstance(status, int):
+        return _status_reason(status)
+    message = str(error)
+    if "Redirect must remain" in message:
+        return "Leitet auf eine andere Domain um"
+    if "not XML or text" in message:
+        return "Keine Textseite (z. B. Bild oder PDF)"
+    if "safety limit" in message:
+        return "Zu groß"
+    if "robots.txt" in message:
+        return "Durch robots.txt gesperrt"
+    return "Nicht erreichbar"
+
+
+def _empty_reason(request: CrawlRequest) -> str:
+    """Why a fetched page yielded nothing to index."""
+    if request.include_patterns or request.exclude_patterns:
+        return "Zu wenig Text oder durch deine Filter ausgeschlossen"
+    return "Zu wenig lesbarer Text"
 
 
 @dataclass
@@ -91,6 +130,15 @@ class CrawlStats:
     failed: int = 0
     truncated: bool = False
     timed_out: bool = False
+    #: (url, reason) of pages the crawl reached and did not index, for the
+    #: reader who sees "2 übersprungen" and wants to know which and why.
+    skipped_pages: list[tuple[str, str]] = field(default_factory=list)
+
+    def skip(self, url: str, reason: str) -> None:
+        if len(self.skipped_pages) < MAX_SKIPPED_PAGES and all(
+            known != url for known, _ in self.skipped_pages
+        ):
+            self.skipped_pages.append((url, reason))
 
     def complete(self, pages_count: int) -> bool:
         if self.truncated or self.timed_out:
@@ -684,11 +732,13 @@ async def _http_fallback_pages(
                 continue
             visited.add(url)
             if urlsplit(url).hostname != source_host:
+                stats.skip(url, "Andere Domain")
                 skipped += 1
                 continue
             if request.respect_robots_txt:
                 refusal = await _robots_allowed(client, url, robots_cache)
                 if refusal:
+                    stats.skip(url, "Durch robots.txt gesperrt")
                     print(f"[WARN] HTTP fallback skipped {url} ({refusal})")
                     if url == start_url:
                         blocked_start = f"{refusal} Die Website lässt sich deshalb nicht einlesen."
@@ -717,6 +767,7 @@ async def _http_fallback_pages(
                         else f"{source_host} war nicht erreichbar. "
                         "Prüfe die Adresse und versuche es erneut."
                     )
+                stats.skip(url, _skip_reason(error))
                 skipped += 1
                 await _report_progress(
                     on_progress,
@@ -738,6 +789,7 @@ async def _http_fallback_pages(
                     f"({len(content)} bytes; include={request.include_patterns}; "
                     f"exclude={request.exclude_patterns})"
                 )
+                stats.skip(final_url, _empty_reason(request))
                 skipped += 1
             if request.type is CrawlType.RECURSIVE and depth < request.max_depth:
                 for link in links:
@@ -808,12 +860,15 @@ async def _http_direct_pages(
                 print(f"[WARN] Skipped {url} ({type(error).__name__}: {error})")
                 if _fetch_failed(error):
                     stats.failed += 1
+                stats.skip(url, _skip_reason(error))
             async with lock:
                 if page:
                     pages[page.url] = page
                     if on_page:
                         await on_page(page)
                 else:
+                    if not any(known == url for known, _ in stats.skipped_pages):
+                        stats.skip(final_url, _empty_reason(request))
                     skipped += 1
                 await _report_progress(
                     on_progress,
@@ -954,9 +1009,11 @@ async def _crawl4ai_pages(
         try:
             await assert_public_url(result_url)
         except (ValueError, OSError):
+            stats.skip(result_url, "Nicht öffentlich erreichbar")
             skipped += 1
         else:
             if urlsplit(result_url).hostname != source_host:
+                stats.skip(result_url, "Leitet auf eine andere Domain um")
                 skipped += 1
             else:
                 html = str(getattr(result, "html", "") or "")
@@ -980,11 +1037,21 @@ async def _crawl4ai_pages(
                     # fetch that worked and was then thrown away by the
                     # extraction. Those need different fixes.
                     markdown = getattr(getattr(result, "markdown", None), "fit_markdown", "")
+                    status_code = getattr(result, "status_code", None)
                     print(
                         f"[WARN] Browser pass dropped {result_url} "
-                        f"(status={getattr(result, 'status_code', None)}, "
+                        f"(status={status_code}, "
                         f"html={len(html)}, markdown={len(markdown or '')})"
                     )
+                    if refused_by_robots:
+                        reason = "Durch robots.txt gesperrt"
+                    elif isinstance(status_code, int) and status_code >= 400:
+                        reason = _status_reason(status_code)
+                    elif not getattr(result, "success", False):
+                        reason = "Nicht erreichbar"
+                    else:
+                        reason = _empty_reason(request)
+                    stats.skip(result_url, reason)
                     skipped += 1
         await _report_progress(
             on_progress,
@@ -1188,6 +1255,7 @@ async def crawl_pages(
         if pages:
             stats.failed = browser_stats.failed
             stats.truncated = stats.truncated or browser_stats.truncated
+            stats.skipped_pages = browser_stats.skipped_pages
             return pages, skipped
         print("[WARN] Crawl4AI returned no indexable pages; using the HTTP fallback.")
     except (UnsafeUrlError, CrawlBlockedError):
@@ -1207,4 +1275,5 @@ async def crawl_pages(
     result = await _http_fallback_pages(request, on_progress, forward, stats=fallback_stats)
     stats.failed = fallback_stats.failed
     stats.truncated = stats.truncated or fallback_stats.truncated
+    stats.skipped_pages = fallback_stats.skipped_pages
     return result

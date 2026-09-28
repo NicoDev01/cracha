@@ -367,12 +367,19 @@ async def process_crawl(payload: dict, job_id: str) -> dict:
         # everything that reached Cloudflare, which after a mid-crawl fallback
         # can be the larger of the two. Only a genuine shortfall is a skip.
         skipped += max(0, len(pages) - len(active_keys))
+        skipped_pages = [
+            {"url": url[:300], "reason": reason} for url, reason in coverage.skipped_pages
+        ]
 
         await update_status(
             job_id,
             status="running",
             phase="indexing",
-            result={"pages_count": len(active_keys), "skipped_count": skipped},
+            result={
+                "pages_count": len(active_keys),
+                "skipped_count": skipped,
+                "skipped_pages": skipped_pages,
+            },
             progress={
                 "stage": "indexing",
                 "current": 0,

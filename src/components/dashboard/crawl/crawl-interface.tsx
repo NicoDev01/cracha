@@ -53,18 +53,18 @@ export function CrawlInterface() {
   }
 
   return (
-    <section className="flex h-full min-h-0 flex-col" aria-label="Website einlesen">
+    <section className="flex h-full min-h-0 flex-col" aria-label="Crawling">
       <header className="flex shrink-0 items-center justify-between gap-3 border-b border-gray-200 px-4 py-3 sm:px-5 dark:border-gray-800">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-500 text-white shadow-theme-sm">
             <Globe className="size-5" />
           </div>
-          <h1 className="truncate font-semibold text-gray-900 dark:text-white">Website einlesen</h1>
+          <h1 className="truncate font-semibold text-gray-900 dark:text-white">Crawling</h1>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="h-9 rounded-xl bg-gray-100 p-1 dark:bg-gray-800">
-            <TabsTrigger value="new" className="rounded-lg px-3" aria-label="Neue Website einlesen">
+            <TabsTrigger value="new" className="rounded-lg px-3" aria-label="Neuer Crawl">
               <Plus className="size-4" />
               <span className="hidden sm:inline">Neu</span>
             </TabsTrigger>

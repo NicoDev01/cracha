@@ -14,7 +14,7 @@ export function FirstSteps() {
   const questionsLeft = Math.floor((CREDITS.welcome - FIRST_CRAWL_PAGES * CREDITS.perPage) / CREDITS.perChatMessage)
   const steps = [
     {
-      title: 'Website einlesen',
+      title: 'Website crawlen',
       text: `Gib die Adresse einer öffentlichen Website ein. Für den Anfang reichen ${FIRST_CRAWL_PAGES} Seiten.`,
     },
     {
@@ -54,7 +54,7 @@ export function FirstSteps() {
       </ol>
       <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-3">
         <Button asChild rounded="full" className={primaryCta}>
-          <Link href="/dashboard/crawl" prefetch={false}><Globe className="size-4" />Website einlesen</Link>
+          <Link href="/dashboard/crawl" prefetch={false}><Globe className="size-4" />Website crawlen</Link>
         </Button>
         <Link href="/website-mit-ki-durchsuchen" className="text-sm text-brand-600 underline underline-offset-2 dark:text-brand-400">
           Anleitung mit Beispielfragen

@@ -125,7 +125,7 @@ export function DashboardOverview() {
           <Button asChild size="sm" rounded="full" className={primaryCta}>
             <Link href="/dashboard/crawl" prefetch={false}>
               <Globe className="size-4" />
-              Website einlesen
+              Website crawlen
             </Link>
           </Button>
         )}

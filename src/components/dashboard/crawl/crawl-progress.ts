@@ -39,8 +39,53 @@ export function crawlProgressLabel(job: Pick<CrawlJob, 'phase' | 'page_limit' | 
  * from a job recorded before the indexed count was fixed; it falls back to the
  * pages that were handed to the index.
  */
-export function crawlResultLabel(job: Pick<CrawlJob, 'indexed_pages' | 'pages_crawled' | 'pages_skipped'>): string {
+export function crawlIndexedLabel(job: Pick<CrawlJob, 'indexed_pages' | 'pages_crawled'>): string {
   const pages = job.indexed_pages || job.pages_crawled
-  const label = `${number.format(pages)} ${pages === 1 ? 'Seite' : 'Seiten'} in der Wissensbasis`
+  return `${number.format(pages)} ${pages === 1 ? 'Seite' : 'Seiten'} in der Wissensbasis`
+}
+
+export function crawlResultLabel(job: Pick<CrawlJob, 'indexed_pages' | 'pages_crawled' | 'pages_skipped'>): string {
+  const label = crawlIndexedLabel(job)
   return job.pages_skipped > 0 ? `${label} · ${number.format(job.pages_skipped)} übersprungen` : label
+}
+
+/** Typical length of each phase with no progress figure of its own, in seconds. */
+const PREPARE_SECONDS = 4
+const INDEX_SECONDS = 30
+
+/** Rises quickly at first and never reaches the end on its own. */
+function easeTowards(seconds: number, scale: number, ceiling: number): number {
+  return ceiling * (1 - Math.exp(-Math.max(0, seconds) / scale))
+}
+
+/**
+ * How full each of the three bars is, from 0 to 1.
+ *
+ * Only crawling has a count, and it is measured against the page limit. The
+ * other two phases report nothing until they end -- the index even turns all
+ * its pages searchable at once -- so their bars move with the time spent and
+ * slow down before the end instead of jumping from 0 to 100.
+ */
+export function crawlStepProgress(
+  job: Pick<CrawlJob, 'phase' | 'status' | 'page_limit' | 'progress' | 'pages_crawled' | 'phase_started_at' | 'created_at'>,
+  now: number,
+): [number, number, number] {
+  const since = (now - new Date(job.phase_started_at ?? job.created_at).getTime()) / 1000
+  switch (job.phase) {
+    case 'queued':
+      return [easeTowards(since, PREPARE_SECONDS, 0.9), 0, 0]
+    case 'crawling': {
+      const limit = crawlPageLimit(job)
+      const found = job.progress?.current ?? job.pages_crawled
+      const counted = limit ? Math.min(1, found / limit) : 0
+      // A start without pages yet still moves, a little.
+      return [1, Math.min(0.97, Math.max(counted, easeTowards(since, 20, 0.12))), 0]
+    }
+    case 'indexing':
+      return [1, 1, easeTowards(since, INDEX_SECONDS, 0.95)]
+    case 'completed':
+      return [1, 1, 1]
+    default:
+      return [0, 0, 0]
+  }
 }

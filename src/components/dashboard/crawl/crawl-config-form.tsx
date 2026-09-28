@@ -60,7 +60,7 @@ function isCrawlableUrl(value: string) {
 
 const modes = [
   { value: "single" as const, label: "Einzelne Seite", short: "Einzelseite", icon: File },
-  { value: "recursive" as const, label: "Verlinkte Seiten", short: "Verlinkt", icon: Globe2 },
+  { value: "recursive" as const, label: "Unterseiten", short: "Unterseiten", icon: Globe2 },
   { value: "sitemap" as const, label: "Sitemap", short: "Sitemap", icon: ListTree },
 ]
 
@@ -196,9 +196,9 @@ export function CrawlConfigForm({
       await startCrawl(config)
       window.dispatchEvent(new Event("cracha:credits-changed"))
       onStarted?.()
-      toast.success("Einlesen gestartet. Es läuft im Hintergrund weiter.")
+      toast.success("Crawl gestartet. Er läuft im Hintergrund weiter.")
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Einlesen konnte nicht gestartet werden.")
+      toast.error(error instanceof Error ? error.message : "Crawl konnte nicht gestartet werden.")
     }
   }
 
@@ -440,7 +440,7 @@ export function CrawlConfigForm({
           </div>
           <Button type="submit" disabled={isRunning || (credits !== null && allowedPages === 0)} className="h-11 gap-2 rounded-full bg-brand-500 px-6 !text-white shadow-theme-xs hover:bg-brand-600">
             {isRunning && <Loader2 className="size-4 animate-spin" />}
-            {isRunning ? "Wird eingelesen" : "Einlesen starten"}
+            {isRunning ? "Crawl läuft" : "Crawl starten"}
             {!isRunning && <ArrowRight className="size-4" />}
           </Button>
         </div>

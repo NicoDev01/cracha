@@ -249,7 +249,7 @@ export function DatabaseSelector() {
             onClick={() => router.push('/dashboard/crawl')}
           >
             <Database className="w-4 h-4 mr-2" />
-            Website einlesen
+            Website crawlen
           </Button>
         </div>
       </DropdownMenuContent>

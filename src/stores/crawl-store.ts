@@ -54,7 +54,28 @@ interface CrawlStatusResponse {
     indexing_pending?: number
     indexing_complete?: boolean
     recent_pages?: CrawledPage[]
+    skipped_pages?: SkippedPage[]
   }
+}
+
+/** A page the crawl reached and did not index, and why. */
+export interface SkippedPage {
+  url: string
+  reason: string
+}
+
+/** How many pages the live list keeps for one crawl. */
+const CRAWLED_PAGES_LIMIT = 200
+
+/**
+ * Every page seen so far, oldest first. Each status carries only the latest
+ * few, so the list is built up here from one answer to the next.
+ */
+function mergeCrawledPages(known: CrawledPage[] | undefined, latest: CrawledPage[] | undefined): CrawledPage[] | undefined {
+  if (!latest?.length) return known
+  const seen = new Set((known ?? []).map((page) => page.url))
+  const fresh = [...latest].reverse().filter((page) => !seen.has(page.url))
+  return fresh.length ? [...(known ?? []), ...fresh].slice(-CRAWLED_PAGES_LIMIT) : known
 }
 
 /** One page the crawler read, as the live list in the crawl view shows it. */
@@ -86,6 +107,11 @@ export interface CrawlJob {
   progress?: CrawlProgress
   /** The latest pages read, newest first. */
   recent_pages?: CrawledPage[]
+  /** Every page read so far, oldest first, for the live list. */
+  crawled_pages?: CrawledPage[]
+  skipped_pages?: SkippedPage[]
+  /** When the current phase began, so its progress can move with time. */
+  phase_started_at?: string
   created_at: string
   updated_at: string
   completed_at?: string
@@ -192,6 +218,9 @@ function migrateJob(value: unknown): CrawlJob | null {
     indexing_complete: job.indexing_complete,
     progress: job.progress,
     recent_pages: Array.isArray(job.recent_pages) ? job.recent_pages : undefined,
+    crawled_pages: Array.isArray(job.crawled_pages) ? job.crawled_pages : undefined,
+    skipped_pages: Array.isArray(job.skipped_pages) ? job.skipped_pages : undefined,
+    phase_started_at: job.phase_started_at,
     created_at: job.created_at,
     updated_at: job.updated_at ?? job.created_at,
     completed_at: job.completed_at,
@@ -223,6 +252,7 @@ export const useCrawlStore = create<CrawlState>()(
           chunks_created: 0,
           pages_skipped: 0,
           progress: { stage: 'queued', current: 0, total: 0, percent: 0 },
+          phase_started_at: now,
           created_at: now,
           updated_at: now,
         }
@@ -359,6 +389,9 @@ export const useCrawlStore = create<CrawlState>()(
                 indexing_complete: result.result?.indexing_complete ?? current.indexing_complete,
                 progress: result.progress ?? current.progress,
                 recent_pages: result.result?.recent_pages ?? current.recent_pages,
+                crawled_pages: mergeCrawledPages(current.crawled_pages, result.result?.recent_pages),
+                skipped_pages: result.result?.skipped_pages ?? current.skipped_pages,
+                phase_started_at: phase !== current.phase ? new Date().toISOString() : current.phase_started_at,
                 error: result.error,
                 updated_at: new Date().toISOString(),
                 completed_at: terminal ? new Date().toISOString() : undefined,

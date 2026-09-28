@@ -119,3 +119,41 @@ async def test_the_status_names_the_latest_pages_read(monkeypatch) -> None:
     assert reported[0] == [{"url": "https://example.com/0", "title": "Seite 0"}]
     newest_eight = [f"Seite {index}" for index in range(9, 1, -1)]
     assert [page["title"] for page in reported[-1]] == newest_eight
+
+
+async def test_the_status_names_the_skipped_pages_and_why(monkeypatch) -> None:
+    page = Page(
+        url="https://example.com/",
+        title="Start",
+        markdown="# Start\n\n" + "Text. " * 50,
+        checksum="a" * 64,
+        crawled_at="2026-09-28T00:00:00+00:00",
+    )
+
+    async def crawl(_request, _on_progress, on_page, stats):
+        stats.skip("https://example.com/termin", "Zu wenig lesbarer Text")
+        await on_page(page)
+        return [page], 1
+
+    class Ingest:
+        async def upload(self, _database, _user, batch, _known, job_id=None):
+            return SimpleNamespace(active_keys=[item.url for item in batch], known_items={})
+
+        async def finalize(self, *_args, **_kwargs):
+            return SimpleNamespace(complete=True, chunks_count=2, indexed_count=1, pending_count=0)
+
+    update = AsyncMock()
+    monkeypatch.setattr(modal_app, "crawl_pages", crawl)
+    monkeypatch.setattr(modal_app, "RagIngestClient", Ingest)
+    monkeypatch.setattr(modal_app, "update_status", update)
+
+    await modal_app.process_crawl.get_raw_f()(
+        {"url": "https://example.com/", "tenant_id": "kb", "user_id": "user"}, "job"
+    )
+
+    reported = [
+        call.kwargs["result"]["skipped_pages"]
+        for call in update.await_args_list
+        if "skipped_pages" in (call.kwargs.get("result") or {})
+    ]
+    assert reported == [[{"url": "https://example.com/termin", "reason": "Zu wenig lesbarer Text"}]]
