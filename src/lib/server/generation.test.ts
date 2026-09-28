@@ -2,7 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   GenerationError,
+  attributeCitations,
+  finalUserText,
   formatGeminiContents,
+  knowledgeBaseKind,
   streamGroundedAnswer,
   groundListEntries,
   groundListEntry,
@@ -665,5 +668,73 @@ describe('BYOK request and fallback reasons', () => {
     const run = vi.fn().mockRejectedValue(new Error('down'))
     await expect(streamGroundedAnswer({ ai: { run } as unknown as CloudflareEnv['AI'], model: '@cf/meta/llama-4-scout-17b-16e-instruct', question: 'Q', history: [], context: 'K' })).rejects.toBeInstanceOf(GenerationError)
     expect(run).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('citation attribution', () => {
+  const blocks: ContextBlock[] = [
+    {
+      n: 1,
+      title: 'PropertyBinding',
+      url: 'https://threejs.org/docs/pages/PropertyBinding.html',
+      text: 'PropertyBinding\nThis holds a reference to a real property in the scene graph.\n.node : Object3D\n.parsedPath : Object\n.bind() : undefined Create getter / setter pair.\n.unbind() : undefined Unbind getter / setter pair.',
+    },
+    {
+      n: 2,
+      title: 'AnimationMixer',
+      url: 'https://threejs.org/docs/pages/AnimationMixer.html',
+      text: 'AnimationMixer\nThe AnimationMixer is a player for animations on a particular object.\n.time : number The global mixer time.\n.clipAction() Returns an AnimationAction.\n.update() Advances the global mixer time and updates the animation.',
+    },
+  ]
+
+  async function* from(chunks: string[]) {
+    for (const chunk of chunks) yield chunk
+  }
+  async function collect(chunks: string[], context = blocks): Promise<string> {
+    let text = ''
+    for await (const piece of attributeCitations(from(chunks), context)) text += piece
+    return text
+  }
+
+  it('adds the page an uncited bullet names in its code', async () => {
+    // The production answer this was written against cited one bullet out of
+    // twenty; every other line gave no hint which page it came from.
+    const answer = await collect([
+      '## PropertyBinding\n### Eigenschaften\n* `.node`: Das Objekt, das die animierte ',
+      'Eigenschaft besitzt.\n## AnimationMixer\n* `.update()`: Aktualisiert die Mixer-Zeit.\n',
+    ])
+    expect(answer).toContain('* `.node`: Das Objekt, das die animierte Eigenschaft besitzt. [1]\n')
+    expect(answer).toContain('* `.update()`: Aktualisiert die Mixer-Zeit. [2]\n')
+  })
+
+  it('never touches a line that already cites, a heading or a code block', async () => {
+    const text = '## PropertyBinding\n* `.bind()`: Erstellt ein Getter-/Setter-Paar. [2]\n```js\nmixer.update()\n```\n'
+    expect(await collect([text])).toBe(text)
+  })
+
+  it('leaves a line alone when no single source supports it', async () => {
+    const line = 'Die Bibliothek eignet sich gut für interaktive Grafiken im Browser.'
+    expect(await collect([line])).toBe(line)
+  })
+
+  it('attributes a final line without a trailing newline', async () => {
+    expect(await collect(['* `.clipAction()` liefert eine AnimationAction'])).toBe('* `.clipAction()` liefert eine AnimationAction [2]')
+  })
+
+  it('never cites the page outline for a detail', async () => {
+    const outline: ContextBlock = { n: 3, title: 'Seitenübersicht', url: 'https://threejs.org/', text: '- /docs/pages (2 pages): AnimationMixer; PropertyBinding', outline: true }
+    expect(await collect(['Der `AnimationMixer` spielt Animationen ab.'], [outline])).toBe('Der `AnimationMixer` spielt Animationen ab.')
+  })
+})
+
+describe('knowledge base kind', () => {
+  it('reads documentation from paths and code', () => {
+    expect(knowledgeBaseKind([{ url: 'https://threejs.org/docs/pages/AnimationMixer.html', text: 'x' }])).toBe('documentation')
+    expect(knowledgeBaseKind([{ url: 'https://example.com/leistungen', text: 'Wir bieten Webdesign.' }])).toBe('website')
+  })
+
+  it('names the kind next to the question, not in a content check', () => {
+    expect(finalUserText('Frage?', 'ctx', 'default', 'website')).toContain('Knowledge base kind: website\nFrage:\nFrage?')
+    expect(finalUserText('Entwurf', 'ctx', 'verification', 'website')).not.toContain('Knowledge base kind')
   })
 })

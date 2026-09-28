@@ -9,6 +9,7 @@ import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import 'katex/dist/katex.min.css';
+import { CitationLink } from './citation';
 import { CodeBlock, CodeBlockCopyButton } from './code-block';
 
 const HardenedMarkdown = hardenReactMarkdown(ReactMarkdown);
@@ -72,14 +73,14 @@ const components: Options['components'] = {
   ),
   a: ({ node: _node, children, className, ...props }) => {
     const label = Array.isArray(children) ? children.join('') : String(children)
-    const isCitation = /^\[\d+\]$/.test(label)
+    const citation = /^\[(\d+)\]$/.exec(label)
+    if (citation) {
+      return <CitationLink index={Number(citation[1])} href={props.href} className={className}>{children}</CitationLink>
+    }
     return (
       <a
-        aria-label={isCitation ? `Quelle ${label.slice(1, -1)} öffnen` : undefined}
         className={cn(
-          isCitation
-            ? 'mx-0.5 inline-flex min-w-5 items-center justify-center rounded-md bg-brand-50 px-1.5 py-0.5 align-baseline text-[0.75em] font-semibold leading-none text-brand-700 no-underline transition-colors hover:bg-brand-100 dark:bg-brand-500/15 dark:text-brand-300 dark:hover:bg-brand-500/25'
-            : 'font-medium text-brand-600 underline decoration-brand-200 underline-offset-2 hover:text-brand-700 dark:text-brand-400',
+          'font-medium text-brand-600 underline decoration-brand-200 underline-offset-2 hover:text-brand-700 dark:text-brand-400',
           className,
         )}
         rel="noreferrer"

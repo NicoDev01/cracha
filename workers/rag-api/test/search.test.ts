@@ -14,8 +14,10 @@ import {
   instanceConfigMatches,
   instanceIdFor,
   isExhaustiveQuestion,
+  isOverviewQuestion,
   itemKeyFor,
   needsUpload,
+  outlineText,
   publishedAtRanking,
   resolveReranking,
   retrieve,
@@ -924,5 +926,79 @@ describe('section context in uploaded documents', () => {
 
     expect(needsUpload(page, legacy)).toBe(true)
     expect(needsUpload(page, { ...legacy, checksum: documentChecksum(page) })).toBe(false)
+  })
+})
+
+describe('questions about the whole knowledge base', () => {
+  it('recognises a summary that names no topic', () => {
+    for (const question of [
+      'Fasse die wichtigsten Inhalte zusammen.',
+      'Welche zentralen Funktionen werden beschrieben?',
+      'Erkläre das Thema in einfachen Worten.',
+      'Worum geht es hier?',
+      'Summarise the most important content.',
+      'Give me an overview',
+    ]) {
+      expect(isOverviewQuestion(question), question).toBe(true)
+      expect(classifyQuestion(question).list, question).toBe(false)
+    }
+  })
+
+  it('keeps a summary of one topic on the ordinary search', () => {
+    for (const question of ['Fasse die Preise zusammen', 'Explain dependency injection', 'Was ist das?', 'Gib mir einen Überblick über die Tarife']) {
+      expect(isOverviewQuestion(question), question).toBe(false)
+    }
+  })
+
+  it('groups the page list by section, largest first', () => {
+    const text = outlineText([
+      { url: 'https://threejs.org/', title: 'three.js docs' },
+      { url: 'https://threejs.org/docs/animation/AnimationMixer.html', title: 'AnimationMixer | three.js docs' },
+      { url: 'https://threejs.org/docs/animation/PropertyBinding.html', title: 'PropertyBinding | three.js docs' },
+      { url: 'https://threejs.org/docs/cameras/PerspectiveCamera.html', title: 'PerspectiveCamera' },
+    ])
+    expect(text.split('\n')[0]).toBe('- /docs/animation (2 pages): AnimationMixer; PropertyBinding')
+    expect(text).toContain('- /docs/cameras (1 pages): PerspectiveCamera')
+    expect(text).toContain('- / (1 pages): three.js docs')
+  })
+
+  it('answers a summary from the outline and the start page, not only its top hits', async () => {
+    const pages = [
+      { id: 'home', url: 'https://threejs.org/docs/', title: 'three.js docs' },
+      { id: 'mixer', url: 'https://threejs.org/docs/pages/AnimationMixer.html', title: 'AnimationMixer' },
+      { id: 'camera', url: 'https://threejs.org/docs/pages/PerspectiveCamera.html', title: 'PerspectiveCamera' },
+    ]
+    const instance = {
+      search: async () => ({
+        search_query: 'inhalte',
+        chunks: [{
+          id: 'c1', type: 'text', score: 0.4, text: 'The AnimationMixer is a player for animations.',
+          item: { key: 'page-mixer.md', metadata: { url: pages[1].url, title: pages[1].title } },
+        }],
+      }),
+      items: {
+        list: async () => ({
+          result: pages.map((page) => ({ id: page.id, key: `page-${page.id}.md`, status: 'completed', metadata: { url: page.url, title: page.title } })),
+          result_info: { count: 3, page: 1, per_page: 50, total_count: 3 },
+        }),
+        get: (itemId: string) => ({
+          chunks: async () => ({
+            result: itemId === 'home' ? [{ id: 'h1', text: 'three.js is a 3D library for the web.', start_byte: 0, end_byte: 40 }] : [],
+          }),
+        }),
+      },
+    } as unknown as Parameters<typeof retrieve>[0]
+
+    const result = await retrieve(instance, 'Fasse die wichtigsten Inhalte zusammen.', 6)
+
+    expect(result.sources.map((source) => source.url)).toEqual([
+      'https://threejs.org/',
+      'https://threejs.org/docs/',
+      pages[1].url,
+    ])
+    expect(result.sources[0].title).toBe('Seitenübersicht (3 Seiten)')
+    expect(result.context).toContain('source_type: site_outline')
+    expect(result.context).toContain('three.js is a 3D library for the web.')
+    expect(result.blocks[0].outline).toBe(true)
   })
 })

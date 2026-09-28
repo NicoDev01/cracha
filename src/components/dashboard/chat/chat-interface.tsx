@@ -41,11 +41,12 @@ import {
   collapseRepeatedCitations,
   getCitedSources,
   getUncitedSources,
+  isOutlineSource,
   linkifyCitations,
   type IndexedSource,
 } from '@/lib/chat/citations';
 import { answerMetaParts, fallbackNotice, formatModel, substituteNotice } from '@/lib/chat/metadata';
-import { cleanSnippet, cleanSourceTitle, sourceHosts, sourceLocation } from '@/lib/chat/source-display';
+import { cleanSnippet, cleanSourceTitle, passageLink, sourceHosts, sourceLocation } from '@/lib/chat/source-display';
 import { checkGeminiKey, PREFERRED_GEMINI_MODELS, type GeminiModelOption } from '@/lib/chat/gemini-models';
 import { streamingMarkdown } from '@/lib/chat/streaming-markdown';
 import { databaseFromChatQuery } from '@/lib/databases';
@@ -53,6 +54,7 @@ import type { Message as ChatMessage, Source as ChatSource } from '@/types/chat'
 import { Conversation, ConversationContent, ConversationScrollButton } from './conversation';
 import { DatabasePicker } from './database-picker';
 import { DatabaseSelector } from './database-selector';
+import { CitationSources } from './citation';
 import { Loader } from './loader';
 import { Message, MessageContent } from './message';
 import {
@@ -100,12 +102,15 @@ const formatTime = (date: Date) => new Intl.DateTimeFormat('de-DE', {
  * title and places it with a breadcrumb instead of the raw path.
  */
 const SourceRow = ({ index, source, muted = false }: IndexedSource & { muted?: boolean }) => {
-  const snippet = cleanSnippet(source.snippet);
+  const outline = isOutlineSource(source);
+  // A cited row quotes the passage the answer drew on, so the reader can see
+  // what was taken from the page without opening it.
+  const passage = muted || outline ? '' : cleanSnippet(source.snippet, 180);
   return (
     <Source
-      href={source.url}
-      title={snippet ? `${source.title}\n\n${snippet}` : source.title}
-      className="items-center rounded-lg border-0 bg-transparent px-2 py-2 shadow-none hover:translate-y-0 hover:bg-gray-50 hover:shadow-none dark:bg-transparent dark:hover:bg-white/[0.04]"
+      href={outline ? source.url : passageLink(source.url, source.snippet)}
+      title={cleanSourceTitle(source.title, source.url)}
+      className={`${passage ? 'items-start' : 'items-center'} rounded-lg border-0 bg-transparent px-2 py-2 shadow-none hover:translate-y-0 hover:bg-gray-50 hover:shadow-none dark:bg-transparent dark:hover:bg-white/[0.04]`}
     >
       <span
         className={`flex size-6 shrink-0 items-center justify-center rounded-md text-[11px] font-semibold tabular-nums ${muted
@@ -119,6 +124,11 @@ const SourceRow = ({ index, source, muted = false }: IndexedSource & { muted?: b
           {cleanSourceTitle(source.title, source.url)}
         </span>
         <span className="block truncate text-[11px] leading-4 text-gray-400 dark:text-gray-500">{sourceLocation(source.url)}</span>
+        {passage && (
+          <span className="mt-1 line-clamp-2 border-l-2 border-gray-200 pl-2 text-[12px] leading-[18px] text-gray-500 dark:border-gray-700 dark:text-gray-400">
+            {passage}
+          </span>
+        )}
       </span>
       <ExternalLink className="size-3.5 shrink-0 text-gray-300 transition-colors group-hover/link:text-brand-500 dark:text-gray-600" aria-hidden="true" />
     </Source>
@@ -135,15 +145,19 @@ const SourceList = ({ cited, uncited }: { cited: IndexedSource[]; uncited: Index
         ))}
       </div>
     )}
+    {/* Folded away: they were searched, not used, and the open list is for checking what was. */}
     {uncited.length > 0 && (
-      <div className="grid gap-0.5">
-        <p className="px-2 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-          Ebenfalls durchsucht, nicht zitiert
-        </p>
-        {uncited.map((entry) => (
-          <SourceRow key={entry.source.id} index={entry.index} source={entry.source} muted />
-        ))}
-      </div>
+      <details className="group/uncited">
+        <summary className="cursor-pointer list-none px-2 pb-1 pt-2 text-[11px] font-medium text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300">
+          {uncited.length} weitere durchsucht, nicht zitiert
+          <span className="ml-1 inline-block transition-transform group-open/uncited:rotate-90" aria-hidden="true">›</span>
+        </summary>
+        <div className="grid gap-0.5">
+          {uncited.map((entry) => (
+            <SourceRow key={entry.source.id} index={entry.index} source={entry.source} muted />
+          ))}
+        </div>
+      </details>
     )}
   </>
 );
@@ -414,7 +428,7 @@ export function ChatInterface() {
     : isStreaming
       ? 'Die Antwort wird erstellt.'
       : lastMessage?.type === 'assistant' && !lastMessage.isStreaming
-        ? `Antwort fertig, ${lastMessage.sources?.length ?? 0} Quellen.`
+        ? `Antwort fertig, ${getCitedSources(lastMessage.content, lastMessage.sources ?? []).length} von ${lastMessage.sources?.length ?? 0} Quellen zitiert.`
         : '';
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -656,7 +670,7 @@ export function ChatInterface() {
                     ? message.content
                     : linkifyCitations(collapseRepeatedCitations(message.isStreaming ? streamingMarkdown(message.content) : message.content), messageSources);
                   const metadata = !isUser && !message.isStreaming ? message.metadata : undefined;
-                  const metaParts = answerMetaParts(metadata, messageSources.length);
+                  const metaParts = answerMetaParts(metadata, messageSources.length, citedSources.length);
                   return (
                     <Message
                       key={message.id}
@@ -702,11 +716,13 @@ export function ChatInterface() {
                                 : 'Formuliere Antwort …'}
                             </span>
                           ) : (
-                            <Response>{renderedContent}</Response>
+                            <CitationSources.Provider value={messageSources}>
+                              <Response>{renderedContent}</Response>
+                            </CitationSources.Provider>
                           )}
 
                           {!isUser && (citedSources.length > 0 || (!message.isStreaming && uncitedSources.length > 0)) && (
-                            <Sources>
+                            <Sources defaultOpen>
                               <SourcesTrigger count={citedSources.length} hosts={sourceHosts(citedSources.map((entry) => entry.source.url))} />
                               <SourcesContent>
                                 <SourceList cited={citedSources} uncited={message.isStreaming ? [] : uncitedSources} />

@@ -784,6 +784,19 @@ export async function retrieve(
     return work.finally(() => { timings[name] = Date.now() - started })
   }
 
+  // A question about the knowledge base as a whole has no topic to search for,
+  // so the ranked chunks are whatever happened to score highest: "Fasse die
+  // wichtigsten Inhalte zusammen" on the three.js docs came back as two API
+  // pages and was summarised as if they were the whole site. The page list and
+  // the start page are what such a question is about. Read alongside the search.
+  const overviewPromise = intent.overview && instance.items
+    ? timed('overview_ms', resolveOverview(instance.items)).catch((error) => {
+      console.log(JSON.stringify({ event: 'overview_failed', error: error instanceof Error ? error.message : 'unknown' }))
+      return null
+    })
+    : Promise.resolve(null)
+  if (intent.overview) options.onProgress?.({ stage: 'collection', title: 'Seitenübersicht' })
+
   // Vector search protects semantic recall and typo tolerance. Hybrid + reranking
   // supplies keyword precision. Local rank fusion keeps either path from
   // discarding a useful result solely because one model assigned a low score.
@@ -831,6 +844,7 @@ export async function retrieve(
     ? await timed('hub_ms', resolveHubPage(instance, rankedChunks, queryTokens, !intent.explicitList))
     : null
   if (hub) options.onProgress?.({ stage: 'collection', title: hub.title })
+  const overview = await overviewPromise
   // Only the hybrid path rewrites, so its query is the one a reader can act on.
   // The vector path now reports the question as typed, and printing both would
   // read as two searches having disagreed rather than as one having been cleaned.
@@ -838,11 +852,142 @@ export async function retrieve(
     || successfulResults.map((result) => result.search_query).find(Boolean)
     || question
 
-  const packed = packContext(rankedChunks, hub, effectiveIntent, topK)
+  const packed = packContext(rankedChunks, hub, effectiveIntent, topK, overview)
   options.onProgress?.({ stage: 'selected', sources: packed.sources.length, pages: seenPages.size })
   // Where a slow search spends its time; the request log only has the total.
   console.log(JSON.stringify({ event: 'retrieval_timing', ...timings, pages: seenPages.size, list: effectiveIntent.list }))
   return { ...packed, searchQuery }
+}
+
+/** What a question about the whole knowledge base is answered from. */
+export interface OverviewContext {
+  /** The indexed pages, grouped by section; stands for the site's scope. */
+  outline: { url: string; title: string; text: string; pages: number }
+  /** The page closest to the root, usually the site's own introduction. */
+  home: HubPage | null
+}
+
+const OVERVIEW_TRIGGERS = new Set([
+  'fasse', 'fass', 'zusammen', 'zusammenfassung', 'zusammenfassen', 'ueberblick', 'uebersicht', 'worum',
+  'wichtigsten', 'wichtigste', 'inhalte', 'themen', 'zentralen', 'zentrale', 'erklaere', 'erklaer',
+  'summarize', 'summarise', 'summary', 'overview', 'topics', 'explain',
+  'resume', 'resumen', 'riassumi', 'samenvatting', 'vat',
+])
+/** Words that may accompany a trigger without naming a topic of their own. */
+const OVERVIEW_FILLERS = new Set([
+  'gib', 'gibt', 'geben', 'geht', 'kurz', 'kurze', 'kurzen', 'kurzer', 'grob', 'hier', 'dabei', 'was', 'das',
+  'inhalt', 'inhalten', 'thema', 'website', 'webseite', 'seite', 'seiten', 'dokumentation', 'doku',
+  'wissensbasis', 'werden', 'behandelt', 'beschrieben', 'funktionen', 'einfachen', 'einfach', 'worten',
+  'main', 'most', 'important', 'key', 'points', 'content', 'contents', 'this', 'site', 'docs',
+  'documentation', 'give', 'short', 'brief', 'covered', 'cover', 'covers', 'core', 'capabilities',
+  'described', 'topic', 'simple', 'terms', 'how', 'work', 'works',
+])
+
+/**
+ * "Fasse die wichtigsten Inhalte zusammen" names no topic; "Fasse die Preise
+ * zusammen" does, and is an ordinary search. Every word has to be one that asks
+ * about the whole, so a named topic always wins.
+ */
+export function isOverviewQuestion(question: string): boolean {
+  const words = tokens(question)
+  return words.some((word) => OVERVIEW_TRIGGERS.has(word))
+    && words.every((word) => OVERVIEW_TRIGGERS.has(word) || OVERVIEW_FILLERS.has(word))
+}
+
+const OUTLINE_MAX_CHARACTERS = 7_000
+const OUTLINE_TITLES_PER_SECTION = 12
+const HOME_MAX_CHARACTERS = 8_000
+
+function shortTitle(title: string): string {
+  const [first] = title.split(/\s+[|–—·•»]\s+/u)
+  return (first && first.trim().length >= 3 ? first : title).replace(/\s+/g, ' ').trim().slice(0, 80)
+}
+
+/**
+ * The page list as sections: `/docs/animation (14 pages): AnimationMixer; …`.
+ * Grouped by the first two path segments, largest section first, so the scope
+ * of a 500-page site fits a few thousand characters.
+ */
+export function outlineText(pages: Array<{ url: string; title: string }>): string {
+  const sections = new Map<string, string[]>()
+  for (const page of pages) {
+    let segments: string[]
+    try {
+      segments = new URL(page.url).pathname.split('/').filter(Boolean)
+    } catch {
+      continue
+    }
+    const section = segments.length > 1 ? `/${segments.slice(0, Math.min(2, segments.length - 1)).join('/')}` : '/'
+    const titles = sections.get(section) ?? []
+    titles.push(shortTitle(page.title || segments.at(-1) || page.url))
+    sections.set(section, titles)
+  }
+  const lines: string[] = []
+  let length = 0
+  for (const [section, titles] of [...sections.entries()].sort((left, right) => right[1].length - left[1].length)) {
+    const unique = [...new Set(titles)]
+    const shown = unique.slice(0, OUTLINE_TITLES_PER_SECTION).join('; ')
+    const more = unique.length > OUTLINE_TITLES_PER_SECTION ? `; … (+${unique.length - OUTLINE_TITLES_PER_SECTION})` : ''
+    const line = `- ${section} (${titles.length} pages): ${shown}${more}`
+    if (length + line.length > OUTLINE_MAX_CHARACTERS) break
+    lines.push(line)
+    length += line.length + 1
+  }
+  return lines.join('\n')
+}
+
+async function resolveOverview(items: ItemsApi): Promise<OverviewContext | null> {
+  const pageSize = 50
+  const first = await items.list({ page: 1, per_page: pageSize })
+  const total = first.result_info?.total_count ?? first.result.length
+  const rest = await Promise.all(
+    Array.from({ length: Math.min(Math.ceil(total / pageSize), HUB_MAX_SCAN_PAGES) - 1 }, (_, index) =>
+      items.list({ page: index + 2, per_page: pageSize }).then((response) => response.result).catch(() => [])),
+  )
+  const listed = [first.result, ...rest].flat()
+    .map((item) => ({
+      id: item.id,
+      key: item.key,
+      url: typeof item.metadata?.url === 'string' ? item.metadata.url : '',
+      title: typeof item.metadata?.title === 'string' ? item.metadata.title : '',
+    }))
+    .filter((item) => item.url)
+  if (!listed.length) return null
+
+  const depth = (url: string) => {
+    try {
+      return new URL(url).pathname.split('/').filter(Boolean).length
+    } catch {
+      return Number.POSITIVE_INFINITY
+    }
+  }
+  const homeItem = [...listed].sort((left, right) => depth(left.url) - depth(right.url) || left.url.length - right.url.length)[0]
+  let home: HubPage | null = null
+  try {
+    const { text, truncated } = await readItemText(items, homeItem.id)
+    if (text.trim()) {
+      home = {
+        url: homeItem.url,
+        title: homeItem.title || homeItem.url,
+        key: homeItem.key,
+        text: text.slice(0, HOME_MAX_CHARACTERS),
+        truncated: truncated || text.length > HOME_MAX_CHARACTERS,
+      }
+    }
+  } catch (error) {
+    console.log(JSON.stringify({ event: 'overview_home_failed', error: error instanceof Error ? error.message : 'unknown' }))
+  }
+  const root = (() => {
+    try {
+      return new URL(homeItem.url).origin + '/'
+    } catch {
+      return homeItem.url
+    }
+  })()
+  return {
+    outline: { url: root, title: `Seitenübersicht (${listed.length} Seiten)`, text: outlineText(listed), pages: listed.length },
+    home,
+  }
 }
 
 export function packContext(
@@ -850,6 +995,7 @@ export function packContext(
   hub: HubPage | null,
   intent: QuestionIntent,
   topK: number,
+  overview: OverviewContext | null = null,
 ): { context: string; blocks: ContextBlock[]; sources: Source[] } {
   // An enumerating answer is only as complete as the context allows. The budget
   // is sized so one full collection page fits alongside supporting detail pages.
@@ -872,6 +1018,21 @@ export function packContext(
     sourceNumberByKey.set(key, sourceNumber)
     sources.push({ id, title, url, snippet: snippet.slice(0, 320), score, chunk_index: id })
     return sourceNumber
+  }
+
+  // The site's own scope comes before any single page, so a summary starts
+  // from what the knowledge base contains rather than from its top two hits.
+  if (overview) {
+    const { outline, home } = overview
+    const outlineNumber = addSource(`outline:${outline.url}`, outline.title, outline.url, outline.text, 1, 'site-outline')
+    blocks.push({ n: outlineNumber, title: outline.title, url: outline.url, text: outline.text, outline: true })
+    contextCharacters += outline.text.length
+    if (home) {
+      const homeNumber = addSource(home.url, home.title, home.url, home.text, 1, `home-${home.key}`)
+      blocks.push({ n: homeNumber, title: home.title, url: home.url, text: home.text })
+      chunksPerSource.set(home.url, maxChunksPerSource)
+      contextCharacters += home.text.length
+    }
   }
 
   // The collection page goes in whole and first. Splitting it across ranked
@@ -930,9 +1091,11 @@ export function packContext(
         // parenthetical after the title was quoted verbatim into an answer, and
         // key: value lines are also language-neutral, which a German label was
         // not once the knowledge base could be in any language.
-        const kind = block.collection
-          ? `\nsource_type: ${block.truncated ? 'collection_page_partial' : 'collection_page_complete'}`
-          : ''
+        const kind = block.outline
+          ? '\nsource_type: site_outline'
+          : block.collection
+            ? `\nsource_type: ${block.truncated ? 'collection_page_partial' : 'collection_page_complete'}`
+            : ''
         return `[${block.n}] ${block.title}\nURL: ${block.url || 'unknown'}${kind}\n${block.text}`
       })
       .join('\n\n---\n\n'),
@@ -1088,6 +1251,8 @@ export interface QuestionIntent {
   exhaustive: boolean
   /** The answer depends on which source is newest. */
   recency: boolean
+  /** The question is about the knowledge base as a whole, not a topic in it. */
+  overview: boolean
 }
 
 export interface ContextBlock {
@@ -1101,12 +1266,17 @@ export interface ContextBlock {
   truncated?: boolean
   /** Entries outside this block may be rejected as not belonging to the set. */
   authoritative?: boolean
+  /** The grouped page list of the whole knowledge base. */
+  outline?: boolean
 }
 
 export function classifyQuestion(question: string): QuestionIntent {
-  const exhaustive = EXHAUSTIVE_PATTERN.test(question)
-  const list = exhaustive || LIST_PATTERN.test(question)
-  return { exhaustive, list, explicitList: list, recency: RECENCY_PATTERN.test(question) }
+  const overview = isOverviewQuestion(question)
+  const exhaustive = !overview && EXHAUSTIVE_PATTERN.test(question)
+  // "Überblick", "overview" and "Themen" are list words too, but a question
+  // about the whole site is answered from its outline, not a collection page.
+  const list = !overview && (exhaustive || LIST_PATTERN.test(question))
+  return { exhaustive, list, explicitList: list, recency: RECENCY_PATTERN.test(question), overview }
 }
 
 export function isExhaustiveQuestion(question: string): boolean {

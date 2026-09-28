@@ -76,6 +76,12 @@ describe('answerMetaParts', () => {
     ])
   })
 
+  it('names cited and searched sources separately when they differ', () => {
+    expect(answerMetaParts(metadata, 2, 1)[2]).toBe('1 von 2 Quellen zitiert')
+    expect(answerMetaParts(metadata, 2, 2)[2]).toBe('2 Quellen zitiert')
+    expect(answerMetaParts(metadata, 3, 0)[2]).toBe('3 Quellen durchsucht, keine zitiert')
+  })
+
   it('reports a single source in the singular', () => {
     expect(answerMetaParts(metadata, 1)[2]).toBe('1 Quelle')
   })

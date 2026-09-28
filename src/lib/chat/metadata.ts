@@ -45,7 +45,7 @@ export function formatModel(model: string): string {
  * searched. Empty while a request is still in flight, since a half-measured
  * duration would be worse than none.
  */
-export function answerMetaParts(metadata: Metadata | undefined, sourceCount: number): string[] {
+export function answerMetaParts(metadata: Metadata | undefined, sourceCount: number, citedCount?: number): string[] {
   if (!metadata || metadata.query_time <= 0) return []
   const total = formatDuration(metadata.query_time)
   // A cached search returns in milliseconds. Reporting that as search time would
@@ -60,8 +60,22 @@ export function answerMetaParts(metadata: Metadata | undefined, sourceCount: num
     // nothing to answer from. A blank part would render as a stray separator.
     formatModel(metadata.model_used),
     timing,
-    sourceCount > 0 ? `${sourceCount} ${sourceCount === 1 ? 'Quelle' : 'Quellen'}` : null,
+    sourceCountLabel(sourceCount, citedCount),
   ].filter((part): part is string => Boolean(part))
+}
+
+/**
+ * "2 Quellen" under an answer that cited one read as if both had been used,
+ * while the list above it said "Verwendete Quellen 1". Searched and cited are
+ * different claims, so the line names both when they differ.
+ */
+function sourceCountLabel(sourceCount: number, citedCount?: number): string | null {
+  if (sourceCount <= 0) return null
+  const noun = (count: number) => (count === 1 ? 'Quelle' : 'Quellen')
+  if (citedCount === undefined) return `${sourceCount} ${noun(sourceCount)}`
+  if (citedCount === 0) return `${sourceCount} ${noun(sourceCount)} durchsucht, keine zitiert`
+  if (citedCount >= sourceCount) return `${sourceCount} ${noun(sourceCount)} zitiert`
+  return `${citedCount} von ${sourceCount} Quellen zitiert`
 }
 
 /**

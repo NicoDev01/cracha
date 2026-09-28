@@ -78,6 +78,46 @@ export function cleanSnippet(snippet: string, maxLength = 220): string {
   return text.length > maxLength ? `${text.slice(0, maxLength - 1).trimEnd()}…` : text
 }
 
+const PASSAGE_WORDS = 7
+const PASSAGE_MIN_WORDS = 5
+
+/**
+ * A short run of words the source page shows verbatim, taken from the passage
+ * the answer was written from. Lines the indexer added, tables and code are
+ * skipped, and markdown is reduced to the text a browser renders.
+ */
+export function passagePhrase(snippet: string): string | null {
+  for (const raw of snippet.split('\n')) {
+    if (/^\s*(#{1,6}\s|Quelle:\s|>|\||```|~~~|- \/)/u.test(raw)) continue
+    const text = raw
+      .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/^\s*(?:[-*+]|\d+[.)])\s+/u, '')
+      .replace(/[*_`]+/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+    const words = text.split(' ').filter(Boolean)
+    // Both ends of a snippet may be cut mid-word; a phrase from its start is
+    // only cut at its own end, which the slice leaves out.
+    if (words.length < PASSAGE_MIN_WORDS + 1) continue
+    return words.slice(0, Math.min(PASSAGE_WORDS, words.length - 1)).join(' ')
+  }
+  return null
+}
+
+/**
+ * The source URL with a text fragment (`#:~:text=`), so opening a citation
+ * scrolls to and highlights the passage the answer drew on. Chrome, Edge and
+ * Safari support it; elsewhere, or if the page changed since the crawl, the
+ * page simply opens at the top.
+ */
+export function passageLink(url: string, snippet: string): string {
+  const phrase = passagePhrase(snippet)
+  if (!phrase) return url
+  // The spec reserves `-`, `,` and `&` inside a directive.
+  const encoded = encodeURIComponent(phrase).replace(/-/g, '%2D').replace(/[()]/g, (c) => (c === '(' ? '%28' : '%29'))
+  return `${url}${url.includes('#') ? '' : '#'}:~:text=${encoded}`
+}
+
 /** Up to two distinct sites, for the collapsed source list. */
 export function sourceHosts(urls: string[]): { shown: string[]; more: number } {
   const hosts = [...new Set(urls.map((url) => {

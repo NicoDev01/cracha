@@ -180,8 +180,13 @@ STRUCTURED CONTENT
 - Reproduce code, commands, configuration and API signatures verbatim in fenced code blocks with a language tag. Never invent parameters, flags, methods or option names that the sources do not contain.
 - Keep numbers, units, currencies and dates exactly as the sources write them.
 
+SUMMARIES AND OVERVIEWS
+- A source marked "source_type: site_outline" lists every indexed page of the knowledge base, grouped by section. When it is present, the question is about the knowledge base as a whole: say in one or two sentences what it is and whom it is for, then describe its main areas as 3 to 6 short themed sections, citing the outline for the scope and the other sources for details.
+- Never present a few retrieved pages as "the most important content" of the whole knowledge base. A summary names themes and what they are for; it does not copy lists of properties, methods or fields.
+
 CITATIONS
-- Every paragraph containing a factual claim must carry at least one matching source marker [n]. For a coherent list taken from a single collection source, one marker in the introducing sentence covers the whole list; otherwise every bullet needs its own matching marker. A factual answer without markers is invalid.
+- Every paragraph, bullet and table row containing a factual claim must end with the marker [n] of the source that states it. A factual answer without markers is invalid.
+- Only for a coherent list taken from one collection source may a single marker in the introducing sentence cover the whole list.
 - Cite the source that actually states the claim, not merely a source on the same topic. When two sources support one claim, write [1][3].
 - Use only the numbers from the source context, written exactly as [n]. Place the marker directly after the sentence or bullet it supports, before any line break.
 
@@ -192,8 +197,13 @@ ANSWER STYLE
 - Write as a knowledgeable colleague would. Never refer to "the context", "the provided sources" or "the documents"; simply state the facts and cite them. The only exception is saying that the knowledge base does not cover something.
 - If an important caveat exists (the sources are partial, contradict each other, or are dated), state it once, briefly, at the end.
 
+STYLE BY KIND OF KNOWLEDGE BASE (the kind is named after the question)
+- documentation: write for a developer. Explain what a thing does and when to use it before listing its members. Name classes, methods, options and flags exactly, in inline code. For a how-to, give numbered steps and a code example only when the sources contain one. Mention version or deprecation notes the sources state.
+- website: write for a customer or visitor. Say what is offered, for whom, under which conditions and at what price, in plain language. Do not repeat marketing superlatives as facts. When the sources name a contact, a form or a page for the next step, end with it.
+
 OUTPUT
 - Answer in the language of the question, regardless of the language of the sources. Keep product names, UI labels, code and identifiers in their original form.
+- Write every word in that one language and its script. Never insert words or characters from another script, such as Chinese characters in a German answer; translate the term or keep the original identifier.
 - Format longer answers as readable markdown: short ## headings, bullet lists, sparing **emphasis** on the key terms. A short answer needs no heading. Never use a heading as the first line of a short answer.
 - Start directly with the answer. Do not restate the question.
 - Never produce a section named Sources, Quellen or References, and never print a source list or URLs. Sources are displayed separately in the user interface.`
@@ -352,6 +362,8 @@ export interface ContextBlock {
   truncated?: boolean
   /** Retrieval is confident this block defines the full set of entries. */
   authoritative?: boolean
+  /** The grouped page list of the whole knowledge base. */
+  outline?: boolean
 }
 
 const LIST_ITEM = /^(\s*(?:[-*+]|\d+[.)])\s+)(.*)$/u
@@ -565,15 +577,165 @@ export async function* groundListEntries(
 }
 
 
+const HAS_MARKER = /\[\d+(?:\s*,\s*\d+)*\]/u
+const CODE_SPAN = /`([^`\n]+)`/gu
+/** Tokens that say nothing about which source a line came from. */
+const ATTRIBUTION_MIN_TOKEN = 4
+const ATTRIBUTION_MIN_COVERAGE = 0.5
+const ATTRIBUTION_MIN_MATCHES = 3
+
+interface AttributionBlock {
+  n: number
+  padded: string
+  title: string
+}
+
+function matchTokens(value: string): string[] {
+  return [...new Set(normalizeForMatch(value).split(' ').filter((token) => token.length >= ATTRIBUTION_MIN_TOKEN))]
+}
+
+/**
+ * The source a line most plausibly came from, or none. Two kinds of evidence:
+ * the identifiers in its inline code, which name one API member verbatim in any
+ * language, and ordinary words, weighted by how few sources share them. A
+ * German sentence about English docs shares few words with its source, which is
+ * why code spans and the section heading carry the decision there.
+ */
+export function attributeLine(line: string, headings: string[], blocks: AttributionBlock[]): number | null {
+  if (!blocks.length) return null
+  const codes = [...line.matchAll(CODE_SPAN)]
+    .map((match) => normalizeForMatch(match[1]))
+    .filter((code) => code.replace(/\s/g, '').length >= 3)
+  const words = matchTokens(line.replace(CODE_SPAN, ' '))
+  const headingWords = headings.map(matchTokens).filter((tokens) => tokens.length > 0)
+  const frequency = (token: string) => blocks.filter((block) => block.padded.includes(` ${token} `)).length
+  const weight = new Map(words.map((token) => [token, Math.log(1 + blocks.length / Math.max(frequency(token), 1))]))
+  const totalWeight = [...weight.values()].reduce((sum, value) => sum + value, 0)
+
+  let best: { n: number; score: number } | null = null
+  for (const block of blocks) {
+    const codeMatches = codes.filter((code) => block.padded.includes(` ${code} `)).length
+    const matched = words.filter((token) => block.padded.includes(` ${token} `))
+    const coverage = totalWeight ? matched.reduce((sum, token) => sum + (weight.get(token) ?? 0), 0) / totalWeight : 0
+    // "PropertyBinding › Eigenschaften": the class heading names the page even
+    // when the German subheading shares nothing with it.
+    const headingMatch = headingWords.some((tokens) => tokens.every((token) => block.padded.includes(` ${token} `)))
+    // Every identifier of the line has to be in the source; one of several is
+    // a shared name, not evidence.
+    const byCode = codes.length > 0 && codeMatches === codes.length
+    const byWords = matched.length >= ATTRIBUTION_MIN_MATCHES && coverage >= ATTRIBUTION_MIN_COVERAGE
+    if (!byCode && !byWords) continue
+    const score = codeMatches * 3 + (headingMatch ? 2 : 0) + coverage * 2
+    if (!best || score > best.score) best = { n: block.n, score }
+  }
+  return best?.n ?? null
+}
+
+/**
+ * Adds the marker a factual line should have carried and did not. The prompt
+ * asks for one on every paragraph and bullet, and Llama 4 Scout still wrote a
+ * twenty-line summary with a single marker on its last bullet — the reader could
+ * not tell which page any of the rest came from. Markers are only ever added,
+ * never removed or changed, and only where the line's own words or identifiers
+ * point at one source. The line streams as before; the marker follows it.
+ */
+export async function* attributeCitations(
+  text: AsyncGenerator<string>,
+  blocks: ContextBlock[],
+): AsyncGenerator<string> {
+  const candidates = blocks
+    .filter((block) => !block.outline)
+    .map((block) => ({ n: block.n, padded: paddedBlockText(`${block.title}\n${block.text}`), title: block.title }))
+  if (!candidates.length) {
+    yield* text
+    return
+  }
+  let line = ''
+  /** The open headings by level; a bold line on its own counts as level 7. */
+  const headings: string[] = []
+  let inFence = false
+  const markerFor = (): string => {
+    const current = line
+    line = ''
+    if (FENCE_LINE.test(current)) { inFence = !inFence; return '' }
+    if (inFence) return ''
+    const trimmed = current.trim()
+    const headingMatch = /^(#{1,6})\s+(.*)$/u.exec(trimmed)
+    const boldLine = /^\*\*([^*]+)\*\*:?$/u.exec(trimmed)
+    if (headingMatch || boldLine) {
+      const level = headingMatch ? headingMatch[1].length : 7
+      headings.length = level - 1
+      headings[level - 1] = headingMatch ? headingMatch[2] : boldLine![1]
+      return ''
+    }
+    if (!trimmed || trimmed.startsWith('|') || trimmed.endsWith(':') || HAS_MARKER.test(trimmed)) return ''
+    if (trimmed.replace(LIST_ITEM, '$2').length < 20 && !/`[^`\n]+`/u.test(trimmed)) return ''
+    const n = attributeLine(trimmed, headings.filter(Boolean), candidates)
+    return n ? ` [${n}]` : ''
+  }
+  for await (const delta of text) {
+    let rest = delta
+    while (rest) {
+      const newline = rest.indexOf('\n')
+      if (newline === -1) {
+        line += rest
+        yield rest
+        break
+      }
+      const piece = rest.slice(0, newline)
+      line += piece
+      if (piece) yield piece
+      const marker = markerFor()
+      yield `${marker}\n`
+      rest = rest.slice(newline + 1)
+    }
+  }
+  if (line) {
+    const marker = markerFor()
+    if (marker) yield marker
+  }
+}
+
 /**
  * The sources first, the question last. With up to 64 000 characters of
  * context, a question stated before it is the part the model has drifted
  * furthest from when it starts writing; placed after it, the question is the
  * last thing read, which is what long-context prompting guidance recommends.
  */
-export function finalUserText(question: string, context: string, mode: 'default' | 'verification' = 'default'): string {
-  const label = mode === 'verification' ? 'Zu prüfender Textentwurf' : 'Frage'
-  return `Quellenkontext:\n${context}\n\n---\n\n${label}:\n${question}`
+export function finalUserText(
+  question: string,
+  context: string,
+  mode: 'default' | 'verification' = 'default',
+  kind?: KnowledgeBaseKind,
+): string {
+  if (mode === 'verification') return `Quellenkontext:\n${context}\n\n---\n\nZu prüfender Textentwurf:\n${question}`
+  // Read last, so it is what the model has in mind when it starts writing. A
+  // smaller model follows the citation rule far more reliably from here than
+  // from a system prompt 30 000 characters earlier.
+  const reminder = 'End every paragraph, bullet and table row that states a fact with its source marker [n].'
+  return `Quellenkontext:\n${context}\n\n---\n\n${kind ? `Knowledge base kind: ${kind}\n` : ''}Frage:\n${question}\n\n(${reminder})`
+}
+
+export type KnowledgeBaseKind = 'documentation' | 'website'
+
+const DOCUMENTATION_PATH = /\/(docs?|documentation|api|reference|manual|guides?|handbuch|developers?|sdk|learn|wiki|tutorials?)(\/|$)/i
+
+/**
+ * Documentation and a company website call for different answers — members and
+ * code for one, offers, conditions and a next step for the other — and one
+ * generic style served neither. Read from what retrieval returned: paths that
+ * look like docs, or passages full of code.
+ */
+export function knowledgeBaseKind(blocks: Array<Pick<ContextBlock, 'url' | 'text'>>): KnowledgeBaseKind | undefined {
+  if (!blocks.length) return undefined
+  let evidence = 0
+  for (const block of blocks) {
+    let path = ''
+    try { path = new URL(block.url).pathname } catch { /* An unknown URL says nothing. */ }
+    const codeSpans = block.text.match(/`[^`\n]{2,}`/g)?.length ?? 0
+    if (DOCUMENTATION_PATH.test(path) || /^\s*(```|~~~)/m.test(block.text) || codeSpans >= 4) evidence += 1
+  }
+  return evidence / blocks.length >= 0.5 ? 'documentation' : 'website'
 }
 
 export function formatGeminiContents(
@@ -581,6 +743,7 @@ export function formatGeminiContents(
   question: string,
   context: string,
   mode: 'default' | 'verification' = 'default',
+  kind?: KnowledgeBaseKind,
 ): Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> {
   const trimmed = trimHistory(history)
   const turns: Array<{ role: 'user' | 'model'; text: string }> = []
@@ -609,7 +772,7 @@ export function formatGeminiContents(
     }
   }
 
-  const finalText = finalUserText(question, context, mode)
+  const finalText = finalUserText(question, context, mode, kind)
   const lastTurn = merged[merged.length - 1]
   if (lastTurn && lastTurn.role === 'user') {
     lastTurn.text += `\n\n${finalText}`
@@ -654,11 +817,12 @@ async function openModelStream(input: ModelStreamInput): Promise<ReadableStream<
   // truncated long lists before the model was finished.
   const maxTokens = 4_000
   const systemPrompt = input.mode === 'verification' ? VERIFICATION_SYSTEM_PROMPT : SYSTEM_PROMPT
+  const kind = knowledgeBaseKind(input.blocks ?? [])
 
   // 1. BYOK: Direct Google AI Studio / Gemini API if user supplied an apiKey
   if (input.apiKey) {
     const geminiModel = normalizeGeminiModel(input.model)
-    const contents = formatGeminiContents(input.history, input.question, input.context, input.mode)
+    const contents = formatGeminiContents(input.history, input.question, input.context, input.mode, kind)
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:streamGenerateContent?alt=sse`
     const request = (generationConfig: object) => fetch(url, {
       method: 'POST',
@@ -696,7 +860,7 @@ async function openModelStream(input: ModelStreamInput): Promise<ReadableStream<
   const runModel = input.ai.run.bind(input.ai) as GatewayAIStreamRun
 
   if (input.model.startsWith('google/gemini-')) {
-    const contents = formatGeminiContents(input.history, input.question, input.context, input.mode)
+    const contents = formatGeminiContents(input.history, input.question, input.context, input.mode, kind)
     const body = {
       systemInstruction: { parts: [{ text: systemPrompt }] },
       contents,
@@ -714,7 +878,7 @@ async function openModelStream(input: ModelStreamInput): Promise<ReadableStream<
     messages: [
       { role: 'system', content: systemPrompt },
       ...trimHistory(input.history),
-      { role: 'user', content: finalUserText(input.question, input.context, input.mode) },
+      { role: 'user', content: finalUserText(input.question, input.context, input.mode, kind) },
     ],
     max_tokens: maxTokens,
     temperature: 0.1,
@@ -741,10 +905,10 @@ async function prepareTextStream(input: ModelStreamInput, deadline: number): Pro
     acceptingStream = false
     throw error instanceof GenerationError || error instanceof ProviderError ? error : new GenerationError('invalid_stream')
   }
-  const text = groundListEntries(
+  const text = attributeCitations(groundListEntries(
     readTextDeltas(stream, deadline, input.signal, input.apiKey ? GEMINI_FIRST_TOKEN_TIMEOUT_MS : IDLE_TIMEOUT_MS),
     input.blocks ?? [],
-  )
+  ), input.blocks ?? [])
   try {
     const first = await text.next()
     if (first.done || !first.value) throw new GenerationError('invalid_stream')

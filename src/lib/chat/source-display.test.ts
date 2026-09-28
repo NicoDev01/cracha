@@ -1,6 +1,29 @@
 import { describe, expect, it } from 'vitest'
 
-import { cleanSnippet, cleanSourceTitle, sourceHosts, sourceLocation } from './source-display'
+import { cleanSnippet, cleanSourceTitle, passageLink, passagePhrase, sourceHosts, sourceLocation } from './source-display'
+
+describe('passage links', () => {
+  const snippet = '# AnimationMixer | three.js docs\n\nQuelle: https://threejs.org/docs/pages/AnimationMixer.html\n\nThe **AnimationMixer** is a player for animations on a particular object in the scene. When multiple objects are animated indepen'
+
+  it('takes the first rendered sentence, skipping the lines the indexer added', () => {
+    expect(passagePhrase(snippet)).toBe('The AnimationMixer is a player for animations')
+  })
+
+  it('reduces markdown links and list markers to their text', () => {
+    expect(passagePhrase('- Siehe [die Preisliste](https://x.de/preise) für alle Tarife und Laufzeiten')).toBe('Siehe die Preisliste für alle Tarife und')
+  })
+
+  it('finds nothing in a snippet without a full line of prose', () => {
+    expect(passagePhrase('| Tarif | Preis |\n| --- | --- |')).toBeNull()
+    expect(passageLink('https://x.de/a', 'zu kurz')).toBe('https://x.de/a')
+  })
+
+  it('appends a text fragment the browser can highlight', () => {
+    expect(passageLink('https://threejs.org/docs/', 'Pre-built helpers make it easy to start quickly today'))
+      .toBe('https://threejs.org/docs/#:~:text=Pre%2Dbuilt%20helpers%20make%20it%20easy%20to%20start')
+    expect(passageLink('https://x.de/a#b', 'eins zwei drei vier fünf sechs sieben')).toMatch(/^https:\/\/x\.de\/a#b:~:text=/)
+  })
+})
 
 describe('cleanSourceTitle', () => {
   it('drops the branding a site appends to every title', () => {

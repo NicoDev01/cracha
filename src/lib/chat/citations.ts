@@ -1,9 +1,14 @@
 import type { Source } from '@/types/chat'
-import { cleanSourceTitle } from './source-display'
+import { passageLink } from './source-display'
 
 export interface IndexedSource {
   index: number
   source: Source
+}
+
+/** The page list of the whole knowledge base, which has no passage to open. */
+export function isOutlineSource(source: Pick<Source, 'id'>): boolean {
+  return source.id === 'site-outline'
 }
 
 export function getCitationNumbers(content: string, sourceCount: number): number[] {
@@ -45,10 +50,11 @@ export function linkifyCitations(content: string, sources: Source[]): string {
       try {
         const url = new URL(source.url)
         if (url.protocol !== 'https:' && url.protocol !== 'http:') return `[${index}]`
-        const href = encodeURI(url.toString()).replace(/\(/g, '%28').replace(/\)/g, '%29')
-        // The marker alone says nothing until clicked; the title is its tooltip.
-        const title = cleanSourceTitle(source.title, source.url).replace(/["\\]/g, '')
-        return `[[${index}]](${href} "${title}")`
+        const base = encodeURI(url.toString()).replace(/\(/g, '%28').replace(/\)/g, '%29')
+        // Opens the page at the passage the answer drew on. Title and passage
+        // are shown on hover by the chat rather than as a native tooltip.
+        const href = isOutlineSource(source) ? base : passageLink(base, source.snippet)
+        return `[[${index}]](${href})`
       } catch {
         return `[${index}]`
       }

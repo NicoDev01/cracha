@@ -91,6 +91,7 @@ export interface ContextBlock {
   collection?: boolean
   truncated?: boolean
   authoritative?: boolean
+  outline?: boolean
 }
 
 export interface RetrievalResponse {

@@ -34,6 +34,7 @@ interface RetrievalResponse {
     collection?: boolean
     truncated?: boolean
     authoritative?: boolean
+    outline?: boolean
   }>
   sources?: Array<{ id: string; title: string; url: string; snippet: string; score: number; chunk_index: string }>
   usage?: { latency_ms?: number; cached?: boolean }
