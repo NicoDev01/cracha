@@ -1016,7 +1016,7 @@ export function packContext(
     if (existing) return existing
     const sourceNumber = sources.length + 1
     sourceNumberByKey.set(key, sourceNumber)
-    sources.push({ id, title, url, snippet: snippet.slice(0, 320), score, chunk_index: id })
+    sources.push({ id, title, url, snippet: sourceSnippet(snippet), score, chunk_index: id })
     return sourceNumber
   }
 
@@ -1102,6 +1102,26 @@ export function packContext(
     blocks,
     sources,
   }
+}
+
+const SNIPPET_CHARACTERS = 320
+
+/**
+ * The start of the passage as the page shows it. The first 320 characters of a
+ * chunk were mostly the lines the indexer adds — `# Title`, `Quelle: <url>` —
+ * so the passage itself was cut to a few words, and mid-word ("Socia").
+ */
+export function sourceSnippet(text: string): string {
+  const body = text
+    .split('\n')
+    .filter((line) => !/^\s*(#\s|Quelle:\s)/u.test(line) && !SECTION_CONTEXT_LINE.test(line))
+    .join('\n')
+    .replace(/^\s*(Zum Inhalt springen|Skip to (main )?content)\b\s*/iu, '')
+    .trim()
+  if (body.length <= SNIPPET_CHARACTERS) return body
+  const cut = body.slice(0, SNIPPET_CHARACTERS)
+  const lastSpace = cut.search(/\s\S*$/u)
+  return `${lastSpace > SNIPPET_CHARACTERS * 0.6 ? cut.slice(0, lastSpace) : cut}…`
 }
 
 function chunkSourceKey(chunk: SearchChunk): string {

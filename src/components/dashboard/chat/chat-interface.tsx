@@ -668,7 +668,7 @@ export function ChatInterface() {
                     : getUncitedSources(messageSources, citedSources);
                   const renderedContent = isUser
                     ? message.content
-                    : linkifyCitations(collapseRepeatedCitations(message.isStreaming ? streamingMarkdown(message.content) : message.content), messageSources);
+                    : linkifyCitations(collapseRepeatedCitations(message.isStreaming ? streamingMarkdown(message.content) : message.content), messageSources, message.isStreaming ? undefined : message.metadata?.citation_anchors);
                   const metadata = !isUser && !message.isStreaming ? message.metadata : undefined;
                   const metaParts = answerMetaParts(metadata, messageSources.length, citedSources.length);
                   return (

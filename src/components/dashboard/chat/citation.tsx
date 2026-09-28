@@ -4,7 +4,7 @@ import * as HoverCard from '@radix-ui/react-hover-card';
 import { ExternalLink } from 'lucide-react';
 import { createContext, useContext, type ReactNode } from 'react';
 import { isOutlineSource } from '@/lib/chat/citations';
-import { cleanSnippet, cleanSourceTitle, passagePhrase, sourceLocation } from '@/lib/chat/source-display';
+import { cleanSnippet, cleanSourceTitle, sourceLocation } from '@/lib/chat/source-display';
 import { cn } from '@/lib/utils';
 import type { Source } from '@/types/chat';
 
@@ -19,9 +19,11 @@ const CHIP = 'mx-0.5 inline-flex min-w-5 items-center justify-center rounded-md 
  * written from, so a claim can be checked without leaving the chat; the link
  * itself opens the page scrolled to that passage.
  */
-export function CitationLink({ index, href, children, className }: {
+export function CitationLink({ index, href, quote, children, className }: {
   index: number;
   href?: string;
+  /** The sentence of the page that supports this marker's line, once known. */
+  quote?: string;
   children: ReactNode;
   className?: string;
 }) {
@@ -41,8 +43,10 @@ export function CitationLink({ index, href, children, className }: {
   if (!source) return link;
 
   const outline = isOutlineSource(source);
-  const passage = outline ? '' : cleanSnippet(source.snippet, 260);
-  const marksPassage = !outline && passagePhrase(source.snippet) !== null;
+  // The supporting sentence for this very line when the answer is finished;
+  // until then, the start of the passage retrieved from the page.
+  const passage = outline ? '' : quote || cleanSnippet(source.snippet, 260);
+  const marksPassage = !outline && Boolean(href?.includes(':~:text='));
   return (
     <HoverCard.Root openDelay={120} closeDelay={80}>
       <HoverCard.Trigger asChild>{link}</HoverCard.Trigger>
@@ -66,9 +70,12 @@ export function CitationLink({ index, href, children, className }: {
             </div>
           </div>
           {passage ? (
-            <blockquote className="mt-2.5 border-l-2 border-brand-200 pl-2.5 text-[12px] leading-5 text-gray-600 dark:border-brand-700 dark:text-gray-300">
+            <>
+            {quote && <p className="mt-2.5 text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">Belegstelle</p>}
+            <blockquote className={`${quote ? 'mt-1' : 'mt-2.5'} border-l-2 border-brand-200 pl-2.5 text-[12px] leading-5 text-gray-600 dark:border-brand-700 dark:text-gray-300`}>
               {passage}
             </blockquote>
+            </>
           ) : outline ? (
             <p className="mt-2.5 text-[12px] leading-5 text-gray-600 dark:text-gray-300">
               Liste aller indexierten Seiten der Wissensbasis, nach Bereichen gruppiert.

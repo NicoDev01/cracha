@@ -1,6 +1,6 @@
 'use client'
 
-import type { ChatResponse, FallbackReason, QueryRequest, RetrievalProgress, Source } from '@/types/chat'
+import type { ChatResponse, CitationAnchor, FallbackReason, QueryRequest, RetrievalProgress, Source } from '@/types/chat'
 import { apiFetch } from '@/lib/api/request'
 
 interface RawSource {
@@ -48,13 +48,18 @@ interface StreamDone {
   substituteDetail?: string
   refunded?: boolean
   reference?: string
+  /** Where each cited line is supported on its page. */
+  anchors?: Record<string, CitationAnchor>
+  /** The corrected answer, sent only when it differs from what was streamed. */
+  text?: string
 }
 
 export interface ChatStreamHandlers {
   onProgress?: (progress: RetrievalProgress) => void
   onStart: (data: { sources: Source[]; model: string; requestedModel?: string; fallback?: boolean; fallbackReason?: FallbackReason; fallbackDetail?: string }) => void
   onDelta: (text: string) => void
-  onDone: (metadata: ChatResponse['metadata']) => void
+  /** `text` replaces the streamed answer when the server corrected it. */
+  onDone: (metadata: ChatResponse['metadata'], text?: string) => void
 }
 
 function mapSources(sources: RawSource[] = []): Source[] {
@@ -161,6 +166,7 @@ class ChatAPIClient {
         fallbackReason = data.fallbackReason ?? fallbackReason
         fallbackDetail = data.fallbackDetail ?? fallbackDetail
         finished = true
+        const corrected = typeof data.text === 'string' && data.text.trim() ? [data.text] as const : [] as const
         handlers.onDone({
           query_time: data.usage?.latency_ms ?? 0,
           retrieval_time: data.usage?.retrieval_ms,
@@ -174,7 +180,8 @@ class ChatAPIClient {
           substitute_detail: requestedModel && !usedFallback ? data.substituteDetail : undefined,
           refunded: data.refunded,
           reference: data.reference,
-        })
+          citation_anchors: data.anchors && typeof data.anchors === 'object' ? data.anchors : undefined,
+        }, ...corrected)
       } else if (event === 'error') {
         throw new Error(data.message ?? 'Die Antwort konnte nicht erzeugt werden.')
       }
@@ -212,8 +219,9 @@ class ChatAPIClient {
       onDelta: (text) => {
         message += text
       },
-      onDone: (doneMetadata) => {
+      onDone: (doneMetadata, text) => {
         metadata = doneMetadata
+        if (text) message = text
       },
     })
     return { message, sources, metadata }

@@ -1,5 +1,6 @@
 import type { Source } from '@/types/chat'
-import { passageLink } from './source-display'
+import type { CitationAnchor } from '@/types/chat'
+import { fragmentLink, passageLink } from './source-display'
 
 export interface IndexedSource {
   index: number
@@ -40,8 +41,14 @@ export function getUncitedSources(sources: Source[], cited: IndexedSource[]): In
     .filter((entry) => !used.has(entry.index))
 }
 
-export function linkifyCitations(content: string, sources: Source[]): string {
-  return content.replace(/\[(\d+(?:\s*,\s*\d+)*)\]/g, (original, group: string) => {
+/**
+ * Turns markers into links. With the anchors of a finished answer, each marker
+ * opens its page at the sentence that supports its own line and carries that
+ * sentence as the link title, which the chat shows on hover; without them it
+ * falls back to the start of the retrieved passage.
+ */
+export function linkifyCitations(content: string, sources: Source[], anchors?: Record<string, CitationAnchor>): string {
+  return content.split('\n').map((line, lineIndex) => line.replace(/\[(\d+(?:\s*,\s*\d+)*)\]/g, (original, group: string) => {
     const links = group.split(',').map((value) => {
       const index = Number(value.trim())
       const source = sources[index - 1]
@@ -51,16 +58,58 @@ export function linkifyCitations(content: string, sources: Source[]): string {
         const url = new URL(source.url)
         if (url.protocol !== 'https:' && url.protocol !== 'http:') return `[${index}]`
         const base = encodeURI(url.toString()).replace(/\(/g, '%28').replace(/\)/g, '%29')
-        // Opens the page at the passage the answer drew on. Title and passage
-        // are shown on hover by the chat rather than as a native tooltip.
-        const href = isOutlineSource(source) ? base : passageLink(base, source.snippet)
-        return `[[${index}]](${href})`
+        if (isOutlineSource(source)) return `[[${index}]](${base})`
+        const anchor = anchors?.[`${lineIndex}:${index}`]
+        const href = anchor ? fragmentLink(base, anchor.phrase) : passageLink(base, source.snippet)
+        const title = anchor ? ` "${anchor.quote.replace(/["\\\n]/g, ' ')}"` : ''
+        return `[[${index}]](${href}${title})`
       } catch {
         return `[${index}]`
       }
     })
     return links.length > 0 ? links.join(' ') : original
-  })
+  })).join('\n')
+}
+
+const LIST_LINE = /^\s*(?:[-*+]|\d+[.)])\s+/u
+const SOLE_TRAILING_MARKER = /^(.*?)\s*\[(\d+)\]([.,;:!?]?)\s*$/u
+
+/**
+ * A list whose every entry cites the same single page, 33 names each followed
+ * by the same [2], reads as noise and says nothing an introducing marker would
+ * not. From three entries on, the marker moves to the sentence that introduces
+ * the list — or stays on the first entry when a heading introduces it.
+ */
+function collapseUniformLists(lines: string[]): string[] {
+  const result = [...lines]
+  let start = 0
+  while (start < result.length) {
+    if (!LIST_LINE.test(result[start])) { start += 1; continue }
+    let end = start
+    const entries: number[] = []
+    while (end < result.length && (LIST_LINE.test(result[end]) || (!result[end].trim() && LIST_LINE.test(result[end + 1] ?? '')))) {
+      if (result[end].trim()) entries.push(end)
+      end += 1
+    }
+    const markers = entries.map((index) => {
+      const match = SOLE_TRAILING_MARKER.exec(result[index])
+      return match && !/\[\d/.test(match[1]) ? match[2] : null
+    })
+    if (entries.length >= 3 && markers[0] && markers.every((marker) => marker === markers[0])) {
+      const marker = `[${markers[0]}]`
+      let intro = start - 1
+      while (intro >= 0 && !result[intro].trim()) intro -= 1
+      const introLine = intro >= 0 ? result[intro] : ''
+      const introIsProse = introLine.trim() && !/^\s*#/.test(introLine) && !LIST_LINE.test(introLine)
+      entries.forEach((index, position) => {
+        if (!introIsProse && position === 0) return
+        result[index] = result[index].replace(SOLE_TRAILING_MARKER, '$1$3')
+      })
+      if (introIsProse && !introLine.includes(marker)) result[intro] = `${introLine.trimEnd()} ${marker}`
+    }
+    start = end
+  }
+  return result
 }
 
 const CITATION_GROUP = /(\s*)\[(\d+(?:\s*,\s*\d+)*)\]/g
@@ -89,12 +138,12 @@ function collapseLine(line: string): string {
  */
 export function collapseRepeatedCitations(content: string): string {
   let inFence = false
-  return content.split('\n').map((line) => {
+  return collapseUniformLists(content.split('\n').map((line) => {
     if (/^\s*(```|~~~)/.test(line)) {
       inFence = !inFence
       return line
     }
     if (inFence) return line
     return collapseLine(line).replace(MARKERS_BEFORE_PUNCTUATION, '$2$1')
-  }).join('\n')
+  })).join('\n')
 }

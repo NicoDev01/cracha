@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 
 import { getWorkerEnv } from '@/lib/server/cloudflare'
-import { DEFAULT_BYOK_MODEL, DEFAULT_GENERATION_MODEL, streamGroundedAnswer } from '@/lib/server/generation'
+import { citationAnchors, DEFAULT_BYOK_MODEL, DEFAULT_GENERATION_MODEL, reciteNumbers, streamGroundedAnswer } from '@/lib/server/generation'
 import { CreditError, getCreditState, spendChatCredits, refundChatCredits, CREDITS, admitRequest, hasUnsettledCrawl, DuplicateRequestError } from '@/lib/server/credits'
 import { getOwnedDatabase } from '@/lib/server/database-registry'
 import { getAuthenticatedUser } from '@/lib/supabase/server'
@@ -217,16 +217,36 @@ export async function POST(request: NextRequest) {
         const substituteReason = generated.substituteReason
         const substituteDetail = generated.substituteDetail
         let hasText = false
+        let answer = ''
         try {
           send('meta', { sources, model, usedModel, fallback, fallbackReason, fallbackDetail, substituteReason, substituteDetail, mode })
           for await (const text of generated.text) {
             signal.throwIfAborted()
             hasText ||= Boolean(text.trim())
+            answer += text
             send('delta', { text })
           }
           signal.throwIfAborted()
           if (!hasText) throw new Error('Empty generation')
-          send('done', { usage: usage(), model, usedModel, fallback, fallbackReason, fallbackDetail, substituteReason, substituteDetail, mode, reference, refunded: false })
+          // Checked on the whole answer: a marker can only be moved once its
+          // line is complete, and by then it has been streamed. The corrected
+          // text replaces the streamed one when it differs.
+          const blocks = mode === 'verification' ? [] : retrieval.blocks ?? []
+          let final = answer
+          let anchors = {}
+          try {
+            final = reciteNumbers(answer, blocks)
+            anchors = citationAnchors(final, blocks)
+          } catch (error) {
+            // A refinement, never a reason to fail an answer that was written.
+            final = answer
+            console.error(JSON.stringify({ event: 'citation_check_failed', reason: error instanceof Error ? error.name : 'unknown' }))
+          }
+          send('done', {
+            usage: usage(), model, usedModel, fallback, fallbackReason, fallbackDetail, substituteReason, substituteDetail, mode, reference, refunded: false,
+            anchors,
+            ...(final !== answer ? { text: final } : {}),
+          })
         } catch (error) {
           console.error(JSON.stringify({ event: 'chat_generation_failed', reason: error instanceof Error ? error.name : 'unknown' }))
           // Deliberately stopping after receiving text must not permit unlimited

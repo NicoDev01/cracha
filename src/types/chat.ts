@@ -56,7 +56,14 @@ export interface ChatResponse {
     substitute_detail?: string
     refunded?: boolean
     reference?: string
+    /** Per `line:n`, the words and sentence of source n that support that line. */
+    citation_anchors?: Record<string, CitationAnchor>
   }
+}
+
+export interface CitationAnchor {
+  phrase: string
+  quote: string
 }
 
 export interface QueryRequest {

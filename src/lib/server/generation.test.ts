@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   GenerationError,
+  anchorFor,
   attributeCitations,
+  citationAnchors,
   finalUserText,
   formatGeminiContents,
   knowledgeBaseKind,
@@ -10,6 +12,7 @@ import {
   groundListEntries,
   groundListEntry,
   paddedBlockText,
+  reciteNumbers,
   trimHistory,
   type ContextBlock,
   type GroundingBlock,
@@ -736,5 +739,52 @@ describe('knowledge base kind', () => {
   it('names the kind next to the question, not in a content check', () => {
     expect(finalUserText('Frage?', 'ctx', 'default', 'website')).toContain('Knowledge base kind: website\nFrage:\nFrage?')
     expect(finalUserText('Entwurf', 'ctx', 'verification', 'website')).not.toContain('Knowledge base kind')
+  })
+})
+
+describe('checking citations against the cited page', () => {
+  // Taken from webmen.de: the team page lists the names, the start page states
+  // the figures. The production answer credited the figures to the team page.
+  const blocks: ContextBlock[] = [
+    {
+      n: 1,
+      title: 'Full-Service-Digitalagentur in Bremen',
+      url: 'https://www.webmen.de/',
+      text: 'Webmen ist seit 1996 Ihre Digitalagentur im Herzen Bremens. Wir sind Ihr Partner für Websites und Shops, Softwareentwicklung und Online Marketing.\nUmsatzstarke Online-Shops mit Magento, WooCommerce oder Shopware.\n1996 Gründungsjahr\n33 Persönlichkeiten\n73 ältester Kollege\n18 jüngster Kollege\n2 Mitarbeitende mit Doktortitel',
+    },
+    {
+      n: 2,
+      title: 'Unser Team',
+      url: 'https://www.webmen.de/agentur-bremen/team',
+      text: 'In unserer Digitalagentur haben wir ein dynamisches und kreatives Team.\nChristiane Niebuhr-Redder\nMark Hapke Reichardt\nAnnie',
+    },
+  ]
+
+  it('moves a marker to the page that states the line\'s numbers', () => {
+    expect(reciteNumbers('Das Team von Webmen besteht aus 33 Persönlichkeiten. [2]', blocks))
+      .toBe('Das Team von Webmen besteht aus 33 Persönlichkeiten. [1]')
+    expect(reciteNumbers('Der älteste Kollege ist 73 Jahre alt und der jüngste 18 Jahre alt.[2]', blocks))
+      .toBe('Der älteste Kollege ist 73 Jahre alt und der jüngste 18 Jahre alt.[1]')
+  })
+
+  it('keeps a marker whose page holds the numbers, and a list ordinal is no claim', () => {
+    const text = 'Seit 1996 in Bremen. [1]\n1. Christiane Niebuhr-Redder [2]'
+    expect(reciteNumbers(text, blocks)).toBe(text)
+  })
+
+  it('keeps a marker when no page holds the number', () => {
+    expect(reciteNumbers('Rund 400 Kunden vertrauen Webmen. [2]', blocks)).toBe('Rund 400 Kunden vertrauen Webmen. [2]')
+  })
+
+  it('finds the sentence that supports the line, not the start of the page', () => {
+    expect(anchorFor('* Umsatzstarke Online-Shops mit Magento, WooCommerce oder Shopware [1]', blocks[0].text))
+      .toEqual({ phrase: 'Umsatzstarke Online-Shops mit Magento, WooCommerce oder Shopware.', quote: 'Umsatzstarke Online-Shops mit Magento, WooCommerce oder Shopware.' })
+    expect(anchorFor('2. Mark Hapke Reichardt [2]', blocks[1].text)?.phrase).toBe('Mark Hapke Reichardt')
+  })
+
+  it('anchors every marker by line', () => {
+    const anchors = citationAnchors('Intro\n1. Christiane Niebuhr-Redder [2]\nGegründet 1996 in Bremen. [1]', blocks)
+    expect(anchors['1:2'].phrase).toBe('Christiane Niebuhr-Redder')
+    expect(anchors['2:1'].phrase).toBe('Webmen ist seit 1996 Ihre Digitalagentur im Herzen')
   })
 })

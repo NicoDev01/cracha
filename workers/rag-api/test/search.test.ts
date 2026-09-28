@@ -22,6 +22,7 @@ import {
   resolveReranking,
   retrieve,
   siblingMentions,
+  sourceSnippet,
   stripSectionContext,
   uploadPages,
 } from '../src/search'
@@ -1000,5 +1001,19 @@ describe('questions about the whole knowledge base', () => {
     expect(result.context).toContain('source_type: site_outline')
     expect(result.context).toContain('three.js is a 3D library for the web.')
     expect(result.blocks[0].outline).toBe(true)
+  })
+})
+
+describe('source snippets', () => {
+  it('start at the passage and end at a word', () => {
+    const snippet = sourceSnippet(`# Social-Media-Marketing
+
+Quelle: https://www.webmen.de/x
+
+Zum Inhalt springen ${'Social Media verbindet Marken mit Menschen. '.repeat(12)}`)
+    expect(snippet.startsWith('Social Media verbindet')).toBe(true)
+    expect(snippet.endsWith('…')).toBe(true)
+    expect(snippet.length).toBeLessThanOrEqual(321)
+    expect(snippet).not.toMatch(/\s\S{1,4}…$/)
   })
 })

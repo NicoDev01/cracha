@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { collapseRepeatedCitations, getCitedSources, getUncitedSources } from './citations'
+import { collapseRepeatedCitations, getCitedSources, getUncitedSources, linkifyCitations } from './citations'
 import type { Source } from '@/types/chat'
 
 const sources = (count: number): Source[] => Array.from({ length: count }, (_, index) => ({
@@ -71,5 +71,31 @@ describe('collapseRepeatedCitations', () => {
   it('leaves code blocks alone', () => {
     const code = '```js\nx[1]; y[1]\n```'
     expect(collapseRepeatedCitations(code)).toBe(code)
+  })
+})
+
+describe('lists citing one page throughout', () => {
+  it('moves the repeated marker to the introducing sentence', () => {
+    const text = 'Zum Team gehören:\n\n1. Anna [2]\n2. Ben [2]\n3. Carla [2]\n\nDanach mehr. [1]'
+    expect(collapseRepeatedCitations(text)).toBe('Zum Team gehören: [2]\n\n1. Anna\n2. Ben\n3. Carla\n\nDanach mehr. [1]')
+  })
+
+  it('keeps it on the first entry under a heading', () => {
+    expect(collapseRepeatedCitations('## Team\n- Anna [2]\n- Ben [2]\n- Carla [2]')).toBe('## Team\n- Anna [2]\n- Ben\n- Carla')
+  })
+
+  it('leaves lists with mixed or few sources alone', () => {
+    const mixed = 'Leistungen:\n- Webdesign [2]\n- SEO [3]\n- Apps [2]'
+    expect(collapseRepeatedCitations(mixed)).toBe(mixed)
+    const short = 'Zwei:\n- A [2]\n- B [2]'
+    expect(collapseRepeatedCitations(short)).toBe(short)
+  })
+})
+
+describe('linking markers with anchors', () => {
+  it('links each line to its own passage and carries the quote', () => {
+    const [source] = sources(1)
+    const text = linkifyCitations('Intro\nAnna leitet das Team. [1]', [source], { '1:1': { phrase: 'Anna leitet', quote: 'Anna leitet das "Team".' } })
+    expect(text).toBe('Intro\nAnna leitet das Team. [[1]](https://example.com/1#:~:text=Anna%20leitet "Anna leitet das  Team .")')
   })
 })

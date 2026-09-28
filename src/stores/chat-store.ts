@@ -116,6 +116,7 @@ export const useChatStore = create<ChatState>()(persist((set, get) => ({
     }
     let complete = false
     let doneMetadata: Message['metadata']
+    let correctedText: string | undefined
     const smoother = createTextSmoother(text => update(messages => messages.map(message => message.id === assistantId ? { ...message, content: message.content + text } : message)))
     try {
       await streamChatQuery({
@@ -136,11 +137,11 @@ export const useChatStore = create<ChatState>()(persist((set, get) => ({
           if (active === request && get().ownerId === request.owner) set({ isLoading: false, isStreaming: true })
         },
         onDelta(text) { smoother.push(text) },
-        onDone(metadata) { complete = true; doneMetadata = metadata },
+        onDone(metadata, text) { complete = true; doneMetadata = metadata; correctedText = text },
       }, request.controller.signal)
       // The answer is finished only once the reader has seen all of it.
       await smoother.drain()
-      if (complete) update(messages => messages.map(message => message.id === assistantId ? { ...message, isStreaming: false, metadata: doneMetadata } : message))
+      if (complete) update(messages => messages.map(message => message.id === assistantId ? { ...message, content: correctedText ?? message.content, isStreaming: false, metadata: doneMetadata } : message))
       // A model without quota or without access fails the same way next time,
       // and trying it first cost every answer several seconds. The one that
       // answered takes its place until the reader picks another.

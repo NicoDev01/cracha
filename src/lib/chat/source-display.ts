@@ -16,7 +16,9 @@ export function cleanSourceTitle(title: string, url: string): string {
   if (!trimmed || trimmed === url) return titleFromUrl(url)
   const [first] = trimmed.split(TITLE_SEPARATOR)
   // "FAQ | Firma" keeps "FAQ"; a two-letter fragment is kept whole instead.
-  return first && first.trim().length >= 3 ? first.trim() : trimmed
+  const name = first && first.trim().length >= 3 ? first.trim() : trimmed
+  // "… für SEO -" is what is left when a site's name was cut off its title.
+  return name.replace(/\s+[-–—|:·]\s*$/u, '')
 }
 
 function pathSegments(url: URL): string[] {
@@ -72,10 +74,17 @@ export function cleanSnippet(snippet: string, maxLength = 220): string {
     .filter((line) => !/^\s*(#{1,6}\s|Quelle:\s|>\s.*›)/u.test(line))
     .join(' ')
     .replace(/[*_`#>|]+/g, ' ')
+    // Table rules and the skip link a crawled page starts with.
+    .replace(/(^|\s)-{3,}(?=\s|$)/g, ' ')
+    .replace(/^\s*(Zum Inhalt springen|Skip to (main )?content)/iu, '')
     .replace(/\[(\d+)\]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
-  return text.length > maxLength ? `${text.slice(0, maxLength - 1).trimEnd()}…` : text
+  if (text.length <= maxLength) return text
+  // Cut at a word, not inside one: "Socia" and "Mob" ended rows of the list.
+  const cut = text.slice(0, maxLength - 1)
+  const lastSpace = cut.lastIndexOf(' ')
+  return `${(lastSpace > maxLength * 0.6 ? cut.slice(0, lastSpace) : cut).replace(/[\s,;:–-]+$/u, '')}…`
 }
 
 const PASSAGE_WORDS = 7
@@ -112,7 +121,11 @@ export function passagePhrase(snippet: string): string | null {
  */
 export function passageLink(url: string, snippet: string): string {
   const phrase = passagePhrase(snippet)
-  if (!phrase) return url
+  return phrase ? fragmentLink(url, phrase) : url
+}
+
+/** `url#:~:text=<phrase>`, with the characters the directive reserves escaped. */
+export function fragmentLink(url: string, phrase: string): string {
   // The spec reserves `-`, `,` and `&` inside a directive.
   const encoded = encodeURIComponent(phrase).replace(/-/g, '%2D').replace(/[()]/g, (c) => (c === '(' ? '%28' : '%29'))
   return `${url}${url.includes('#') ? '' : '#'}:~:text=${encoded}`

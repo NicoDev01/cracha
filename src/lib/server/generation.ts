@@ -173,6 +173,7 @@ SETS AND ENUMERATIONS
 - The source_type markers are internal metadata. Never mention, quote or translate them; write normally, for example "The team consists of:".
 - Scope completeness claims to the provided sources, never to the entire website or the real world. Say "The provided overview lists" rather than claiming the set is universally complete. If a source is partial or says "a selection", "among others" or "examples", explicitly state that limitation. Do not infer missing entries or promise that uncrawled pages contain none.
 - When the question asks how many there are as well as which ones, write the list FIRST and state the total AFTER it. Write that list as a NUMBERED list, never as bullet points, and let the last number you wrote be the total. Never state a total before the list, never take a number the sources state instead of counting, and never state a total that differs from the last number in your own list.
+- When you list every item the source gives, introduce the list as complete ("Zum Team gehören:"), never with "some", "einige" or "for example". Use those words only when you deliberately list a part.
 - Before answering, silently verify that names, numbers and enumerations are complete, deduplicated and covered by the context.
 
 STRUCTURED CONTENT
@@ -182,7 +183,9 @@ STRUCTURED CONTENT
 
 SUMMARIES AND OVERVIEWS
 - A source marked "source_type: site_outline" lists every indexed page of the knowledge base, grouped by section. When it is present, the question is about the knowledge base as a whole: say in one or two sentences what it is and whom it is for, then describe its main areas as 3 to 6 short themed sections, citing the outline for the scope and the other sources for details.
-- Never present a few retrieved pages as "the most important content" of the whole knowledge base. A summary names themes and what they are for; it does not copy lists of properties, methods or fields.
+- Never present a few retrieved pages as "the most important content" of the whole knowledge base. A summary names themes and what they are for; it does not copy lists of properties, methods or fields, and it does not repeat a theme under a second heading.
+- If the outline shows a small or narrow knowledge base (for example ten pages from one area of a documentation), say so in the first sentence and name that area; never call single pages or classes its "main areas". For documentation, explain how the covered parts work together.
+- For an organisation's website, lead with the key facts the sources state: what it does, since when, where, how large, for whom, then its offers and how to get in touch. A single blog post is not a main theme.
 
 CITATIONS
 - Every paragraph, bullet and table row containing a factual claim must end with the marker [n] of the source that states it. A factual answer without markers is invalid.
@@ -694,6 +697,138 @@ export async function* attributeCitations(
     const marker = markerFor()
     if (marker) yield marker
   }
+}
+
+const NUMBER = /\d+(?:[.,]\d+)*/gu
+const MARKER_GROUP = /\s*\[(\d+(?:\s*,\s*\d+)*)\]/gu
+
+/** The numbers a line states, without its list ordinal and its markers. */
+function claimNumbers(line: string): string[] {
+  const body = line.replace(/^\s*(?:[-*+]|\d+[.)])\s+/u, '').replace(CITATION_MARKERS, '')
+  return [...new Set(body.match(NUMBER) ?? [])].map((number) => ` ${normalizeForMatch(number)} `)
+}
+
+function citedNumbers(line: string): number[] {
+  return [...line.matchAll(MARKER_GROUP)].flatMap((match) => match[1].split(',').map((value) => Number(value.trim())))
+}
+
+/**
+ * A marker whose page does not contain the line's numbers is a wrong citation,
+ * however plausible the page looks. "Das Team besteht aus 33 Persönlichkeiten
+ * [2]" cited the team page, which lists 33 names but never states the number;
+ * the start page does. When exactly the cited pages lack a number and another
+ * page holds all of them, the marker is moved there. Numbers are the one kind
+ * of claim that can be checked this strictly in any language.
+ */
+export function reciteNumbers(text: string, blocks: ContextBlock[]): string {
+  const candidates = blocks
+    .filter((block) => !block.outline)
+    .map((block) => ({ n: block.n, padded: paddedBlockText(`${block.title}\n${block.text}`), title: block.title }))
+  if (candidates.length < 2) return text
+  let inFence = false
+  return text.split('\n').map((line) => {
+    if (FENCE_LINE.test(line)) { inFence = !inFence; return line }
+    if (inFence) return line
+    const cited = citedNumbers(line)
+    const numbers = claimNumbers(line)
+    if (!cited.length || !numbers.length) return line
+    const holds = (padded: string) => numbers.every((number) => padded.includes(number))
+    const citedBlocks = candidates.filter((block) => cited.includes(block.n))
+    if (!citedBlocks.length || citedBlocks.some((block) => holds(block.padded))) return line
+    const supporting = candidates.filter((block) => holds(block.padded))
+    if (!supporting.length) return line
+    const best = supporting.length === 1 ? supporting[0].n : attributeLine(line.replace(CITATION_MARKERS, ''), [], supporting)
+    if (!best) return line
+    let replaced = false
+    return line.replace(MARKER_GROUP, (whole) => {
+      if (replaced) return ''
+      replaced = true
+      return `${/^\s*/u.exec(whole)?.[0] ?? ''}[${best}]`
+    })
+  }).join('\n')
+}
+
+export interface CitationAnchor {
+  /** A few words the page shows verbatim, for a `#:~:text=` link. */
+  phrase: string
+  /** The sentence of the page that supports the line, shown on hover. */
+  quote: string
+}
+
+const ANCHOR_WORDS = 8
+const ANCHOR_QUOTE_CHARACTERS = 280
+
+function plainSegment(segment: string): string {
+  return segment
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/^\s*(?:[-*+]|\d+[.)])\s+/u, '')
+    .replace(/\\([\\`*_{}[\]()#+\-.!])/g, '$1')
+    .replace(/[*_`#|]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
+ * The sentence of a source that best supports one line of the answer. A link to
+ * the page opened it at the top, or at the first sentence of the retrieved
+ * passage whatever the line said — for eleven services on one start page, the
+ * same intro sentence every time.
+ */
+export function anchorFor(claim: string, sourceText: string): CitationAnchor | null {
+  const claimTokens = new Set(normalizeForMatch(claim.replace(CITATION_MARKERS, '')).split(' ').filter((token) => token.length >= 3 || /\d/u.test(token)))
+  if (!claimTokens.size) return null
+  let best: { words: string[]; score: number; first: number; text: string } | null = null
+  for (const raw of sourceText.split(/\n+|(?<=[.!?])\s+/u)) {
+    // Lines the indexer added — `Quelle: <url>`, `> Title › Section` — and
+    // table rules are not text the page shows.
+    if (/^\s*(Quelle:\s|---|> .* › )/u.test(raw)) continue
+    const text = plainSegment(raw)
+    const words = text.split(' ').filter(Boolean)
+    if (words.length < 2) continue
+    let score = 0
+    let first = -1
+    words.forEach((word, index) => {
+      // Inflections share a stem: "Bremen" in the answer, "Bremens" on the page.
+      const hit = normalizeForMatch(word).split(' ').some((token) => claimTokens.has(token)
+        || (token.length >= 5 && [...claimTokens].some((claimed) => claimed.length >= 5
+          && (token.startsWith(claimed) || claimed.startsWith(token)))))
+      if (!hit) return
+      score += 1
+      if (first === -1) first = index
+    })
+    if (score > (best?.score ?? 0)) best = { words, score, first, text }
+  }
+  // One shared word is a coincidence unless the line is a name or a term.
+  if (!best || best.score < Math.min(2, claimTokens.size)) return null
+  // From the sentence start when the match is near it, so the highlight reads
+  // as a sentence; otherwise one word before the first match.
+  const from = best.first < ANCHOR_WORDS / 2 ? 0 : best.first - 1
+  const start = best.words.length <= ANCHOR_WORDS ? 0 : Math.min(from, best.words.length - ANCHOR_WORDS)
+  return {
+    phrase: best.words.slice(start, start + ANCHOR_WORDS).join(' '),
+    quote: best.text.length > ANCHOR_QUOTE_CHARACTERS ? `${best.text.slice(0, ANCHOR_QUOTE_CHARACTERS - 1).trimEnd()}…` : best.text,
+  }
+}
+
+/**
+ * Per line and marker, where on the cited page the line is supported. Keyed
+ * `line:n`; the client links and quotes each marker with it once the answer is
+ * complete.
+ */
+export function citationAnchors(text: string, blocks: ContextBlock[]): Record<string, CitationAnchor> {
+  const byNumber = new Map(blocks.filter((block) => !block.outline).map((block) => [block.n, block]))
+  const anchors: Record<string, CitationAnchor> = {}
+  let inFence = false
+  text.split('\n').forEach((line, index) => {
+    if (FENCE_LINE.test(line)) { inFence = !inFence; return }
+    if (inFence) return
+    for (const n of new Set(citedNumbers(line))) {
+      const block = byNumber.get(n)
+      const anchor = block ? anchorFor(line, block.text) : null
+      if (anchor) anchors[`${index}:${n}`] = anchor
+    }
+  })
+  return anchors
 }
 
 /**
