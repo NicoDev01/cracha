@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { scrubBreadcrumb, scrubEvent, withoutQuery } from "./error-reporting";
+import { IGNORED_ERRORS, scrubBreadcrumb, scrubEvent, withoutQuery } from "./error-reporting";
 
 describe("error reporting", () => {
   it("drops query strings and fragments, which carry sign-in codes", () => {
@@ -26,5 +26,11 @@ describe("error reporting", () => {
       url: "/api/chat",
       status_code: 500,
     });
+  });
+
+  it("ignores the Outlook Safe Links scanner, not real errors", () => {
+    const ignored = (message: string) => IGNORED_ERRORS.some((pattern) => pattern.test(message));
+    expect(ignored("Non-Error promise rejection captured with value: Object Not Found Matching Id:3, MethodName:update, ParamCount:4")).toBe(true);
+    expect(ignored("TypeError: Cannot read properties of undefined (reading 'update')")).toBe(false);
   });
 });

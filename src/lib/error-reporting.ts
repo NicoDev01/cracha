@@ -13,6 +13,14 @@ const DSN = "https://2ecf04ff0a9a7e1e33697d33e3de0bc0@o4509519950839808.ingest.d
 /** `next start`, `wrangler dev` and previews run production builds too. */
 const PRODUCTION_HOST = "cracha-app.com";
 
+/**
+ * Not ours. Microsoft's Safe Links scanner (CefSharp) opens links from mails —
+ * here the sign-up confirmation sent to a company on Microsoft 365 — and its
+ * injected bridge rejects a promise with this string. No visitor sees it.
+ * https://trackjs.com/javascript-errors/object-not-found-matching-id-methodname-paramcount/
+ */
+export const IGNORED_ERRORS = [/Object Not Found Matching Id:\d+, MethodName:\w+, ParamCount:\d+/];
+
 type SentryModule = typeof import("@sentry/browser");
 let loading: Promise<SentryModule> | null = null;
 
@@ -62,6 +70,7 @@ function loadSentry(): Promise<SentryModule> | null {
         stackFrameVariables: false,
       },
       denyUrls: [/^(chrome|moz|safari(-web)?)-extension:\/\//],
+      ignoreErrors: IGNORED_ERRORS,
       beforeSend: scrubEvent,
       beforeBreadcrumb: scrubBreadcrumb,
     });

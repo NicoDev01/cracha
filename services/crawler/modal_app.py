@@ -227,9 +227,6 @@ async def finalize_index(
 async def process_crawl(payload: dict, job_id: str) -> dict:
     request = CrawlRequest.model_validate(payload)
     ingest_client = RagIngestClient()
-    # Here rather than in the endpoint: this function is already long-running,
-    # so the cleanup costs the caller nothing.
-    await prune_crawl_statuses()
 
     async def report_progress(progress: dict[str, object]) -> None:
         result = {}
@@ -624,3 +621,6 @@ async def reconcile_settlements() -> None:
             )
         else:
             await update_status(job_id)
+    # Here, not at the start of a crawl, where it ran between the user's click
+    # and the first page fetched. This sweep reads every record anyway.
+    await prune_crawl_statuses()

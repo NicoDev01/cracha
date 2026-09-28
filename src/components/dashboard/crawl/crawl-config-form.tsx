@@ -105,6 +105,12 @@ export function CrawlConfigForm({
     }
   }, [initialValues, form])
 
+  // The crawler container is usually asleep when someone opens this form; by
+  // the time the URL is typed it is awake, so the start does not wait for it.
+  useEffect(() => {
+    void apiFetch("/api/admin/crawl/warm", { method: "POST" }).catch(() => undefined)
+  }, [])
+
   const crawlType = form.watch("type")
   const url = form.watch("url")
   const crawlAll = form.watch("crawl_all")

@@ -50,7 +50,8 @@ async def test_the_crawls_coverage_decides_whether_the_worker_may_prune(
     monkeypatch.setattr(modal_app, "crawl_pages", crawl)
     monkeypatch.setattr(modal_app, "RagIngestClient", Ingest)
     monkeypatch.setattr(modal_app, "update_status", AsyncMock())
-    monkeypatch.setattr(modal_app, "prune_crawl_statuses", AsyncMock())
+    prune = AsyncMock()
+    monkeypatch.setattr(modal_app, "prune_crawl_statuses", prune)
 
     result = await modal_app.process_crawl.get_raw_f()(
         {"url": "https://example.com/", "tenant_id": "kb", "user_id": "user"}, "job"
@@ -58,3 +59,5 @@ async def test_the_crawls_coverage_decides_whether_the_worker_may_prune(
 
     assert result["success"] is True
     assert finalized["crawl_complete"] is expected
+    # Housekeeping belongs to the scheduled sweep, not to the user's wait.
+    prune.assert_not_awaited()
