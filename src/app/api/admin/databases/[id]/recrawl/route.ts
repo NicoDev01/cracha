@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { enqueueCrawl } from '@/lib/server/crawler-api'
+import { CrawlRateLimitError, enqueueCrawl } from '@/lib/server/crawler-api'
 import { getOwnedDatabase } from '@/lib/server/database-registry'
 import { CreditError } from '@/lib/server/credits'
 import { getAuthenticatedUser } from '@/lib/supabase/server'
@@ -28,6 +28,9 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
       requested_page_limit: result.requested_page_limit,
     }, { status: 202 })
   } catch (error) {
+    if (error instanceof CrawlRateLimitError) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 429, headers: { 'Retry-After': String(error.retryAfter) } })
+    }
     if (error instanceof CreditError) {
       return NextResponse.json({ success: false, error: error.message, reason: error.reason, credits: error.state }, { status: 402 })
     }

@@ -17,3 +17,5 @@ Danach gehören Geheimnisse ausschließlich in Cloudflare Secrets, Modal Secrets
 - Wissensbasen werden serverseitig ihrem Eigentümer zugeordnet.
 - Crawler und Ingestion verwenden getrennte, zeitnah rotierbare Service-Tokens.
 - Der Crawler lehnt lokale, private und reservierte Zieladressen ab und respektiert standardmäßig `robots.txt`.
+- Registrierungen mit Wegwerf-Adressen lehnt der Supabase-Hook `before_user_created` ab (Liste `public.disposable_email_domains`, aktualisierbar mit `node scripts/disposable-domains.mjs`).
+- Crawl-Starts sind je Konto auf 5 pro 10 Minuten und 25 pro Tag begrenzt; Chat, Analyse, Checkout, Warmstart und Statusabfragen haben eigene Fenster (`admit_request`).

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getWorkerEnv } from '@/lib/server/cloudflare'
-import { settleCrawlCredits } from '@/lib/server/credits'
+import { admitRequest, settleCrawlCredits } from '@/lib/server/credits'
 import { getAuthenticatedUser } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
@@ -38,6 +38,12 @@ function skippedPages(value: unknown): Array<{ url: string; reason: string }> | 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ jobId: string }> }) {
   const user = await getAuthenticatedUser()
   if (!user) return NextResponse.json({ success: false, error: 'Authentifizierung erforderlich.' }, { status: 401 })
+
+  // The page polls every two to three seconds, about 25 a minute per open
+  // tab. Each poll reaches the crawler, so a loop far above that is refused.
+  if (!(await admitRequest(user.id, 'crawl-status', 90, 60))) {
+    return NextResponse.json({ success: false, error: 'Zu viele Statusabfragen. Bitte schließe doppelte Tabs.' }, { status: 429, headers: { 'Retry-After': '60' } })
+  }
 
   const { jobId } = await params
   const env = getWorkerEnv()

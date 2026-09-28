@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { getWorkerEnv } from '@/lib/server/cloudflare'
+import { admitRequest } from '@/lib/server/credits'
 import { getAuthenticatedUser } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
@@ -17,6 +18,9 @@ export async function POST() {
   if (!user) return NextResponse.json({ success: false }, { status: 401 })
   const env = getWorkerEnv()
   if (!env.MODAL_CRAWLER_URL || !env.CRAWLER_API_SECRET) return new NextResponse(null, { status: 204 })
+  // Each call keeps a container awake for minutes. The form sends one per
+  // visit; more than that is a script, and it gets the same silent answer.
+  if (!(await admitRequest(user.id, 'warm', 6, 60))) return new NextResponse(null, { status: 204 })
   await fetch(`${env.MODAL_CRAWLER_URL.replace(/\/$/, '')}/warm`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${env.CRAWLER_API_SECRET}` },

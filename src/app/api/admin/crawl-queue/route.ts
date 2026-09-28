@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { enqueueCrawl, type CrawlInput } from '@/lib/server/crawler-api'
+import { CrawlRateLimitError, enqueueCrawl, type CrawlInput } from '@/lib/server/crawler-api'
 import { CreditError } from '@/lib/server/credits'
 import { getAuthenticatedUser } from '@/lib/supabase/server'
 
@@ -53,6 +53,9 @@ export async function POST(request: NextRequest) {
     // An empty balance is not a service failure, and logging it as one would
     // bury the real ones. 402 tells the interface to offer a top-up instead of
     // suggesting a retry.
+    if (error instanceof CrawlRateLimitError) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 429, headers: { 'Retry-After': String(error.retryAfter) } })
+    }
     if (error instanceof CreditError) {
       return NextResponse.json({ success: false, error: error.message, reason: error.reason, credits: error.state }, { status: 402 })
     }

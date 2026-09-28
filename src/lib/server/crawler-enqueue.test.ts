@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-const mocks = vi.hoisted(() => ({ state: vi.fn(), hold: vi.fn(), release: vi.fn(), bind: vi.fn(), create: vi.fn(), save: vi.fn(), owned: vi.fn(), put: vi.fn(), fetch: vi.fn() }))
+const mocks = vi.hoisted(() => ({ admit: vi.fn(), state: vi.fn(), hold: vi.fn(), release: vi.fn(), bind: vi.fn(), create: vi.fn(), save: vi.fn(), owned: vi.fn(), put: vi.fn(), fetch: vi.fn() }))
 vi.mock('./cloudflare', () => ({ getWorkerEnv: () => ({ MODAL_CRAWLER_URL: 'https://crawler.example', CRAWLER_API_SECRET: 'test', DATABASE_REGISTRY: { put: mocks.put } }) }))
-vi.mock('./credits', async original => ({ ...await original<typeof import('./credits')>(), getCreditState: mocks.state, holdCrawlCredits: mocks.hold, releaseCrawlCredits: mocks.release, bindCrawlHold: mocks.bind }))
+vi.mock('./credits', async original => ({ ...await original<typeof import('./credits')>(), admitRequest: mocks.admit, getCreditState: mocks.state, holdCrawlCredits: mocks.hold, releaseCrawlCredits: mocks.release, bindCrawlHold: mocks.bind }))
 vi.mock('./database-registry', async original => ({ ...await original<typeof import('./database-registry')>(), createDatabase: mocks.create, saveDatabase: mocks.save, getOwnedDatabase: mocks.owned }))
 import { enqueueCrawl } from './crawler-api'
 const input = { url: 'https://example.com', database_name: 'Test', limit: 20 }
 beforeEach(() => {
   vi.resetAllMocks(); vi.stubGlobal('fetch', mocks.fetch)
+  mocks.admit.mockResolvedValue(true)
   mocks.state.mockResolvedValue({ balance: 100, databases: 0, maxDatabases: 25 })
   mocks.hold.mockResolvedValue(true)
   mocks.create.mockResolvedValue({ id: 'db', user_id: 'user', name: 'Test' })
@@ -56,5 +57,17 @@ it('rejects recrawl when database is marked as deleting', async () => {
 it('rejects recrawl when database is already crawling', async () => {
   mocks.owned.mockResolvedValue({ id: 'db-run', user_id: 'user', name: 'Run', status: 'crawling' })
   await expect(enqueueCrawl({ ...input, database_id: 'db-run' }, 'user')).rejects.toThrow('bereits indexiert')
+  expect(mocks.hold).not.toHaveBeenCalled()
+})
+it('refuses a burst of crawl starts before reserving money or waking the crawler', async () => {
+  mocks.admit.mockResolvedValueOnce(false)
+  await expect(enqueueCrawl(input, 'user')).rejects.toMatchObject({ retryAfter: 600 })
+  expect(mocks.admit).toHaveBeenCalledTimes(1)
+  expect(mocks.fetch).not.toHaveBeenCalled(); expect(mocks.hold).not.toHaveBeenCalled()
+})
+it('refuses crawl starts past the daily limit', async () => {
+  mocks.admit.mockResolvedValueOnce(true).mockResolvedValueOnce(false)
+  await expect(enqueueCrawl(input, 'user')).rejects.toThrow('Tageslimit')
+  expect(mocks.admit).toHaveBeenLastCalledWith('user', 'crawl-day', 25, 86_400)
   expect(mocks.hold).not.toHaveBeenCalled()
 })

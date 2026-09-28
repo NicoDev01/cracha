@@ -3,6 +3,7 @@ import { z } from 'zod'
 
 import { getWorkerEnv } from './cloudflare'
 import {
+  admitRequest,
   affordablePages,
   bindCrawlHold,
   CreditError,
@@ -22,6 +23,15 @@ import {
   type CrawlType,
   type DatabaseRecord,
 } from './database-registry'
+
+/** Too many crawl starts; the routes answer 429 with `retryAfter` seconds. */
+export class CrawlRateLimitError extends Error {
+  constructor(readonly retryAfter: number) {
+    super(retryAfter > 3600
+      ? 'Tageslimit für Crawls erreicht. Bitte versuche es morgen erneut.'
+      : 'Zu viele Crawls in kurzer Zeit. Bitte warte ein paar Minuten.')
+  }
+}
 
 export interface CrawlInput {
   url: string
@@ -116,6 +126,13 @@ export async function enqueueCrawl(input: CrawlInput, userId: string) {
   if (rebuilding?.status === 'crawling') {
     throw new Error('Wissensbasis wird bereits indexiert.')
   }
+
+  // Only one crawl runs per account (credit_hold), but a start that is
+  // cancelled at once is free and still wakes a crawler container and indexes
+  // pages. These two windows bound that loop; the daily one is only asked
+  // when the short one admits, so a burst of clicks does not burn the day.
+  if (!(await admitRequest(userId, 'crawl', 5, 600))) throw new CrawlRateLimitError(600)
+  if (!(await admitRequest(userId, 'crawl-day', 25, 86_400))) throw new CrawlRateLimitError(86_400)
 
   // Every crawl is priced here rather than in the two routes that lead to it,
   // so a route added later cannot forget to ask. It happens before anything is
