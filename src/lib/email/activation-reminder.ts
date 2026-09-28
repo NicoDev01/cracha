@@ -19,7 +19,7 @@ const starterQuestions = Math.floor((CREDITS.welcome - starterPages * CREDITS.pe
 const crawlUrl = `${siteConfig.url}/dashboard/crawl`;
 const guideUrl = `${siteConfig.url}/website-mit-ki-durchsuchen`;
 const privacyUrl = `${siteConfig.url}/datenschutz`;
-const logoUrl = `${siteConfig.url}/images/logo/logo-email.png`;
+const logoUrl = `${siteConfig.url}/images/logo/logo-email.png?v=2`;
 
 const subject = `Deine ${CREDITS.welcome} Start-Credits warten noch`;
 const heading = "Deine erste Website wartet";
