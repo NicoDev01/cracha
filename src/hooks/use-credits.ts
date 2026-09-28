@@ -15,6 +15,39 @@ export interface CreditEntry { amount: number; kind: string; detail: string | nu
 export interface CreditPackage { id: string; credits: number; priceCents: number; label: string }
 interface CreditData { credits: CreditState; entries: CreditEntry[]; packages: CreditPackage[] }
 
+let inflight: { owner: string; promise: Promise<CreditData> } | null = null
+
+/**
+ * One request for every component that asks at the same time. The header, the
+ * credit card and the crawl form each used this hook, and a dashboard load sent
+ * /api/credits four times in the same 60 ms — each one three database reads.
+ */
+function loadCredits(owner: string): Promise<CreditData> {
+  if (inflight?.owner === owner) return inflight.promise
+  const promise = fetch('/api/credits', { cache: 'no-store', signal: AbortSignal.timeout(15_000) })
+    .then(async (response) => {
+      const result = await response.json() as CreditData & { error?: string }
+      if (!response.ok || !result.credits) throw new Error(result.error || 'Guthaben konnte nicht geladen werden.')
+      return result
+    })
+    .finally(() => { if (inflight?.promise === promise) inflight = null })
+  inflight = { owner, promise }
+  return promise
+}
+
+let forgottenFor: Event | null = null
+
+/**
+ * A change was just made, so an answer already on its way may predate it.
+ * Every mounted hook hears the same event; only the first may drop the
+ * request, or each would discard the one the previous hook just started.
+ */
+function forgetInflightCredits(event: Event) {
+  if (forgottenFor === event) return
+  forgottenFor = event
+  inflight = null
+}
+
 /** No browser-persisted balance: every account receives fresh server data. */
 export function useCredits() {
   const owner = useAuthStore(state => state.user?.id)
@@ -34,9 +67,7 @@ export function useCredits() {
     setLoading(true)
     setError(null)
     try {
-      const response = await fetch('/api/credits', { cache: 'no-store', signal: AbortSignal.timeout(15_000) })
-      const result = await response.json() as CreditData & { error?: string }
-      if (!response.ok || !result.credits) throw new Error(result.error || 'Guthaben konnte nicht geladen werden.')
+      const result = await loadCredits(owner)
       if (ownerRef.current === owner && request.current === sequence) {
         setData({ owner, value: result }); setError(null)
       }
@@ -51,10 +82,8 @@ export function useCredits() {
     let active = true
     const sequence = ++request.current
 
-    fetch('/api/credits', { cache: 'no-store', signal: AbortSignal.timeout(15_000) })
-      .then(async (response) => {
-        const result = await response.json() as CreditData & { error?: string }
-        if (!response.ok || !result.credits) throw new Error(result.error || 'Guthaben konnte nicht geladen werden.')
+    loadCredits(owner)
+      .then((result) => {
         if (active && ownerRef.current === owner && request.current === sequence) {
           setData({ owner, value: result })
           setError(null)
@@ -72,11 +101,12 @@ export function useCredits() {
       })
 
     const reload = () => { void refresh() }
-    window.addEventListener('cracha:credits-changed', reload)
+    const changed = (event: Event) => { forgetInflightCredits(event); void refresh() }
+    window.addEventListener('cracha:credits-changed', changed)
     window.addEventListener('focus', reload)
     return () => {
       active = false
-      window.removeEventListener('cracha:credits-changed', reload)
+      window.removeEventListener('cracha:credits-changed', changed)
       window.removeEventListener('focus', reload)
     }
   }, [owner, refresh])

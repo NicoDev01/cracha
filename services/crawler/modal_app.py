@@ -33,6 +33,11 @@ INGEST_MAX_BUFFER_SECONDS = 5.0
 # first had to start. Waiting here costs an idle crawl container for a minute;
 # handing over cost the user that start.
 CRAWL_INDEX_WAIT_SECONDS = 150
+# A cold crawl container took about seven seconds to start, all of it between
+# the click and the first page. The crawl form wakes one while it is being
+# filled in (POST /warm), and it waits this long for the crawl to arrive.
+WARM_CRAWLER_SECONDS = 180
+_last_warm = 0.0
 image = (
     modal.Image.debian_slim(python_version="3.12")
     .apt_install("curl")
@@ -217,7 +222,9 @@ async def finalize_index(
     timeout=3600,
     cpu=2.0,
     memory=4096,
-    scaledown_window=60,
+    # Long enough for a container woken by /warm while the form is filled in to
+    # still be there when the crawl is started.
+    scaledown_window=WARM_CRAWLER_SECONDS,
     # Each crawl holds 2 CPUs and 4 GB for as long as it runs, and nothing
     # bounded how many could start at once. Ten at a time is far more than the
     # expected load, so no one waits in practice — it exists so that a burst
@@ -225,6 +232,9 @@ async def finalize_index(
     max_containers=10,
 )
 async def process_crawl(payload: dict, job_id: str) -> dict:
+    if payload.get("warm") is True:
+        # Only here so a container exists; the next real crawl lands in it.
+        return {"warm": True}
     request = CrawlRequest.model_validate(payload)
     ingest_client = RagIngestClient()
 
@@ -475,6 +485,17 @@ def api():
             "status": "healthy", "service": APP_NAME, "billing_protocol": 1,
             "settlement_configured": bool(os.environ.get("CRAWLER_SETTLEMENT_URL")),
         }
+
+    @web.post("/warm", dependencies=[Depends(authorize)])
+    async def warm() -> dict:
+        """Starts a crawl container ahead of the crawl, at most once a minute."""
+        global _last_warm
+        now = time.monotonic()
+        if now - _last_warm < 60:
+            return {"warming": False}
+        _last_warm = now
+        await process_crawl.spawn.aio({"warm": True}, "warm")
+        return {"warming": True}
 
     @web.post("/analyze", dependencies=[Depends(authorize)])
     async def analyze(request: AnalyzeRequest) -> SiteAnalysis:

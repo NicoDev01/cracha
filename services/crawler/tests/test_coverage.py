@@ -61,3 +61,16 @@ async def test_the_crawls_coverage_decides_whether_the_worker_may_prune(
     assert finalized["crawl_complete"] is expected
     # Housekeeping belongs to the scheduled sweep, not to the user's wait.
     prune.assert_not_awaited()
+
+
+async def test_a_warm_up_call_starts_no_crawl(monkeypatch) -> None:
+    # The crawl form wakes a container ahead of the crawl. That call must not
+    # touch any status, billing or index: it only makes the container exist.
+    update = AsyncMock()
+    monkeypatch.setattr(modal_app, "update_status", update)
+    monkeypatch.setattr(modal_app, "RagIngestClient", None)
+
+    result = await modal_app.process_crawl.get_raw_f()({"warm": True}, "warm")
+
+    assert result == {"warm": True}
+    update.assert_not_awaited()

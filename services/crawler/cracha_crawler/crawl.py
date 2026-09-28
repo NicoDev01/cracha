@@ -52,6 +52,12 @@ SITEMAP_PATHS = (
 # result is reported as truncated rather than as a total.
 ANALYSIS_URL_LIMIT = 25_000
 MIN_BROWSER_TIMEOUT_SECONDS = 60
+# Pages the browser renders at once. crawl4ai's default is five, which paced a
+# crawl at about one page a second: measured on twenty pages of nhochdrei.de,
+# 33.0 s twice at five, 23.5 and 26.8 s at ten, with identical markdown. Four
+# CPUs instead of two changed nothing, so the wait is the pages, not the
+# machine. crawl4ai still spaces requests to one host and backs off on 429/503.
+BROWSER_SESSIONS = 10
 MAX_BROWSER_TIMEOUT_SECONDS = 900
 ProgressCallback = Callable[[dict[str, object]], Awaitable[None]]
 HTML_LINK_RE = re.compile(
@@ -275,13 +281,18 @@ async def _safe_download(client: httpx.AsyncClient, url: str) -> tuple[bytes, st
     raise ValueError("Sitemap redirected too often.")
 
 
-async def _dynamic_page_urls(start_url: str, source_host: str | None) -> list[str]:
-    try:
-        async with create_safe_client(timeout=15) as client:
-            content, final_url = await _safe_download(client, start_url)
-    except (httpx.HTTPError, ValueError, OSError) as error:
-        print(f"[CRAWL] dynamic discovery unavailable: {type(error).__name__}: {error}")
-        return []
+async def _dynamic_page_urls(
+    start_url: str, source_host: str | None, start_page: tuple[bytes, str] | None = None
+) -> list[str]:
+    """`start_page` is the start URL already downloaded, as (content, final URL)."""
+    if start_page is None:
+        try:
+            async with create_safe_client(timeout=15) as client:
+                start_page = await _safe_download(client, start_url)
+        except (httpx.HTTPError, ValueError, OSError) as error:
+            print(f"[CRAWL] dynamic discovery unavailable: {type(error).__name__}: {error}")
+            return []
+    content, final_url = start_page
     html = content.decode("utf-8", errors="ignore")
     prefix_match = DYNAMIC_PAGE_PREFIX_RE.search(html)
     if not prefix_match:
@@ -305,24 +316,27 @@ def _www_twins(host: str | None, other: str | None) -> bool:
     return host.removeprefix("www.") == other.removeprefix("www.")
 
 
-async def _settled_start_url(url: str) -> str:
-    """The start URL on the host the site actually serves.
+async def _settled_start_url(url: str) -> tuple[str, tuple[bytes, str] | None]:
+    """The start URL on the host the site actually serves, and its download.
 
     Every pass keeps to the start URL's host, so a site that sends `simba.de`
     to `www.simba.de` had its own start page rejected as an off-site redirect,
     and the crawl failed with "simba.de war nicht erreichbar". Only the
     www/apex hop is adopted; any other redirect is left for the passes to
     refuse as before.
+
+    The download is handed on because the browser pass fetched the same page
+    again before starting Chromium, one more round trip before the first page.
     """
     try:
         async with create_safe_client(timeout=15) as client:
-            _content, final_url = await _safe_download(client, url)
+            content, final_url = await _safe_download(client, url)
     except (httpx.HTTPError, ValueError, OSError):
-        return url
+        return url, None
     if _www_twins(urlsplit(url).hostname, urlsplit(final_url).hostname):
         print(f"[CRAWL] start URL {url} is served from {final_url}")
-        return canonical_url(final_url)
-    return url
+        return canonical_url(final_url), (content, final_url)
+    return url, (content, final_url)
 
 
 class CrawlBlockedError(RuntimeError):
@@ -821,6 +835,7 @@ async def _crawl4ai_pages(
     on_page: Callable[[Page], Awaitable[None]] | None = None,
     *,
     stats: CrawlStats | None = None,
+    start_page: tuple[bytes, str] | None = None,
 ) -> tuple[list[Page], int]:
     from crawl4ai import AsyncWebCrawler, BrowserConfig, CacheMode, CrawlerRunConfig
     from crawl4ai.content_filter_strategy import PruningContentFilter
@@ -885,6 +900,7 @@ async def _crawl4ai_pages(
         # default score treats as layout.
         "table_score_threshold": 5,
         "page_timeout": 30_000,
+        "semaphore_count": BROWSER_SESSIONS,
         "delay_before_return_html": 0.5,
         "wait_for_images": False,
         "preserve_https_for_internal_links": True,
@@ -909,7 +925,7 @@ async def _crawl4ai_pages(
     source_host = urlsplit(start_url).hostname
     expected_total = 1
     dynamic_page_urls = (
-        await _dynamic_page_urls(start_url, source_host)
+        await _dynamic_page_urls(start_url, source_host, start_page)
         if request.type is CrawlType.RECURSIVE
         else []
     )
@@ -1134,7 +1150,7 @@ async def crawl_pages(
     """
     stats = stats if stats is not None else CrawlStats()
     await assert_public_url(str(request.url))
-    settled = await _settled_start_url(str(request.url))
+    settled, start_page = await _settled_start_url(str(request.url))
     if settled != str(request.url):
         request = request.model_copy(update={"url": settled})
     browser_timeout = min(
@@ -1167,7 +1183,7 @@ async def crawl_pages(
     try:
         async with asyncio.timeout(browser_timeout):
             pages, skipped = await _crawl4ai_pages(
-                request, on_progress, forward, stats=browser_stats
+                request, on_progress, forward, stats=browser_stats, start_page=start_page
             )
         if pages:
             stats.failed = browser_stats.failed

@@ -72,7 +72,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Frage oder Wissensbasis-ID ist ungültig.' }, { status: 400 })
   }
   const { question, tenant_id: tenantId, messages, top_k } = parsed.data
-  const database = await getOwnedDatabase(tenantId, user.id)
+  // Independent lookups, asked at once: in sequence they were three round
+  // trips between the question and the first line of the answer. The rate
+  // limit counts a request whether or not the knowledge base exists, which is
+  // what a limit is for.
+  const [database, unsettled, admitted] = await Promise.all([
+    getOwnedDatabase(tenantId, user.id),
+    hasUnsettledCrawl(user.id, tenantId),
+    admitRequest(user.id, 'chat', 12, 60),
+  ])
   if (!database) {
     return NextResponse.json({ error: 'Wissensbasis nicht gefunden.' }, { status: 404 })
   }
@@ -85,8 +93,8 @@ export async function POST(request: NextRequest) {
   // Charged before the search and the model run, not after: those are what the
   // balance exists to bound, so an account that cannot pay must not reach them.
   // The state is only read on refusal, where a few extra reads cost nothing.
-  if (await hasUnsettledCrawl(user.id, tenantId)) return NextResponse.json({ error: 'Diese Wissensbasis ist noch nicht freigegeben. Warte auf den Crawl-Abschluss oder starte einen abgebrochenen Crawl erneut.' }, { status: 409 })
-  if (!(await admitRequest(user.id, 'chat', 12, 60))) return NextResponse.json({ error: 'Zu viele Fragen in kurzer Zeit. Bitte warte einen Moment.' }, { status: 429, headers: { 'Retry-After': '60' } })
+  if (unsettled) return NextResponse.json({ error: 'Diese Wissensbasis ist noch nicht freigegeben. Warte auf den Crawl-Abschluss oder starte einen abgebrochenen Crawl erneut.' }, { status: 409 })
+  if (!admitted) return NextResponse.json({ error: 'Zu viele Fragen in kurzer Zeit. Bitte warte einen Moment.' }, { status: 429, headers: { 'Retry-After': '60' } })
   const reference = `${user.id}:${parsed.data.request_id ?? crypto.randomUUID()}`
   let allowed: boolean
   try { allowed = await spendChatCredits(user.id, reference) }

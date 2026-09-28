@@ -35,8 +35,24 @@ export interface DatabaseResponse {
 
 class DatabaseAPIClient {
     private baseUrl = '/api'
+    /**
+     * The listing in flight, shared by everyone who asks meanwhile. The
+     * overview, the chat picker and the selector each load it on mount, which
+     * made one dashboard visit three identical requests. Writes drop it, so no
+     * one is handed a list from before their own change.
+     */
+    private listing: Promise<Database[]> | null = null
 
-    async getUserDatabases(): Promise<Database[]> {
+    getUserDatabases(): Promise<Database[]> {
+        if (this.listing) return this.listing
+        const listing = this.fetchUserDatabases().finally(() => {
+            if (this.listing === listing) this.listing = null
+        })
+        this.listing = listing
+        return listing
+    }
+
+    private async fetchUserDatabases(): Promise<Database[]> {
         try {
             const response = await apiFetch(`${this.baseUrl}/databases`, {
                 method: 'GET',
@@ -89,6 +105,7 @@ class DatabaseAPIClient {
     }
 
     async createDatabase(database: Partial<Database>): Promise<Database> {
+        this.listing = null
         try {
             const response = await apiFetch(`${this.baseUrl}/databases`, {
                 method: 'POST',
@@ -97,6 +114,7 @@ class DatabaseAPIClient {
                 },
                 body: JSON.stringify(database),
             })
+            this.listing = null
 
             if (!response.ok) {
                 throw new Error(`Failed to create database: ${response.status}`)
@@ -116,6 +134,7 @@ class DatabaseAPIClient {
     }
 
     async updateDatabase(id: string, updates: Partial<Database>): Promise<Database> {
+        this.listing = null
         try {
             const response = await apiFetch(`${this.baseUrl}/databases/${id}`, {
                 method: 'PUT',
@@ -124,6 +143,7 @@ class DatabaseAPIClient {
                 },
                 body: JSON.stringify(updates),
             })
+            this.listing = null
 
             if (!response.ok) {
                 throw new Error(`Failed to update database: ${response.status}`)
@@ -143,6 +163,7 @@ class DatabaseAPIClient {
     }
 
     async deleteDatabase(id: string): Promise<void> {
+        this.listing = null
         try {
             const response = await apiFetch(`${this.baseUrl}/databases/${id}`, {
                 method: 'DELETE',
@@ -150,6 +171,7 @@ class DatabaseAPIClient {
                     'Content-Type': 'application/json',
                 },
             })
+            this.listing = null
 
             const data = await response.json().catch(() => ({})) as DatabaseResponse
 

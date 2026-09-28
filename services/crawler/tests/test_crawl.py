@@ -13,8 +13,8 @@ settled_start_url = crawl._settled_start_url
 def start_url_stays(monkeypatch) -> None:
     """Keeps crawl_pages off the network; the redirect probe is tested alone."""
 
-    async def unchanged(url: str) -> str:
-        return url
+    async def unchanged(url: str) -> tuple[str, None]:
+        return url, None
 
     monkeypatch.setattr(crawl, "_settled_start_url", unchanged)
 
@@ -31,19 +31,42 @@ async def test_an_apex_domain_that_redirects_to_www_is_crawled_on_www(monkeypatc
     # start host, so the start page itself was refused and the crawl failed.
     _redirecting_to(monkeypatch, "https://www.simba.de/")
 
-    assert await settled_start_url("https://simba.de/") == "https://www.simba.de/"
+    assert (await settled_start_url("https://simba.de/"))[0] == "https://www.simba.de/"
 
 
 async def test_a_www_domain_that_redirects_to_the_apex_is_crawled_on_the_apex(monkeypatch) -> None:
     _redirecting_to(monkeypatch, "https://example.com/start")
 
-    assert await settled_start_url("https://www.example.com/") == "https://example.com/start"
+    assert (await settled_start_url("https://www.example.com/"))[0] == "https://example.com/start"
 
 
 async def test_a_redirect_to_another_site_is_not_adopted(monkeypatch) -> None:
     _redirecting_to(monkeypatch, "https://elsewhere.example/")
 
-    assert await settled_start_url("https://simba.de/") == "https://simba.de/"
+    assert (await settled_start_url("https://simba.de/"))[0] == "https://simba.de/"
+
+
+async def test_the_start_page_is_downloaded_once_for_every_later_look(monkeypatch) -> None:
+    # The browser pass read the start page again for dynamic discovery; the
+    # download from the redirect check now travels with the URL.
+    _redirecting_to(monkeypatch, "https://www.simba.de/")
+
+    _url, page = await settled_start_url("https://simba.de/")
+
+    assert page == (b"<html></html>", "https://www.simba.de/")
+
+
+async def test_dynamic_discovery_reuses_a_downloaded_start_page(monkeypatch) -> None:
+    async def no_download(_client, _url: str) -> tuple[bytes, str]:
+        raise AssertionError("the start page was already downloaded")
+
+    monkeypatch.setattr(crawl, "_safe_download", no_download)
+
+    urls = await crawl._dynamic_page_urls(
+        "https://example.com/", "example.com", (b"<html>plain</html>", "https://example.com/")
+    )
+
+    assert urls == []
 
 
 async def test_an_unreachable_start_page_is_left_to_the_passes(monkeypatch) -> None:
@@ -52,7 +75,7 @@ async def test_an_unreachable_start_page_is_left_to_the_passes(monkeypatch) -> N
 
     monkeypatch.setattr(crawl, "_safe_download", refuse)
 
-    assert await settled_start_url("https://simba.de/") == "https://simba.de/"
+    assert await settled_start_url("https://simba.de/") == ("https://simba.de/", None)
 
 
 def html_page(body: str) -> Page | None:
