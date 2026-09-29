@@ -19,3 +19,12 @@ npm run music:15   # schreibt public/film15.wav (für die Studio-Vorschau)
 npm run render:15  # schreibt out/cracha-15s.mp4
 npm run poster:15  # schreibt out/cracha-15s-poster.png
 ```
+
+## Erklärvideo
+
+Komposition `CraChaExplainer` (1920×1080, 60 fps, 34 s) im ruhigen Morph-Stil des Promos: Problem (Klicken durch Unterseiten) → URL → Crawl bis in die tiefste Ebene → Wissensbasis → Frage → Antwort mit Quelle → CTA. Zeitmarken in `src/explainer/timeline.ts`.
+
+```bash
+npm run render:explainer   # schreibt out/cracha-explainer.mp4
+npm run poster:explainer   # schreibt out/cracha-explainer-poster.png
+```
