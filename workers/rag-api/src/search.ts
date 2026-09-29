@@ -113,6 +113,11 @@ export async function ensureInstance(env: Env, databaseId: string): Promise<AiSe
         await existing.info()
         return existing
       } catch {
+        console.error(JSON.stringify({
+          event: 'ai_search_instance_create_failed',
+          instance_id: id,
+          error: createError instanceof Error ? createError.message : String(createError),
+        }))
         throw createError
       }
     }

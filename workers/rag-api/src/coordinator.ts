@@ -49,6 +49,16 @@ export class KnowledgeBaseCoordinator {
     this.queue = work.catch(() => undefined)
     try { return await work } catch (error) {
       const status = error instanceof HttpError ? error.status : 503
+      // The caller only sees the status, so the cause has to reach the logs.
+      if (status >= 500) {
+        console.error(JSON.stringify({
+          event: 'coordinator_operation_failed',
+          path: new URL(request.url).pathname,
+          status,
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+        }))
+      }
       return Response.json({ error: error instanceof HttpError ? error.message : 'Koordination fehlgeschlagen; bitte erneut versuchen.' }, { status })
     }
   }
