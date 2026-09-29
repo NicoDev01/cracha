@@ -1,0 +1,14 @@
+{
+  "bpm": 120,
+  "duration": 15,
+  "clicks": [2.0, 3.0, 4.0, 4.5, 8.0, 8.5, 9.5],
+  "hover": 11.5,
+  "whooshes": [1.65, 3.5, 5.0, 7.5, 8.0, 12.5, 13.5],
+  "typing": [
+    { "start": 2.1, "end": 2.85, "text": "https://docs.example.com" },
+    { "start": 8.55, "end": 9.3, "text": "Wie lange werden Backups aufbewahrt?" }
+  ],
+  "indexing": { "start": 6.5, "end": 7.3, "pages": 48 },
+  "ready": 7.5,
+  "finale": 13.5
+}

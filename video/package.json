@@ -6,7 +6,10 @@
     "studio": "remotion studio",
     "render": "remotion render CraChaPromo out/cracha-promo.mp4 --crf=16",
     "still": "remotion still CraChaPromo out/still.png",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "music:15": "node scripts/make-music.mjs",
+    "render:15": "node scripts/make-music.mjs && remotion render CraCha15 out/cracha-15s.mp4 --crf=16",
+    "poster:15": "remotion still CraCha15 out/cracha-15s-poster.png --frame=880"
   },
   "dependencies": {
     "@remotion/cli": "4.0.527",
