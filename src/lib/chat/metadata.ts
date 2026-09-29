@@ -53,9 +53,10 @@ export function answerMetaParts(metadata: Metadata | undefined, sourceCount: num
   if (!metadata || metadata.query_time <= 0) return []
   const total = formatDuration(metadata.query_time)
   // A cached search returns in milliseconds. Reporting that as search time would
-  // suggest the retrieval got faster, when it simply did not run.
+  // suggest the retrieval got faster, when it simply did not run, so only the
+  // total is shown.
   const timing = metadata.retrieval_cached
-    ? `${total} (Suche zwischengespeichert)`
+    ? total
     : metadata.retrieval_time
       ? `${total} (davon ${formatDuration(metadata.retrieval_time)} Suche)`
       : total

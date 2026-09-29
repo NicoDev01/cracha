@@ -19,7 +19,15 @@ export interface CitationContextValue {
 
 export const CitationSources = createContext<CitationContextValue>({ sources: [] });
 
-const CHIP = 'mx-0.5 inline-flex min-w-5 items-center justify-center rounded-md bg-brand-50 px-1.5 py-0.5 align-baseline text-[0.75em] font-semibold leading-none text-brand-700 no-underline transition-colors hover:bg-brand-100 data-[state=open]:bg-brand-100 dark:bg-brand-500/15 dark:text-brand-300 dark:hover:bg-brand-500/25';
+/*
+ * A chip that names the page, as Astryx labels its citations: the number ties
+ * it to the source list, the title says what backs the line without a hover.
+ * Neutral, not brand-coloured, so a paragraph dense with sources stays text.
+ */
+const CHIP = 'mx-0.5 inline-flex h-5 max-w-[14em] items-center gap-1 overflow-hidden rounded-md border border-gray-200 bg-white py-0 pe-1.5 ps-0.5 align-[-0.2em] text-[11.5px] font-medium leading-none text-gray-500 no-underline transition-colors hover:border-gray-300 hover:bg-gray-50 hover:text-gray-800 data-[state=open]:border-gray-300 data-[state=open]:bg-gray-50 data-[state=open]:text-gray-800 dark:border-white/10 dark:bg-white/[0.03] dark:text-gray-400 dark:hover:border-white/20 dark:hover:bg-white/[0.06] dark:hover:text-gray-100 dark:data-[state=open]:bg-white/[0.06] dark:data-[state=open]:text-gray-100';
+const CHIP_NUMBER = 'flex h-4 min-w-4 shrink-0 items-center justify-center rounded bg-gray-100 px-1 text-[10px] font-semibold tabular-nums text-gray-600 dark:bg-white/10 dark:text-gray-300';
+/** A marker whose source is unknown keeps its plain number. */
+const BARE_CHIP = 'mx-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-md bg-gray-100 px-1 align-[-0.2em] text-[10px] font-semibold tabular-nums text-gray-600 no-underline dark:bg-white/10 dark:text-gray-300';
 
 function normalize(word: string): string {
   return word.toLocaleLowerCase('de')
@@ -81,13 +89,18 @@ export function CitationLink({ index, href, anchorKey, children, className }: {
   const link = (
     <a
       aria-label={source ? `Quelle ${index}: ${cleanSourceTitle(source.title, source.url)}` : `Quelle ${index} öffnen`}
-      className={cn(CHIP, className)}
+      className={cn(source ? CHIP : BARE_CHIP, className)}
       href={href}
       rel="noreferrer"
       target="_blank"
       onClick={source ? onClick : undefined}
     >
-      {children}
+      {source ? (
+        <>
+          <span className={CHIP_NUMBER}>{index}</span>
+          <span className="min-w-0 truncate">{cleanSourceTitle(source.title, source.url)}</span>
+        </>
+      ) : children}
     </a>
   );
   if (!source) return link;

@@ -23,6 +23,6 @@ describe('citation markers', () => {
     )
     const marker = screen.getByRole('link', { name: 'Quelle 1: AnimationMixer' })
     expect(marker.getAttribute('href')).toBe('https://threejs.org/docs/pages/AnimationMixer.html#:~:text=The%20AnimationMixer%20is%20a%20player%20for%20animations')
-    expect(marker.textContent).toBe('[1]')
+    expect(marker.textContent).toBe('1AnimationMixer')
   })
 })

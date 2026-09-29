@@ -98,7 +98,7 @@ describe('answerMetaParts', () => {
     // 4 ms is the cache read, not a retrieval. Printing it as "davon 4 ms Suche"
     // would read as a retrieval that got 2900x faster.
     expect(answerMetaParts({ ...metadata, query_time: 7_200, retrieval_time: 4, retrieval_cached: true }, 3)[1])
-      .toBe('7,2 s (Suche zwischengespeichert)')
+      .toBe('7,2 s')
   })
 
   it('stays empty until the answer is timed', () => {

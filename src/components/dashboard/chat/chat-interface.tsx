@@ -6,7 +6,6 @@ import {
   Bot,
   Check,
   Copy,
-  Cpu,
   Download,
   ExternalLink,
   FileCheck,
@@ -46,7 +45,7 @@ import {
   linkifyCitations,
   type IndexedSource,
 } from '@/lib/chat/citations';
-import { answerMetaParts, fallbackNotice, formatModel, substituteNotice } from '@/lib/chat/metadata';
+import { answerMetaParts, fallbackNotice, substituteNotice } from '@/lib/chat/metadata';
 import { cleanSnippet, cleanSourceTitle, passageLink, sourceHosts, sourceLocation } from '@/lib/chat/source-display';
 import { checkGeminiKey, PREFERRED_GEMINI_MODELS, type GeminiModelOption } from '@/lib/chat/gemini-models';
 import { streamingMarkdown } from '@/lib/chat/streaming-markdown';
@@ -724,28 +723,22 @@ export function ChatInterface() {
                         a phone the answer gets the width instead.
                       */}
                       {!isUser && (
-                        <div className={`mt-6 hidden size-8 shrink-0 items-center justify-center rounded-xl sm:flex ${message.isError ? 'bg-error-50 text-error-600 dark:bg-error-500/10' : 'bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-400'}`}>
+                        <div className={`hidden size-8 shrink-0 items-center justify-center rounded-xl sm:flex ${message.isError ? 'bg-error-50 text-error-600 dark:bg-error-500/10' : 'bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-400'}`}>
                           <Bot className="size-4" />
                         </div>
                       )}
                       <div className="w-full max-w-3xl">
-                        <div className={`mb-1.5 flex flex-wrap items-center gap-2 text-xs text-gray-400 ${isUser ? 'justify-end' : 'justify-start'}`}>
-                          <span className="font-medium text-gray-600 dark:text-gray-300">{isUser ? 'Du' : 'CraCha'}</span>
-                          <span aria-hidden="true">·</span>
-                          <time dateTime={message.timestamp.toISOString()}>{formatTime(message.timestamp)}</time>
-                          {!isUser && message.metadata?.model_used && (
-                            <>
-                              <span aria-hidden="true">·</span>
-                              <span className="inline-flex items-center gap-1 rounded-md bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-                                <Cpu className="size-3" aria-hidden="true" />
-                                {formatModel(message.metadata.model_used)}
-                                {message.metadata.fallback && (
-                                  <span className="text-warning-600 dark:text-warning-400" title={fallbackNotice(message.metadata.fallback_reason)}>(Ersatz)</span>
-                                )}
-                              </span>
-                            </>
-                          )}
-                        </div>
+                        {/*
+                          An answer starts with its text; when it was written and by
+                          which model is in the line under it, once it is complete.
+                        */}
+                        {isUser && (
+                          <div className="mb-1.5 flex flex-wrap items-center justify-end gap-2 text-xs text-gray-400">
+                            <span className="font-medium text-gray-600 dark:text-gray-300">Du</span>
+                            <span aria-hidden="true">·</span>
+                            <time dateTime={message.timestamp.toISOString()}>{formatTime(message.timestamp)}</time>
+                          </div>
+                        )}
                         <MessageContent className={message.isError ? 'rounded-2xl border border-error-200 bg-error-50 p-4 text-error-700 dark:border-error-800 dark:bg-error-500/10 dark:text-error-300' : undefined}>
                           {isUser ? (
                             <p className="whitespace-pre-wrap leading-6">{message.content}</p>
@@ -830,14 +823,13 @@ export function ChatInterface() {
                                 {substituteNotice(metadata)}
                               </span>
                             )}
-                            {metaParts.length > 0 && (
-                              <span
-                                className="text-[11px] leading-5 text-gray-400 dark:text-gray-500"
-                                title={metadata?.model_used}
-                              >
-                                {metaParts.join(' · ')}
-                              </span>
-                            )}
+                            <span
+                              className="text-[11px] leading-5 text-gray-400 dark:text-gray-500"
+                              title={metadata?.model_used}
+                            >
+                              <time dateTime={message.timestamp.toISOString()}>{formatTime(message.timestamp)}</time>
+                              {metaParts.map((part) => ` · ${part}`).join('')}
+                            </span>
                           </div>
                         )}
                       </div>
@@ -847,11 +839,10 @@ export function ChatInterface() {
 
                 {isLoading && (
                   <Message from="assistant">
-                    <div className="mt-6 hidden size-8 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600 sm:flex dark:bg-brand-500/10 dark:text-brand-400">
+                    <div className="hidden size-8 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600 sm:flex dark:bg-brand-500/10 dark:text-brand-400">
                       <Bot className="size-4" />
                     </div>
                     <div className="w-full max-w-3xl">
-                      <div className="mb-1.5 text-xs font-medium text-gray-600 dark:text-gray-300">CraCha</div>
                       <MessageContent className="rounded-3xl border border-gray-200 bg-white px-4 py-3.5 shadow-theme-xs dark:border-gray-700 dark:bg-gray-800/60">
                         <SearchProgress progress={retrievalProgress} />
                       </MessageContent>
