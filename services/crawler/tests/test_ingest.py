@@ -302,7 +302,7 @@ async def test_upload_threads_the_listing_into_the_next_batch() -> None:
     ingest = object.__new__(RagIngestClient)
     payloads: list[dict] = []
 
-    async def post(_client, path, payload):
+    async def post(_client, path, payload, **_kwargs):
         payloads.append(payload)
         # The worker answers every upload with what its scan found; only the
         # first batch of a job actually triggers that scan.
@@ -420,7 +420,7 @@ async def test_an_empty_listing_still_travels_to_the_next_batch() -> None:
     ingest = object.__new__(RagIngestClient)
     payloads: list[dict] = []
 
-    async def post(_client, _path, payload):
+    async def post(_client, _path, payload, **_kwargs):
         payloads.append(payload)
         return SimpleNamespace(json=lambda: {"active_keys": ["k"], "known_items": {}})
 
@@ -443,7 +443,7 @@ async def test_upload_reports_no_listing_when_the_worker_sent_none() -> None:
     # next batch has to scan for itself rather than be told the index is empty.
     ingest = object.__new__(RagIngestClient)
 
-    async def post(_client, _path, _payload):
+    async def post(_client, _path, _payload, **_kwargs):
         return SimpleNamespace(json=lambda: {"active_keys": ["k"]})
 
     ingest._post = post
@@ -583,3 +583,27 @@ async def test_finalize_tells_the_worker_whether_the_crawl_saw_the_whole_site(
         assert "complete" not in completes[0]
     else:
         assert completes[0]["complete"] is crawl_complete
+
+
+@pytest.mark.asyncio
+async def test_upload_rides_out_a_stretch_of_503s(no_sleep: None) -> None:
+    import httpx
+
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls < 5:
+            return httpx.Response(503, json={"error": "Koordination fehlgeschlagen"})
+        return httpx.Response(202, json={"active_keys": ["page-a.md"], "known_items": {}})
+
+    ingest = object.__new__(RagIngestClient)
+    ingest.base_url = "https://rag.test"
+    ingest.secret = "secret"
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        response = await ingest._post(
+            client, "/ingest/pages", {}, attempts=ingest_module.UPLOAD_ATTEMPTS
+        )
+    assert response.status_code == 202
+    assert calls == 5

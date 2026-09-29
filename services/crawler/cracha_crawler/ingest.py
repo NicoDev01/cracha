@@ -104,6 +104,9 @@ class IndexStatus:
     searchable_count: int = 0
 
 
+UPLOAD_ATTEMPTS = 6
+
+
 class RagIngestClient:
     def __init__(self) -> None:
         self.base_url = os.environ["RAG_API_URL"].rstrip("/")
@@ -113,9 +116,11 @@ class RagIngestClient:
     def headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self.secret}"}
 
-    async def _post(self, client: httpx.AsyncClient, path: str, payload: dict) -> httpx.Response:
+    async def _post(
+        self, client: httpx.AsyncClient, path: str, payload: dict, attempts: int = 3
+    ) -> httpx.Response:
         last_error: Exception | None = None
-        for attempt in range(3):
+        for attempt in range(attempts):
             try:
                 response = await client.post(
                     f"{self.base_url}{path}", headers=self.headers, json=payload
@@ -130,7 +135,7 @@ class RagIngestClient:
                 )
             except httpx.TransportError as error:
                 last_error = error
-            if attempt < 2:
+            if attempt < attempts - 1:
                 await asyncio.sleep(2**attempt)
         assert last_error is not None
         raise last_error
@@ -165,7 +170,13 @@ class RagIngestClient:
                 # first crawl produces.
                 if carried is not None:
                     payload["known_items"] = carried
-                response = await self._post(client, "/ingest/pages", payload)
+                # The first batch of a new knowledge base creates its AI Search
+                # instance, and a create that stalls leaves every other batch
+                # waiting behind it with 503s. Three tries over three seconds
+                # failed a whole crawl on that; six ride out half a minute.
+                response = await self._post(
+                    client, "/ingest/pages", payload, attempts=UPLOAD_ATTEMPTS
+                )
                 body = response.json()
                 active_keys.extend(body["active_keys"])
                 returned = body.get("known_items")
