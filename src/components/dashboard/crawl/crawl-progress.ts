@@ -81,8 +81,14 @@ export function crawlStepProgress(
       // A start without pages yet still moves, a little.
       return [1, Math.min(0.97, Math.max(counted, easeTowards(since, 20, 0.12))), 0]
     }
-    case 'indexing':
-      return [1, 1, easeTowards(since, INDEX_SECONDS, 0.95)]
+    case 'indexing': {
+      // Searchable pages are the one real signal; the clock only fills the
+      // time before the first ones appear. The last step waits for a
+      // confirming poll, so a full count still stops short of the end.
+      const total = job.progress?.total || job.pages_crawled
+      const searchable = total > 0 ? Math.min(1, (job.progress?.searchable ?? 0) / total) : 0
+      return [1, 1, Math.max(easeTowards(since, INDEX_SECONDS, 0.95), searchable * 0.97)]
+    }
     case 'completed':
       return [1, 1, 1]
     default:

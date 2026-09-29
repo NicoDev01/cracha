@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import * as Popover from "@radix-ui/react-popover"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { ArrowRight, Check, ExternalLink, Globe, Info, Loader2, MessagesSquare, Plus, RotateCcw, X } from "lucide-react"
@@ -18,7 +18,7 @@ const number = new Intl.NumberFormat("de-DE")
 const steps = [
   { label: "Vorbereiten", description: "Der Crawler wird gestartet" },
   { label: "Seiten crawlen", description: "Seiten der Website abrufen und lesen" },
-  { label: "Durchsuchbar machen", description: "In Abschnitte zerlegen und indexieren" },
+  { label: "Indexieren", description: "In Abschnitte zerlegen, einbetten und im Suchindex speichern" },
 ]
 
 function formatDuration(seconds: number) {
@@ -90,11 +90,70 @@ function OverallBar({ percent, current }: { percent: number; current: number }) 
 }
 
 /**
+ * What indexing is doing right now. AI Search reports nothing until a page's
+ * first chunks exist, so until then the step shows how long it has been
+ * running; after that, one segment per page lights up as it becomes
+ * searchable.
+ */
+function IndexDetail({ total, searchable, chunks, since, now }: { total: number; searchable: number; chunks: number; since: string; now: number }) {
+  const reduceMotion = useReducedMotion()
+  const seconds = Math.max(0, Math.floor((now - new Date(since).getTime()) / 1000))
+  const ready = Math.min(searchable, total)
+  const segments = total > 0 && total <= 60
+  return (
+    <span className="block">
+      <span className="block">
+        {ready > 0
+          ? <><span className="font-medium tabular-nums text-gray-700 dark:text-gray-200">{number.format(ready)} von {number.format(total)}</span> Seiten durchsuchbar{chunks > 0 && ` · ${number.format(chunks)} Abschnitte`}</>
+          : `${number.format(total)} ${total === 1 ? "Seite wird" : "Seiten werden"} zerlegt, eingebettet und gespeichert`}
+      </span>
+      {segments ? (
+        <span className="mt-2.5 flex flex-wrap gap-1" aria-hidden>
+          {Array.from({ length: total }, (_, index) => {
+            const lit = index < ready
+            return (
+              <span key={index} className="relative h-1.5 w-3 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
+                <motion.span
+                  className="absolute inset-0 rounded-full bg-brand-500"
+                  initial={false}
+                  animate={{ opacity: lit ? 1 : 0, scaleX: lit ? 1 : 0.3 }}
+                  transition={reduceMotion ? { duration: 0 } : { duration: 0.35, ease: "easeOut", delay: lit ? (index % 12) * 0.03 : 0 }}
+                  style={{ originX: 0 }}
+                />
+                {!lit && !reduceMotion && (
+                  <motion.span
+                    className="absolute inset-0 rounded-full bg-brand-500/30"
+                    animate={{ opacity: [0, 1, 0] }}
+                    transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut", delay: (index % 16) * 0.1 }}
+                  />
+                )}
+              </span>
+            )
+          })}
+        </span>
+      ) : total > 0 ? (
+        <span className="mt-2.5 block h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800" aria-hidden>
+          <motion.span
+            className="block h-full rounded-full bg-brand-500"
+            initial={false}
+            animate={{ width: `${Math.round((ready / total) * 100)}%` }}
+            transition={reduceMotion ? { duration: 0 } : { duration: 0.6, ease: "easeOut" }}
+          />
+        </span>
+      ) : null}
+      <span className="mt-2 block font-mono text-[11px] tabular-nums text-gray-400 dark:text-gray-500">
+        läuft seit {formatDuration(seconds)} · meist unter einer Minute
+      </span>
+    </span>
+  )
+}
+
+/**
  * The three steps stacked, each marker sitting on one track. The piece of
  * track below a step fills as that step advances, so the line itself shows
  * how far the current step has come.
  */
-function StepList({ progress, current, details }: { progress: [number, number, number]; current: number; details: (string | null)[] }) {
+function StepList({ progress, current, details }: { progress: [number, number, number]; current: number; details: ReactNode[] }) {
   const reduceMotion = useReducedMotion()
   return (
     <ol aria-label="Schritte">
@@ -323,15 +382,25 @@ export function CrawlMonitor({ onNew }: { onNew?: () => void }) {
   const pages = currentJob.crawled_pages ?? [...(currentJob.recent_pages ?? [])].reverse()
   const found = currentJob.progress?.current ?? currentJob.pages_crawled
   const limit = crawlPageLimit(currentJob)
-  const indexing = number.format(currentJob.progress?.total || currentJob.pages_crawled)
-  const stepDetails = [
+  // While indexing, `progress` counts indexed pages instead of fetched ones,
+  // so the fetched count comes from the job itself.
+  const crawled = currentStep > 1 ? currentJob.progress?.total || currentJob.pages_crawled : found
+  const stepDetails: ReactNode[] = [
     currentStep > 0 ? "Gestartet" : null,
     currentStep === 1
       ? found > 0
         ? `${number.format(found)} ${limit ? `von max. ${number.format(limit)} ` : ""}${found === 1 ? "Seite" : "Seiten"} erfasst`
         : "Seiten werden gesucht …"
-      : currentStep > 1 ? `${number.format(found)} ${found === 1 ? "Seite" : "Seiten"} erfasst` : null,
-    currentStep === 2 ? `${indexing} Seiten werden in Abschnitte zerlegt und gespeichert · meist etwa eine Minute` : null,
+      : currentStep > 1 ? `${number.format(crawled)} ${crawled === 1 ? "Seite" : "Seiten"} erfasst` : null,
+    currentStep === 2 ? (
+      <IndexDetail
+        total={crawled}
+        searchable={currentJob.progress?.searchable ?? 0}
+        chunks={currentJob.progress?.chunks_count ?? 0}
+        since={currentJob.phase_started_at ?? currentJob.created_at}
+        now={now}
+      />
+    ) : null,
   ]
   // A failed crawl used to be a dead end: the only way on was deleting the
   // knowledge base and setting it up again. Needs the knowledge base id, which

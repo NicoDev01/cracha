@@ -7,7 +7,7 @@ import {
 import { databaseForUser } from './database'
 import { forwardOperation, KnowledgeBaseCoordinator } from './coordinator'
 import { assertText, HttpError, json, readJson } from './http'
-import { instanceIdFor, resolveReranking, retrieve, type RetrievalProgress } from './search'
+import { ensureInstance, instanceIdFor, resolveReranking, retrieve, type RetrievalProgress } from './search'
 import type { ConversationMessage, Env, QueryBody, RetrievalResponse } from './types'
 
 export { KnowledgeBaseCoordinator }
@@ -132,7 +132,20 @@ async function route(request: Request, env: Env, ctx?: ExecutionContext): Promis
     await authenticateQuery(request, env)
     databaseId = assertText(decodeURIComponent(url.pathname.split('/')[2]), 'database_id', 160)
   }
-  if (databaseId) return forwardOperation(env, databaseId, request)
+  if (databaseId) {
+    const response = await forwardOperation(env, databaseId, request)
+    // A new knowledge base would otherwise create its AI Search instance in
+    // the first upload, seconds after the first pages are ready. Creating it
+    // while the crawler starts takes that off the path; the upload still
+    // creates it if this did not get there first.
+    if (response.ok && request.method === 'POST' && url.pathname.endsWith('/start-job')) {
+      const id = databaseId
+      ctx?.waitUntil(ensureInstance(env, id).catch((error) => {
+        console.log(JSON.stringify({ event: 'instance_prewarm_failed', database_id: id, error: error instanceof Error ? error.message : 'unknown' }))
+      }))
+    }
+    return response
+  }
   throw new HttpError(404, `Endpoint ${url.pathname} nicht gefunden.`)
 }
 

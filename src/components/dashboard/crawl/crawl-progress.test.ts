@@ -87,3 +87,17 @@ describe('crawlOverallPercent', () => {
     expect(crawlOverallPercent([1, 1, 2])).toBe(100)
   })
 })
+
+describe('crawlStepProgress while indexing', () => {
+  const started = '2026-09-29T12:00:00.000Z'
+  const at = (seconds: number) => new Date(started).getTime() + seconds * 1000
+  const indexing = (searchable: number) => ({
+    phase: 'indexing' as const, status: 'processing' as const, pages_crawled: 10, created_at: started, phase_started_at: started,
+    progress: { stage: 'indexing' as const, current: 0, total: 10, percent: 0, searchable },
+  })
+
+  it('follows searchable pages ahead of the clock but stops short of done', () => {
+    expect(crawlStepProgress(indexing(5), at(1))[2]).toBeCloseTo(0.485)
+    expect(crawlStepProgress(indexing(10), at(1))[2]).toBeCloseTo(0.97)
+  })
+})

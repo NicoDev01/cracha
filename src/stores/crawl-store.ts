@@ -23,6 +23,8 @@ export interface CrawlProgress {
   pages_count?: number
   skipped_count?: number
   chunks_count?: number
+  /** While indexing: pages whose chunks already answer questions. */
+  searchable?: number
   url?: string
 }
 

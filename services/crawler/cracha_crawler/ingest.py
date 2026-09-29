@@ -279,7 +279,7 @@ class RagIngestClient:
         }
         if job_id is not None:
             payload["job_id"] = job_id
-        previous_progress: tuple[int, int] | None = None
+        previous_progress: tuple[int, int, int] | None = None
         latest = IndexStatus(
             chunks_count=0,
             indexed_count=0,
@@ -326,7 +326,7 @@ class RagIngestClient:
                 f"searchable={latest.searchable_count}/{total} pending={pending} "
                 f"chunks={chunks_count} ready={latest.complete}"
             )
-            progress = (indexed, chunks_count)
+            progress = (indexed, chunks_count, latest.searchable_count)
             if progress != previous_progress:
                 previous_progress = progress
                 last_change = _monotonic()
@@ -340,6 +340,10 @@ class RagIngestClient:
                             "total": total,
                             "percent": round((indexed / max(1, total)) * 100),
                             "chunks_count": chunks_count,
+                            # Pages that already answer questions. Items stay
+                            # "running" long after their chunks exist, so this
+                            # is what moves while `current` sits at 0.
+                            "searchable": latest.searchable_count,
                         }
                     )
             if latest.complete:
