@@ -11,7 +11,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import type { ChatStatus } from '@/types/ai';
-import { Loader2Icon, SendIcon, SquareIcon, XIcon } from 'lucide-react';
+import { ArrowUpIcon, Loader2Icon, SquareIcon, XIcon } from 'lucide-react';
 import type {
   ComponentProps,
   HTMLAttributes,
@@ -21,12 +21,27 @@ import { Children } from 'react';
 
 export type PromptInputProps = HTMLAttributes<HTMLFormElement>;
 
-export const PromptInput = ({ className, ...props }: PromptInputProps) => (
+/*
+ * Modelled on the Astryx ChatComposer: a raised 28px shell with the text on
+ * top and the actions in a row below, lifted a little further on hover and
+ * while typing. In the dark theme the shell is a step lighter than the chat
+ * and carries a hairline, because a shadow alone disappears on a dark page.
+ */
+export const PromptInput = ({ className, onClick, ...props }: PromptInputProps) => (
   <form
     className={cn(
-      'w-full rounded-[1.75rem] border border-gray-200 bg-white shadow-theme-sm transition-shadow focus-within:border-brand-300 focus-within:shadow-focus-ring dark:border-gray-700 dark:bg-gray-900 dark:focus-within:border-brand-700',
+      'flex w-full cursor-text flex-col gap-2 rounded-[28px] border border-transparent bg-white p-3 transition-[box-shadow,border-color] duration-150',
+      'shadow-[0_1px_1px_rgba(0,0,0,0.1),0_2px_8px_rgba(0,0,0,0.1)] focus-within:shadow-[0_1px_2px_rgba(0,0,0,0.1),0_2px_12px_rgba(0,0,0,0.12)] [@media(hover:hover)]:hover:shadow-[0_1px_2px_rgba(0,0,0,0.1),0_2px_12px_rgba(0,0,0,0.12)]',
+      'dark:border-white/[0.08] dark:bg-gray-800 dark:shadow-[0_1px_1px_rgba(0,0,0,0.2),0_2px_8px_rgba(0,0,0,0.2)] dark:focus-within:border-white/[0.14]',
       className
     )}
+    // A click anywhere on the shell, not only on the text line, starts typing.
+    onClick={(event) => {
+      onClick?.(event);
+      if (!(event.target as HTMLElement).closest('button, a, textarea, input, select')) {
+        event.currentTarget.querySelector('textarea')?.focus();
+      }
+    }}
     {...props}
   />
 );
@@ -63,12 +78,11 @@ export const PromptInputTextarea = ({
   return (
     <Textarea
       className={cn(
-        'w-full resize-none rounded-none border-none px-4 py-3 shadow-none outline-none ring-0',
-        'field-sizing-content min-h-12 max-h-[8lh] bg-transparent dark:bg-transparent',
+        'w-full resize-none rounded-none border-none px-2 pt-1 pb-0 shadow-none outline-none ring-0',
+        'field-sizing-content min-h-6 max-h-44 overflow-y-auto bg-transparent text-[15px] leading-6 md:text-[15px] dark:bg-transparent',
         // Ensure readable text and placeholder in both themes
         'text-gray-800 dark:text-white/90 placeholder:text-gray-500 dark:placeholder:text-white/40',
-        // Optional: better caret visibility
-        'caret-blue-600 dark:caret-blue-400',
+        'caret-brand-500 dark:caret-brand-400',
         // Ensure readability when disabled (override base disabled:opacity-50)
         'disabled:opacity-100 disabled:text-gray-700 dark:disabled:text-white/80 disabled:placeholder:text-gray-500 dark:disabled:placeholder:text-white/40',
         'focus-visible:ring-0',
@@ -154,7 +168,7 @@ export const PromptInputSubmit = ({
   children,
   ...props
 }: PromptInputSubmitProps) => {
-  let Icon = <SendIcon className="size-4" />;
+  let Icon = <ArrowUpIcon className="size-4" strokeWidth={2.25} />;
 
   if (status === 'submitted') {
     Icon = <Loader2Icon className="size-4 animate-spin" />;
@@ -166,7 +180,11 @@ export const PromptInputSubmit = ({
 
   return (
     <Button
-      className={cn('gap-1.5 rounded-full bg-brand-500 text-white shadow-theme-xs hover:bg-brand-600', className)}
+      className={cn(
+        'size-8 shrink-0 rounded-full bg-brand-500 text-white hover:bg-brand-600',
+        'disabled:bg-gray-200 disabled:text-gray-400 disabled:opacity-100 dark:disabled:bg-white/10 dark:disabled:text-white/35',
+        className
+      )}
       size={size}
       type="submit"
       variant={variant}
@@ -176,6 +194,27 @@ export const PromptInputSubmit = ({
     </Button>
   );
 };
+
+export type PromptInputStopProps = ComponentProps<typeof Button>;
+
+/** Takes the place of the send button while an answer is on its way. */
+export const PromptInputStop = ({ className, ...props }: PromptInputStopProps) => (
+  <Button
+    type="button"
+    size="icon"
+    variant="ghost"
+    className={cn(
+      'size-8 shrink-0 rounded-full bg-gray-100 text-gray-800 hover:bg-gray-200 hover:text-gray-900',
+      'dark:bg-white/10 dark:text-white dark:hover:bg-white/15 dark:hover:text-white',
+      className
+    )}
+    aria-label="Antwort stoppen"
+    title="Antwort stoppen"
+    {...props}
+  >
+    <SquareIcon className="size-3 fill-current" />
+  </Button>
+);
 
 export type PromptInputModelSelectProps = ComponentProps<typeof Select>;
 

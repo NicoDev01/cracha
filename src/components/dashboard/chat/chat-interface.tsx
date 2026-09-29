@@ -60,6 +60,7 @@ import { Loader } from './loader';
 import { Message, MessageContent } from './message';
 import {
   PromptInput,
+  PromptInputStop,
   PromptInputSubmit,
   PromptInputTextarea,
 } from './prompt-input';
@@ -373,6 +374,7 @@ export function ChatInterface() {
     error,
     setError,
     sendMessage,
+    stop,
     isLoading,
     isStreaming,
     retrievalProgress,
@@ -608,7 +610,8 @@ export function ChatInterface() {
               variant="ghost"
               size="icon"
               onClick={() => newConversation()}
-              className="rounded-full text-gray-500 hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.06] dark:hover:text-gray-100"
+              // Not on a phone: the header has no room left there, and the sidebar starts a new chat.
+              className="hidden rounded-full text-gray-500 sm:inline-flex hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.06] dark:hover:text-gray-100"
               aria-label="Neuer Chat"
               title="Neuer Chat"
             >
@@ -760,7 +763,9 @@ export function ChatInterface() {
                           )}
 
                           {!isUser && (citedSources.length > 0 || (!message.isStreaming && uncitedSources.length > 0)) && (
-                            <Sources defaultOpen>
+                            // Closed while the answer streams in: open, the growing list
+                            // pushed the text being written out of view.
+                            <Sources>
                               <SourcesTrigger count={citedSources.length} hosts={sourceHosts(citedSources.map((entry) => entry.source.url))} />
                               <SourcesContent>
                                 <SourceList cited={citedSources} uncited={message.isStreaming ? [] : uncitedSources} />
@@ -884,7 +889,7 @@ export function ChatInterface() {
                 {error}
               </p>
             )}
-            <PromptInput onSubmit={handleSubmit} className="relative flex items-end py-2.5 pl-5 pr-14">
+            <PromptInput onSubmit={handleSubmit}>
               <PromptInputTextarea
                 ref={inputRef}
                 value={input}
@@ -897,16 +902,22 @@ export function ChatInterface() {
                       : 'Frage etwas zu deiner Wissensbasis …'
                 }
                 disabled={!selectedDatabase}
-                className="min-h-7 px-0 py-1 pr-2"
                 aria-label={chatMode === 'verification' ? 'Zu prüfender Text' : 'Nachricht'}
               />
-              <PromptInputSubmit
-                className="absolute bottom-1.5 right-1.5 size-10"
-                disabled={!input.trim() || !selectedDatabase || isLoading || isStreaming || isOpening}
-                status={isLoading || isStreaming ? 'submitted' : undefined}
-                aria-label="Nachricht senden"
-                title="Nachricht senden"
-              />
+              <div className="flex min-h-8 items-center justify-between gap-2">
+                <span className="min-w-0 truncate pl-2 text-xs text-gray-400 dark:text-gray-500" aria-hidden="true">
+                  {isLoading ? 'Wissensbasis wird durchsucht …' : isStreaming ? 'Antwort wird geschrieben …' : ''}
+                </span>
+                {isLoading || isStreaming ? (
+                  <PromptInputStop onClick={stop} />
+                ) : (
+                  <PromptInputSubmit
+                    disabled={!input.trim() || !selectedDatabase || isOpening}
+                    aria-label="Nachricht senden"
+                    title="Nachricht senden"
+                  />
+                )}
+              </div>
             </PromptInput>
           </div>
         </div>
