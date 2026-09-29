@@ -74,6 +74,7 @@ export interface CitationAnchor {
 
 export interface QueryRequest {
   request_id?: string
+  conversation_id?: string
   tenant_id: string
   question: string
   top_k?: number
@@ -85,10 +86,17 @@ export interface QueryRequest {
 
 export interface ChatState {
   ownerId: string | null
+  /** The account's conversations, as the server lists them; newest first. */
+  history: ChatSummary[]
+  historyStatus: 'idle' | 'loading' | 'ready' | 'error'
+  /** Messages of the conversations opened in this tab; the server keeps them. */
   conversations: Record<string, ChatConversation>
+  /** Conversations this browser kept before the history moved to the server, until imported. */
+  legacyConversations: Record<string, ChatConversation> | null
   selectedConversation: string | null
+  /** The selected conversation whose messages are still being fetched. */
+  loadingConversation: string | null
   messages: Message[]
-  messagesByDb?: Record<string, Message[]>
   selectedDatabase: string | null
   isLoading: boolean
   isStreaming: boolean
@@ -103,10 +111,18 @@ export interface ChatState {
   sendMessage: (question: string) => Promise<boolean>
   claimFor: (ownerId: string | null) => void
   stop: () => void
-  newConversation: () => void
-  selectConversation: (id: string) => void
+  /** Starts an empty conversation, optionally with another knowledge base. */
+  newConversation: (databaseId?: string) => void
+  selectConversation: (id: string) => Promise<void>
+  /** Loads the messages of a selection restored from a previous visit. */
+  ensureSelectedConversation: () => Promise<void>
+  loadHistory: () => Promise<void>
+  renameConversation: (id: string, title: string) => Promise<boolean>
+  deleteConversation: (id: string) => Promise<boolean>
+  /** Drops what belonged to knowledge bases that were deleted. */
+  forgetDatabases: (databaseIds: string[]) => void
   feedback: (id: string, value: 'helpful' | 'unhelpful') => void
-  clearChat: () => void
+  clearChat: () => Promise<boolean>
   selectDatabase: (tenantId: string) => void
   setError: (error: string | null) => void
   setByokApiKey: (key: string | null) => void
@@ -119,6 +135,26 @@ export interface ChatConversation {
   databaseId: string
   title: string
   messages: Message[]
+}
+
+/** One conversation in the history list, without its messages. */
+export interface ChatSummary {
+  id: string
+  databaseId: string
+  title: string
+  createdAt: string
+  updatedAt: string
+}
+
+/** A message as the server keeps it. */
+export interface StoredChatMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  sources: Source[]
+  metadata?: ChatResponse['metadata']
+  isError: boolean
+  createdAt: string
 }
 
 export interface Database {

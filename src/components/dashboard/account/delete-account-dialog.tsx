@@ -73,7 +73,8 @@ export function DeleteAccountDialog({ onDeleted }: { onDeleted: () => Promise<vo
               <ul className="list-disc space-y-1 pl-5">
                 <li>alle deine Wissensbasen mit ihren indexierten Inhalten</li>
                 <li>laufende Crawls, die dafür abgebrochen werden</li>
-                <li>dein Chat- und Crawl-Verlauf in diesem Browser</li>
+                <li>alle deine Chats</li>
+                <li>dein Crawl-Verlauf in diesem Browser</li>
                 <li>dein restliches Guthaben, auch gekaufte Credits – ohne Erstattung</li>
                 <li>dein Zugang mit E-Mail-Adresse und Name</li>
               </ul>

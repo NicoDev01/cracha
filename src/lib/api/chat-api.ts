@@ -52,6 +52,10 @@ interface StreamDone {
   anchors?: Record<string, CitationAnchor>
   /** The corrected answer, sent only when it differs from what was streamed. */
   text?: string
+  /** Whether the exchange reached the history; absent when none was asked for. */
+  saved?: boolean
+  /** The generated title of a conversation this answer opened. */
+  title?: string
 }
 
 export interface ChatStreamHandlers {
@@ -60,6 +64,8 @@ export interface ChatStreamHandlers {
   onDelta: (text: string) => void
   /** `text` replaces the streamed answer when the server corrected it. */
   onDone: (metadata: ChatResponse['metadata'], text?: string) => void
+  /** What became of the exchange in the history. */
+  onSaved?: (result: { saved: boolean; title?: string }) => void
 }
 
 function mapSources(sources: RawSource[] = []): Source[] {
@@ -75,6 +81,7 @@ function mapSources(sources: RawSource[] = []): Source[] {
 function requestBody(request: QueryRequest) {
   return {
     request_id: request.request_id,
+    conversation_id: request.conversation_id,
     question: request.question,
     tenant_id: request.tenant_id,
     top_k: request.top_k ?? 8,
@@ -182,6 +189,9 @@ class ChatAPIClient {
           reference: data.reference,
           citation_anchors: data.anchors && typeof data.anchors === 'object' ? data.anchors : undefined,
         }, ...corrected)
+        if (typeof data.saved === 'boolean') {
+          handlers.onSaved?.({ saved: data.saved, title: typeof data.title === 'string' && data.title.trim() ? data.title : undefined })
+        }
       } else if (event === 'error') {
         throw new Error(data.message ?? 'Die Antwort konnte nicht erzeugt werden.')
       }

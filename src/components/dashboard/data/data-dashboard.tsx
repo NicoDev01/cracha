@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/table"
 import { StatusBadge } from "@/components/dashboard/common/StatusBadge"
 import { deleteDatabase } from "@/lib/api/database-api"
+import { useChatStore } from "@/stores/chat-store"
 import { apiFetch } from "@/lib/api/request"
 import {
   chatHref,
@@ -159,6 +160,7 @@ export function DataDashboard() {
 
     if (deleted.length > 0) {
       const deletedSet = new Set(deleted)
+      useChatStore.getState().forgetDatabases(deleted)
       setDatabases((current) => current.filter((database) => !deletedSet.has(database.id)))
       setSelectedIds((current) => new Set([...current].filter((id) => !deletedSet.has(id))))
       toast.success(deleted.length === 1 ? "Wissensbasis gelöscht." : `${deleted.length} Wissensbasen gelöscht.`)
@@ -364,7 +366,9 @@ export function DataDashboard() {
           <AlertDialogHeader>
             <AlertDialogTitle>{deleteIds.length === 1 ? "Wissensbasis löschen?" : `${deleteIds.length} Wissensbasen löschen?`}</AlertDialogTitle>
             <AlertDialogDescription>
-              Alle Inhalte dieser Wissensbasis werden dauerhaft entfernt. Diese Aktion kann nicht rückgängig gemacht werden.
+              {deleteIds.length === 1
+                ? "Alle Inhalte dieser Wissensbasis und alle Chats mit ihr werden dauerhaft entfernt. Diese Aktion kann nicht rückgängig gemacht werden."
+                : "Alle Inhalte dieser Wissensbasen und alle Chats mit ihnen werden dauerhaft entfernt. Diese Aktion kann nicht rückgängig gemacht werden."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

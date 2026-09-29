@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { deleteDatabaseConversations } from './chat-history'
 import { getWorkerEnv } from './cloudflare'
 import { claimDatabaseDeletion, deallocateDatabaseSlot, deleteCrawlAccess, getActiveDeletionClaim, hasUnsettledCrawl } from './credits'
 import { getOwnedDatabase, releaseDatabase, saveDatabase } from './database-registry'
@@ -108,6 +109,8 @@ async function removeRemotely(userId: string, id: string, attempt: 'initial' | '
   }
 
   try {
+    // The chats asked this knowledge base; without it they have nothing to stand on.
+    await deleteDatabaseConversations(userId, id)
     await deleteCrawlAccess(id, userId)
     await releaseDatabase(userId, id)
     await deallocateDatabaseSlot(userId, id)

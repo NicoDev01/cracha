@@ -4,10 +4,13 @@ import { NextRequest } from 'next/server'
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(), owned: vi.fn(), spend: vi.fn(), refund: vi.fn(), state: vi.fn(),
   search: vi.fn(), generate: vi.fn(), admit: vi.fn(), unsettled: vi.fn(),
+  record: vi.fn(), title: vi.fn(),
 }))
 vi.mock('@/lib/supabase/server', () => ({ getAuthenticatedUser: mocks.auth }))
 vi.mock('@/lib/server/database-registry', () => ({ getOwnedDatabase: mocks.owned }))
-vi.mock('@/lib/server/cloudflare', () => ({ getWorkerEnv: () => ({ RAG_API: { fetch: mocks.search }, AI: {}, RAG_QUERY_SECRET: 'test' }) }))
+vi.mock('@/lib/server/cloudflare', () => ({ getWorkerEnv: () => ({ RAG_API: { fetch: mocks.search }, AI: {}, RAG_QUERY_SECRET: 'test' }), keepAlive: vi.fn() }))
+vi.mock('@/lib/server/chat-history', () => ({ recordMessage: mocks.record }))
+vi.mock('@/lib/server/chat-title', () => ({ generateChatTitle: mocks.title }))
 vi.mock('@/lib/server/credits', async (original) => ({
   ...await original<typeof import('@/lib/server/credits')>(),
   admitRequest: mocks.admit, hasUnsettledCrawl: mocks.unsettled,
@@ -35,6 +38,64 @@ beforeEach(() => {
   mocks.state.mockResolvedValue({ balance: 0, reserved: 0, databases: 1, maxDatabases: 25, costs: { page: 1, chatMessage: 5 } })
   mocks.search.mockImplementation(async () => retrieval())
   mocks.generate.mockResolvedValue({ model: 'test', fallback: false, text: (async function* () { yield 'Antwort [1]' })() })
+  mocks.record.mockResolvedValue({ ok: true, created: true })
+  mocks.title.mockResolvedValue('Generierter Titel')
+})
+
+const CONVERSATION = '00000000-0000-4000-8000-0000000000aa'
+const withConversation = (extra: Record<string, unknown> = {}) => request({ question: 'Was steht dort?', tenant_id: 'kb', conversation_id: CONVERSATION, ...extra })
+
+describe('chat history', () => {
+  it('records the question and the answer, and names a new conversation', async () => {
+    const text = await (await POST(withConversation())).text()
+    expect(mocks.record).toHaveBeenNthCalledWith(1, { userId: 'user', conversationId: CONVERSATION, databaseId: 'kb', role: 'user', content: 'Was steht dort?' })
+    expect(mocks.record).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      userId: 'user', conversationId: CONVERSATION, databaseId: 'kb', role: 'assistant', content: 'Antwort [1]',
+      sources: [expect.objectContaining({ id: '1', url: 'https://example.com' })],
+      metadata: expect.objectContaining({ model_used: 'test', refunded: false }),
+      generatedTitle: 'Generierter Titel',
+    }))
+    expect(text).toContain('"saved":true')
+    expect(text).toContain('"title":"Generierter Titel"')
+  })
+  it('names only a conversation this question opened', async () => {
+    mocks.record.mockResolvedValue({ ok: true, created: false })
+    const text = await (await POST(withConversation())).text()
+    expect(mocks.title).not.toHaveBeenCalled()
+    expect(mocks.record).toHaveBeenLastCalledWith(expect.objectContaining({ role: 'assistant', generatedTitle: null }))
+    expect(text).not.toContain('Generierter Titel')
+  })
+  it('records nothing without a conversation id', async () => {
+    const text = await (await POST(request())).text()
+    expect(mocks.record).not.toHaveBeenCalled()
+    expect(text).toContain('"saved":false')
+  })
+  it('refuses a conversation of another account or knowledge base and refunds', async () => {
+    mocks.record.mockResolvedValue({ ok: false, reason: 'database_mismatch' })
+    const text = await (await POST(withConversation())).text()
+    expect(text).toContain('anderen Wissensbasis')
+    expect(mocks.refund).toHaveBeenCalledOnce()
+    expect(mocks.generate).not.toHaveBeenCalled()
+    expect(mocks.record).toHaveBeenCalledOnce()
+  })
+  it('still answers when the history cannot be written, and says so', async () => {
+    mocks.record.mockRejectedValue(new Error('db down'))
+    const text = await (await POST(withConversation())).text()
+    expect(text).toContain('Antwort [1]')
+    expect(text).toContain('"saved":false')
+    expect(mocks.refund).not.toHaveBeenCalled()
+  })
+  it('records a failed answer as it was shown', async () => {
+    mocks.generate.mockRejectedValue(new Error('down'))
+    await (await POST(withConversation())).text()
+    expect(mocks.record).toHaveBeenLastCalledWith(expect.objectContaining({
+      role: 'assistant', isError: true, content: expect.stringContaining('Credits wurden erstattet'),
+    }))
+  })
+  it('rejects a malformed conversation id before charging', async () => {
+    expect((await POST(withConversation({ conversation_id: 'nope' }))).status).toBe(400)
+    expect(mocks.spend).not.toHaveBeenCalled()
+  })
 })
 
 describe('chat billing at the HTTP boundary', () => {

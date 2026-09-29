@@ -13,7 +13,7 @@ export default function DatenschutzPage() {
   return (
     <LegalPage
       title="Datenschutzerklärung"
-      updated="24. September 2026"
+      updated="29. September 2026"
       intro={
         <>
           CraCha ist ein Werkzeug, mit dem du öffentlich zugängliche Websites in
@@ -118,7 +118,7 @@ export default function DatenschutzPage() {
           Zählwerte zum Umfang sowie deine Nutzerkennung. Zusätzlich speichern
           wir die Inhalte, die beim Abruf der von dir angegebenen Website
           entstehen. Deine Fragen im Chat werden zur Beantwortung verarbeitet;
-          Fragen, Antworten, Quellenverweise und deine lokale Bewertung einer Antwort werden kontobezogen im lokalen Speicher deines Browsers gespeichert. Du kannst Verläufe im Chat löschen und exportieren. Eine Synchronisierung zwischen Geräten findet nicht statt. Für die Antworterzeugung werden die Frage, ein begrenzter Gesprächsverlauf und relevante Quelltexte an die eingesetzten KI-Dienste übermittelt. Die Protokollierung von Frage- und Antwortinhalten am KI-Gateway ist für diese Aufrufe deaktiviert.
+          Fragen, Antworten und Quellenverweise speichern wir als Chatverlauf in deinem Konto, zusammen mit der verwendeten Wissensbasis, damit du deine Chats später und auf anderen Geräten wieder aufrufen kannst. Nur du kannst sie sehen. Aus der ersten Frage eines Chats erzeugt ein Sprachmodell bei Cloudflare (Workers AI) einen kurzen Titel. Du kannst Chats jederzeit umbenennen, löschen und Antworten exportieren. Für die Antworterzeugung werden die Frage, ein begrenzter Gesprächsverlauf und relevante Quelltexte an die eingesetzten KI-Dienste übermittelt. Die Protokollierung von Frage- und Antwortinhalten am KI-Gateway ist für diese Aufrufe deaktiviert.
         </p>
         <p>
           <strong className="text-foreground">
@@ -254,7 +254,7 @@ export default function DatenschutzPage() {
             </>,
             <>
               <strong className="text-foreground">Supabase</strong> — Verwaltung
-              der Benutzerkonten und Anmeldung.
+              der Benutzerkonten und Anmeldung sowie Speicherung deines Chatverlaufs.
             </>,
             <>
               <strong className="text-foreground">Resend</strong> — Versand der
@@ -336,15 +336,20 @@ export default function DatenschutzPage() {
               laufende Abrufe ab und löschen sofort deine Zugangsdaten (E-Mail-Adresse,
               Name, Passwort-Hash, Google-Verknüpfung), alle Wissensbasen mit den
               abgerufenen Inhalten und dem Suchindex, zwischengespeicherte
-              Suchergebnisse, dein Guthaben und deine Credit-Buchungen. Restguthaben,
-              auch gekauftes, verfällt dabei ohne Erstattung. Chat- und Abrufverläufe
-              werden in dem Browser entfernt, in dem du die Löschung auslöst; auf
-              anderen Geräten liegen sie nur lokal und lassen sich dort im Browser
-              löschen.
+              Suchergebnisse, deinen Chatverlauf, dein Guthaben und deine
+              Credit-Buchungen. Restguthaben, auch gekauftes, verfällt dabei ohne
+              Erstattung. Der Abrufverlauf wird in dem Browser entfernt, in dem du
+              die Löschung auslöst; auf anderen Geräten liegt er nur lokal und lässt
+              sich dort im Browser löschen.
             </>,
             <>
               <strong className="text-foreground">Wissensbasen und Inhalte</strong>{" "}
               werden bei Löschung der Wissensbasis oder deines Kontos entfernt.
+            </>,
+            <>
+              <strong className="text-foreground">Chats</strong>{" "}
+              speichern wir, bis du sie löschst, die Wissensbasis löschst, mit der
+              du sie geführt hast, oder dein Konto löschst.
             </>,
             <>
               <strong className="text-foreground">Zahlungsnachweise</strong> zu

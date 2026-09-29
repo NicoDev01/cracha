@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   claimDelete: vi.fn(),
   activeClaim: vi.fn(),
   ragFetch: vi.fn(),
+  deleteChats: vi.fn(),
 }))
 
 vi.mock('./database-registry', () => ({
@@ -24,6 +25,7 @@ vi.mock('./credits', () => ({
   claimDatabaseDeletion: mocks.claimDelete,
   getActiveDeletionClaim: mocks.activeClaim,
 }))
+vi.mock('./chat-history', () => ({ deleteDatabaseConversations: mocks.deleteChats }))
 vi.mock('./cloudflare', () => ({
   getWorkerEnv: () => ({ RAG_API: { fetch: mocks.ragFetch }, RAG_QUERY_SECRET: 'test-secret' }),
 }))
@@ -45,12 +47,14 @@ describe('deleteOwnedDatabase', () => {
     mocks.claimDelete.mockImplementation(async () => { order.push('claim'); return { allowed: true, reason: 'ok' } })
     mocks.save.mockImplementation(async () => { order.push('mark-deleting') })
     mocks.ragFetch.mockImplementation(async () => { order.push('remote'); return new Response('{}', { status: 200 }) })
+    mocks.deleteChats.mockImplementation(async () => { order.push('chats') })
     mocks.deleteAccess.mockImplementation(async () => { order.push('access') })
     mocks.release.mockImplementation(async () => { order.push('registry') })
     mocks.deallocateSlot.mockImplementation(async () => { order.push('slot') })
 
     await expect(deleteOwnedDatabase('user-1', 'db-1')).resolves.toEqual({ ok: true })
-    expect(order).toEqual(['claim', 'mark-deleting', 'remote', 'access', 'registry', 'slot'])
+    expect(order).toEqual(['claim', 'mark-deleting', 'remote', 'chats', 'access', 'registry', 'slot'])
+    expect(mocks.deleteChats).toHaveBeenCalledWith('user-1', 'db-1')
   })
 
   it('reports 404 for an id missing from KV without a claim unless ownership is known', async () => {

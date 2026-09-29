@@ -41,9 +41,11 @@ for path in [
     "supabase/migrations/20260920100000_database_quota_guards.sql",
     "supabase/migrations/20260923120000_account_self_deletion.sql",
     "supabase/migrations/20260924100000_activation_funnel_and_reminder.sql",
+    "supabase/migrations/20260929120000_server_chat_history.sql",
     "supabase/tests/billing-assertions.sql",
     "supabase/tests/account-deletion-assertions.sql",
     "supabase/tests/activation-assertions.sql",
+    "supabase/tests/chat-history-assertions.sql",
 ]:
     sql(Path(path).read_text(encoding="utf-8"))
 

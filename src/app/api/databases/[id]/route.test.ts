@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   claimDelete: vi.fn(),
   activeClaim: vi.fn(),
   ragFetch: vi.fn(),
+  deleteChats: vi.fn(),
 }))
 
 vi.mock('@/lib/supabase/server', () => ({ getAuthenticatedUser: mocks.auth }))
@@ -29,6 +30,7 @@ vi.mock('@/lib/server/credits', () => ({
   claimDatabaseDeletion: mocks.claimDelete,
   getActiveDeletionClaim: mocks.activeClaim,
 }))
+vi.mock('@/lib/server/chat-history', () => ({ deleteDatabaseConversations: mocks.deleteChats }))
 vi.mock('@/lib/server/cloudflare', () => ({
   getWorkerEnv: () => ({
     RAG_API: { fetch: mocks.ragFetch },
@@ -171,6 +173,7 @@ describe('/api/databases/[id]', () => {
       expect.stringContaining('/databases/db-1?user_id=user-1'),
       expect.objectContaining({ method: 'DELETE' }),
     )
+    expect(mocks.deleteChats).toHaveBeenCalledWith('user-1', 'db-1')
     expect(mocks.deleteAccess).toHaveBeenCalledWith('db-1', 'user-1')
     expect(mocks.release).toHaveBeenCalledWith('user-1', 'db-1')
     expect(mocks.deallocateSlot).toHaveBeenCalledWith('user-1', 'db-1')

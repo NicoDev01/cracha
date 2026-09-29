@@ -1,17 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 
-import { getWorkerEnv } from '@/lib/server/cloudflare'
+import { recordMessage, type RecordResult } from '@/lib/server/chat-history'
+import { generateChatTitle } from '@/lib/server/chat-title'
+import { getWorkerEnv, keepAlive } from '@/lib/server/cloudflare'
 import { citationAnchors, DEFAULT_BYOK_MODEL, DEFAULT_GENERATION_MODEL, reciteNumbers, streamGroundedAnswer } from '@/lib/server/generation'
 import { CreditError, getCreditState, spendChatCredits, refundChatCredits, CREDITS, admitRequest, hasUnsettledCrawl, DuplicateRequestError } from '@/lib/server/credits'
 import { getOwnedDatabase } from '@/lib/server/database-registry'
 import { getAuthenticatedUser } from '@/lib/supabase/server'
-import type { Source } from '@/types/chat'
+import type { ChatResponse, Source } from '@/types/chat'
 
 export const dynamic = 'force-dynamic'
 
 const chatBody = z.object({
   request_id: z.string().uuid().optional(),
+  /** Where the exchange is kept; without it nothing is recorded. */
+  conversation_id: z.string().uuid().optional(),
   question: z.string().trim().min(1).max(4_000),
   tenant_id: z.string().trim().min(1).max(160),
   top_k: z.number().int().min(1).max(12).default(8),
@@ -42,6 +46,21 @@ interface RetrievalResponse {
 }
 
 const encoder = new TextEncoder()
+
+const REFUSED_CONVERSATION: Record<Exclude<RecordResult, { ok: true }>['reason'], string> = {
+  not_found: 'Diese Unterhaltung gibt es nicht mehr. Bitte starte einen neuen Chat.',
+  database_mismatch: 'Diese Unterhaltung gehört zu einer anderen Wissensbasis. Bitte starte einen neuen Chat.',
+  full: 'Diese Unterhaltung ist lang. Bitte starte einen neuen Chat.',
+}
+
+/** A slow history must not hold up the answer; the write itself still finishes. */
+const HISTORY_WAIT_MS = 4_000
+
+function within<T>(work: Promise<T>, milliseconds: number, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const late = new Promise<T>((resolve) => { timer = setTimeout(() => resolve(fallback), milliseconds) })
+  return Promise.race([work, late]).finally(() => clearTimeout(timer))
+}
 
 type StreamEvent = 'progress' | 'meta' | 'delta' | 'done' | 'error'
 
@@ -134,19 +153,50 @@ export async function POST(request: NextRequest) {
       const send = (event: StreamEvent, data: unknown) => {
         try { controller.enqueue(encodeEvent(event, data)) } catch { /* The reader has gone. */ }
       }
-      const fail = async (message: string) => {
-        const refunded = await refund()
-        send('error', {
-          message: refunded ? `${message} Credits wurden erstattet.` : `${message} Guthaben bitte mit Referenz ${reference} prüfen lassen.`,
-          refunded,
-          reference,
+      let env: CloudflareEnv | undefined
+      try { env = getWorkerEnv() } catch { /* Reported by the search below. */ }
+      const gatewayId = (env as unknown as { AI_GATEWAY_ID?: string } | undefined)?.AI_GATEWAY_ID || process.env.CF_AI_GATEWAY_ID || process.env.AI_GATEWAY_ID
+
+      // The question is recorded while the search runs, and a new conversation
+      // gets its title meanwhile, so neither delays the answer. A history that
+      // cannot be written never costs the reader the answer; the client is told.
+      const conversationId = parsed.data.conversation_id
+      const opened: Promise<RecordResult | null> = conversationId
+        ? recordMessage({ userId: user.id, conversationId, databaseId: tenantId, role: 'user', content: question })
+          .catch((error) => {
+            console.error(JSON.stringify({ event: 'chat_history_write_failed', stage: 'question', reason: String(error) }))
+            return null
+          })
+        : Promise.resolve(null)
+      keepAlive(opened)
+      const titling = opened.then((result) => result?.ok && result.created
+        ? generateChatTitle(env?.AI, question, { signal: AbortSignal.timeout(8_000), gatewayId })
+        : null)
+      const recordAnswer = async (answer: { content: string; sources?: Source[]; metadata?: ChatResponse['metadata']; isError?: boolean }) => {
+        const result = await within(opened, HISTORY_WAIT_MS, null)
+        if (!result?.ok) return { saved: false }
+        const title = await within(titling, HISTORY_WAIT_MS, null)
+        const write = recordMessage({
+          userId: user.id, conversationId: conversationId!, databaseId: tenantId, role: 'assistant', ...answer, generatedTitle: title,
+        }).then((stored) => stored.ok).catch((error) => {
+          console.error(JSON.stringify({ event: 'chat_history_write_failed', stage: 'answer', reason: String(error) }))
+          return false
         })
+        // Also when the reader has gone: the answer they paid for stays in their history.
+        keepAlive(write)
+        return { saved: await within(write, HISTORY_WAIT_MS, false), ...(title ? { title } : {}) }
+      }
+
+      const fail = async (message: string, partial: { text?: string; sources?: Source[] } = {}) => {
+        const refunded = await refund()
+        const shown = refunded ? `${message} Credits wurden erstattet.` : `${message} Guthaben bitte mit Referenz ${reference} prüfen lassen.`
+        send('error', { message: shown, refunded, reference })
+        await recordAnswer({ content: partial.text ? `${partial.text}\n\n${shown}` : shown, sources: partial.sources, isError: true })
       }
       try {
-        let env: CloudflareEnv
         let retrieval: RetrievalResponse & { context: string }
         try {
-          env = getWorkerEnv()
+          if (!env) throw new Error('No Worker environment')
           retrieval = await searchKnowledgeBase(env, {
             signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
             body: { question, tenant_id: tenantId, user_id: user.id, top_k, messages },
@@ -154,6 +204,12 @@ export async function POST(request: NextRequest) {
           })
         } catch (error) {
           await fail(error instanceof RetrievalError ? error.message : 'Suche vorübergehend nicht verfügbar.')
+          return
+        }
+        // Only a forged or stale id gets here; it is refused like any other failure.
+        const opening = await within(opened, HISTORY_WAIT_MS, null)
+        if (opening && !opening.ok) {
+          await fail(REFUSED_CONVERSATION[opening.reason])
           return
         }
 
@@ -174,9 +230,15 @@ export async function POST(request: NextRequest) {
           // No model ran, so the answer line names none. It used to carry the
           // search service, which is the one place the reader saw it.
           const model = ''
+          const text = 'Ich konnte in dieser Wissensbasis keine ausreichend relevanten Informationen finden.'
           send('meta', { sources: [], model })
-          send('delta', { text: 'Ich konnte in dieser Wissensbasis keine ausreichend relevanten Informationen finden.' })
-          send('done', { usage: usage(), model, refunded, reference })
+          send('delta', { text })
+          const finished = usage()
+          const stored = await recordAnswer({
+            content: text,
+            metadata: { query_time: finished.latency_ms, retrieval_time: finished.retrieval_ms, retrieval_cached: finished.retrieval_cached, model_used: model, refunded, reference },
+          })
+          send('done', { usage: finished, model, refunded, reference, ...stored })
           return
         }
 
@@ -185,7 +247,6 @@ export async function POST(request: NextRequest) {
         const byokKey = parsed.data.api_key || undefined
         const configuredModel = env.GENERATION_MODEL || DEFAULT_GENERATION_MODEL
         const selectedModel = byokKey ? (parsed.data.model || DEFAULT_BYOK_MODEL) : configuredModel
-        const gatewayId = (env as unknown as { AI_GATEWAY_ID?: string }).AI_GATEWAY_ID || process.env.CF_AI_GATEWAY_ID || process.env.AI_GATEWAY_ID
 
         let generated: Awaited<ReturnType<typeof streamGroundedAnswer>>
         try {
@@ -245,19 +306,45 @@ export async function POST(request: NextRequest) {
             final = answer
             console.error(JSON.stringify({ event: 'citation_check_failed', reason: error instanceof Error ? error.name : 'unknown' }))
           }
+          // Stored as the client builds it from these events, so a reopened
+          // conversation reads exactly like the one that was streamed.
+          const finished = usage()
+          const requestedModel = model && model !== usedModel ? model : undefined
+          const stored = await recordAnswer({
+            content: final,
+            sources,
+            metadata: {
+              query_time: finished.latency_ms,
+              retrieval_time: finished.retrieval_ms,
+              retrieval_cached: finished.retrieval_cached,
+              model_used: usedModel,
+              fallback,
+              fallback_reason: fallback ? fallbackReason : undefined,
+              fallback_detail: fallback ? fallbackDetail : undefined,
+              requested_model: requestedModel,
+              substitute_reason: requestedModel && !fallback ? substituteReason : undefined,
+              substitute_detail: requestedModel && !fallback ? substituteDetail : undefined,
+              refunded: false,
+              reference,
+              citation_anchors: anchors,
+            },
+          })
           send('done', {
-            usage: usage(), model, usedModel, fallback, fallbackReason, fallbackDetail, substituteReason, substituteDetail, mode, reference, refunded: false,
+            usage: finished, model, usedModel, fallback, fallbackReason, fallbackDetail, substituteReason, substituteDetail, mode, reference, refunded: false,
             anchors,
             ...(final !== answer ? { text: final } : {}),
+            ...stored,
           })
         } catch (error) {
           console.error(JSON.stringify({ event: 'chat_generation_failed', reason: error instanceof Error ? error.name : 'unknown' }))
           // Deliberately stopping after receiving text must not permit unlimited
           // free generation by cancelling just before the final event.
           if (signal.aborted && hasText) {
-            send('error', { message: 'Die begonnene Antwort wurde gestoppt und berechnet.', refunded: false, reference })
+            const message = 'Die begonnene Antwort wurde gestoppt und berechnet.'
+            send('error', { message, refunded: false, reference })
+            await recordAnswer({ content: `${answer}\n\n${message}`, sources, metadata: { query_time: Date.now() - started, model_used: usedModel, reference }, isError: true })
           } else {
-            await fail('Die Antwort konnte nicht erzeugt werden.')
+            await fail('Die Antwort konnte nicht erzeugt werden.', { text: answer, sources: hasText ? sources : undefined })
           }
         }
       } finally {

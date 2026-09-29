@@ -1,10 +1,11 @@
 "use client";
-import React from "react";
+import React, { useCallback, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { Ellipsis, Globe, LayoutDashboard, Library, MessagesSquare, type LucideIcon } from "lucide-react";
+import { ChevronDown, Ellipsis, Globe, LayoutDashboard, Library, MessagesSquare, type LucideIcon } from "lucide-react";
 import { useSidebar } from "../context/SidebarContext";
+import { ChatHistoryNav } from "./ChatHistoryNav";
 
 type NavItem = {
   name: string;
@@ -22,18 +23,34 @@ const navItems: NavItem[] = [
   { icon: Library, name: "Wissensbasen", path: "/dashboard/data" },
 ];
 
+const CHAT_PATH = "/dashboard/chat";
+
 const AppSidebar: React.FC = () => {
-  const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
+  const { isExpanded, isMobileOpen, isHovered, setIsHovered, toggleMobileSidebar } = useSidebar();
   const pathname = usePathname();
   const showLabels = isExpanded || isHovered || isMobileOpen;
+  const [historyOpen, setHistoryOpen] = useState(true);
+  const asideRef = useRef<HTMLElement>(null);
+  const held = useRef(false);
+
+  // A chat menu is rendered outside the sidebar; moving to it must not
+  // collapse a sidebar that is only open because it is hovered.
+  const hold = useCallback((value: boolean) => {
+    held.current = value;
+    if (!value && !asideRef.current?.matches(":hover")) setIsHovered(false);
+  }, [setIsHovered]);
+  const closeOnPhone = useCallback(() => {
+    if (isMobileOpen) toggleMobileSidebar();
+  }, [isMobileOpen, toggleMobileSidebar]);
 
   const renderMenuItems = (items: NavItem[]) => (
     <ul className="flex flex-col gap-4">
       {items.map((nav) => {
         const active = nav.path === pathname;
         const Icon = nav.icon;
+        const isChat = nav.path === CHAT_PATH;
         return (
-          <li key={nav.name}>
+          <li key={nav.name} className="relative">
             <Link
               href={nav.path}
               // Every dashboard route renders dynamically behind auth, and
@@ -50,6 +67,27 @@ const AppSidebar: React.FC = () => {
               </span>
               {showLabels && <span className="menu-item-text">{nav.name}</span>}
             </Link>
+            {isChat && showLabels && (
+              <button
+                type="button"
+                onClick={() => setHistoryOpen((open) => !open)}
+                aria-expanded={historyOpen}
+                aria-label={historyOpen ? "Chatverlauf einklappen" : "Chatverlauf ausklappen"}
+                title={historyOpen ? "Chatverlauf einklappen" : "Chatverlauf ausklappen"}
+                className="absolute right-1 top-1.5 rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-white/5 dark:hover:text-gray-200"
+              >
+                <ChevronDown className={`size-4 transition-transform ${historyOpen ? "rotate-180" : ""}`} aria-hidden="true" />
+              </button>
+            )}
+            {/*
+              Hidden rather than unmounted while the sidebar is a rail, so a
+              delete confirmation opened from it survives the sidebar collapsing.
+            */}
+            {isChat && (
+              <div className={showLabels && historyOpen ? "" : "hidden"}>
+                <ChatHistoryNav onHold={hold} onNavigate={closeOnPhone} />
+              </div>
+            )}
           </li>
         );
       })}
@@ -68,7 +106,10 @@ const AppSidebar: React.FC = () => {
         ${isMobileOpen ? "translate-x-0" : "-translate-x-full"}
         lg:translate-x-0`}
       onMouseEnter={() => !isExpanded && setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseLeave={() => {
+        if (!held.current) setIsHovered(false);
+      }}
+      ref={asideRef}
     >
       <div
         className={`hidden lg:flex py-8 ${!isExpanded && !isHovered ? "lg:justify-center" : "justify-start"
@@ -102,7 +143,8 @@ const AppSidebar: React.FC = () => {
           )}
         </Link>
       </div>
-      <div className="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar">
+      {/* The bottom padding keeps the end of a long chat list above the phone's offset. */}
+      <div className="flex flex-col overflow-y-auto pb-32 duration-300 ease-linear no-scrollbar lg:pb-6">
         <nav className="mb-6">
           <div className="flex flex-col gap-4">
             <div>

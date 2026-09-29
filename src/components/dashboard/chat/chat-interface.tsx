@@ -13,6 +13,7 @@ import {
   FileText,
   Key,
   MessageSquare,
+  SquarePen,
   Trash2,
 } from 'lucide-react';
 import {
@@ -363,7 +364,13 @@ export function ChatInterface() {
     ownerId,
     messages,
     clearChat,
+    newConversation,
+    ensureSelectedConversation,
+    history,
+    selectedConversation,
+    loadingConversation,
     selectedDatabase,
+    error,
     setError,
     sendMessage,
     isLoading,
@@ -416,9 +423,19 @@ export function ChatInterface() {
     window.history.replaceState(null, '', window.location.pathname);
   }, [ready, selectDatabase]);
 
+  // A conversation selected on an earlier visit is fetched once the store is ready.
+  useEffect(() => {
+    if (ready) void ensureSelectedConversation();
+  }, [ready, ensureSelectedConversation]);
+
   useEffect(() => {
     if (!isLoading && !isStreaming && selectedDatabase) inputRef.current?.focus();
-  }, [isLoading, isStreaming, selectedDatabase]);
+  }, [isLoading, isStreaming, selectedDatabase, selectedConversation]);
+
+  const conversationTitle = selectedConversation
+    ? history.find((chat) => chat.id === selectedConversation)?.title
+    : undefined;
+  const isOpening = selectedConversation !== null && loadingConversation === selectedConversation;
 
   // Announcing every streamed token would flood a screen reader, so only the
   // state transitions are spoken. The answer itself is read on demand.
@@ -434,7 +451,7 @@ export function ChatInterface() {
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     const question = input.trim();
-    if (!question || !selectedDatabase || isLoading || isStreaming) return;
+    if (!question || !selectedDatabase || isLoading || isStreaming || isOpening) return;
     if (question.length > 4_000) {
       setError(`Eingabe zu lang (${question.length} Zeichen). Maximal 4.000 Zeichen sind zulässig.`);
       return;
@@ -527,7 +544,7 @@ export function ChatInterface() {
           <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-500 text-white shadow-theme-sm">
             <MessageSquare className="size-5" />
           </div>
-          <h1 className="truncate font-semibold text-gray-900 dark:text-white">CraCha Chat</h1>
+          <h1 className="truncate font-semibold text-gray-900 dark:text-white" title={conversationTitle}>{conversationTitle ?? 'CraCha Chat'}</h1>
         </div>
 
         <div className="flex min-w-0 flex-1 items-center justify-end gap-2 sm:flex-none">
@@ -586,6 +603,19 @@ export function ChatInterface() {
             )}
           </Dialog>
           {messages.length > 0 && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => newConversation()}
+              className="rounded-full text-gray-500 hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.06] dark:hover:text-gray-100"
+              aria-label="Neuer Chat"
+              title="Neuer Chat"
+            >
+              <SquarePen className="size-4" />
+            </Button>
+          )}
+          {messages.length > 0 && (
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button
@@ -593,23 +623,23 @@ export function ChatInterface() {
                   variant="ghost"
                   size="icon"
                   className="rounded-full text-gray-500 hover:bg-error-50 hover:text-error-600 dark:text-gray-400 dark:hover:bg-error-500/10"
-                  aria-label="Unterhaltung löschen"
-                  title="Unterhaltung löschen"
+                  aria-label="Chat löschen"
+                  title="Chat löschen"
                 >
                   <Trash2 className="size-4" />
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Unterhaltung löschen?</AlertDialogTitle>
+                  <AlertDialogTitle>Chat löschen?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    {`Alle ${messages.length} Nachrichten dieser Unterhaltung werden entfernt. Das lässt sich nicht rückgängig machen.`}
+                    {`${conversationTitle ? `„${conversationTitle}“ wird` : 'Dieser Chat wird'} mit allen ${messages.length} Nachrichten endgültig gelöscht. Das lässt sich nicht rückgängig machen.`}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel className="rounded-full">Abbrechen</AlertDialogCancel>
                   <AlertDialogAction
-                    onClick={clearChat}
+                    onClick={() => void clearChat()}
                     className="rounded-full bg-error-600 text-white hover:bg-error-700"
                   >
                     Löschen
@@ -628,7 +658,12 @@ export function ChatInterface() {
       <div className="flex min-h-0 flex-1 flex-col bg-gradient-to-b from-gray-25 to-white dark:from-gray-950 dark:to-gray-900">
         <Conversation className="min-h-0 flex-1 custom-scrollbar">
           <ConversationContent className="mx-auto flex min-h-full w-full max-w-5xl flex-col px-3 py-4 sm:px-6 sm:py-6">
-            {messages.length === 0 ? (
+            {isOpening && messages.length === 0 ? (
+              <div className="m-auto flex items-center gap-2 py-8 text-sm text-gray-500 dark:text-gray-400" role="status">
+                <Loader className="text-brand-500" />
+                Chat wird geladen …
+              </div>
+            ) : messages.length === 0 ? (
               selectedDatabase ? (
                 /*
                  * A base is picked: no icon, no headline, no explanation — the
@@ -843,6 +878,12 @@ export function ChatInterface() {
                 </button>
               </div>
             )}
+            {error && (
+              <p className="mb-2 flex items-start gap-1.5 px-2 text-xs text-error-600 dark:text-error-400" role="alert">
+                <AlertTriangle className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+                {error}
+              </p>
+            )}
             <PromptInput onSubmit={handleSubmit} className="relative flex items-end py-2.5 pl-5 pr-14">
               <PromptInputTextarea
                 ref={inputRef}
@@ -861,7 +902,7 @@ export function ChatInterface() {
               />
               <PromptInputSubmit
                 className="absolute bottom-1.5 right-1.5 size-10"
-                disabled={!input.trim() || !selectedDatabase || isLoading || isStreaming}
+                disabled={!input.trim() || !selectedDatabase || isLoading || isStreaming || isOpening}
                 status={isLoading || isStreaming ? 'submitted' : undefined}
                 aria-label="Nachricht senden"
                 title="Nachricht senden"
