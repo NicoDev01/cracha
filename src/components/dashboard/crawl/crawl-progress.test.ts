@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { CrawlJob } from '@/stores/crawl-store'
 
-import { crawlPageLimit, crawlProgressLabel, crawlResultLabel, crawlStepProgress } from './crawl-progress'
+import { crawlOverallPercent, crawlPageLimit, crawlProgressLabel, crawlResultLabel, crawlStepProgress } from './crawl-progress'
 
 type Job = Pick<CrawlJob, 'phase' | 'page_limit' | 'progress' | 'pages_crawled'>
 const job = (overrides: Partial<Job>): Job => ({ phase: 'crawling', pages_crawled: 0, ...overrides })
@@ -77,5 +77,13 @@ describe('crawlStepProgress', () => {
     expect(late).toBeGreaterThan(early)
     expect(crawlStepProgress(step({ phase: 'indexing' }), at(3600))[2]).toBeLessThan(1)
     expect(crawlStepProgress(step({ phase: 'completed', status: 'completed' }), at(0))).toEqual([1, 1, 1])
+  })
+})
+
+describe('crawlOverallPercent', () => {
+  it('weights the steps and clamps each to its share', () => {
+    expect(crawlOverallPercent([0, 0, 0])).toBe(0)
+    expect(crawlOverallPercent([1, 0.5, 0])).toBe(40)
+    expect(crawlOverallPercent([1, 1, 2])).toBe(100)
   })
 })

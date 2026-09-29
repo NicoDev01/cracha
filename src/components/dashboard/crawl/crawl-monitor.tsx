@@ -11,11 +11,15 @@ import { Button } from "@/components/ui/button"
 import { chatHref } from "@/lib/databases"
 import { cn } from "@/lib/utils"
 import { useCrawlStore, type CrawledPage, type SkippedPage } from "@/stores/crawl-store"
-import { crawlIndexedLabel, crawlPageLimit, crawlStepProgress } from "./crawl-progress"
+import { crawlIndexedLabel, crawlOverallPercent, crawlPageLimit, crawlStepProgress } from "./crawl-progress"
 
 const number = new Intl.NumberFormat("de-DE")
 
-const steps = ["Vorbereiten", "Seiten crawlen", "Durchsuchbar machen"]
+const steps = [
+  { label: "Vorbereiten", description: "Der Crawler wird gestartet" },
+  { label: "Seiten crawlen", description: "Seiten der Website abrufen und lesen" },
+  { label: "Durchsuchbar machen", description: "In Abschnitte zerlegen und indexieren" },
+]
 
 function formatDuration(seconds: number) {
   if (seconds < 60) return `${seconds} s`
@@ -46,46 +50,109 @@ function useNow(running: boolean, interval = 250) {
   return now
 }
 
-/**
- * Three bars that fill from 0 to 100 one after the other. The width glides to
- * each new value instead of jumping, and a finished step gets its check mark.
- */
-function StepBar({ progress, current }: { progress: [number, number, number]; current: number }) {
+/** One bar for the whole run, with the current step on the left and the share done on the right. */
+function OverallBar({ percent, current }: { percent: number; current: number }) {
   const reduceMotion = useReducedMotion()
   return (
-    <div className="grid grid-cols-3 gap-2" aria-label="Fortschritt">
-      {steps.map((label, index) => {
-        const done = progress[index] >= 1
+    <div>
+      <div className="mb-2 flex items-baseline justify-between gap-3 text-sm">
+        <span className="truncate font-medium text-gray-900 dark:text-white">
+          <span className="mr-2 font-mono text-xs font-normal tabular-nums text-gray-400 dark:text-gray-500">{current + 1}/{steps.length}</span>
+          {steps[current].label}
+        </span>
+        <span className="shrink-0 font-mono text-xs tabular-nums text-gray-500 dark:text-gray-400">{percent} %</span>
+      </div>
+      <div
+        role="progressbar"
+        aria-label="Gesamtfortschritt"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent}
+        className="relative h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800"
+      >
+        <motion.div
+          className="absolute inset-y-0 left-0 rounded-full bg-brand-500"
+          initial={false}
+          animate={{ width: `${percent}%` }}
+          transition={reduceMotion ? { duration: 0 } : { duration: 0.9, ease: "easeOut" }}
+        />
+        {!reduceMotion && (
+          <motion.div
+            className="absolute inset-y-0 w-1/5 bg-gradient-to-r from-transparent via-white/40 to-transparent dark:via-white/20"
+            initial={{ left: "-20%" }}
+            animate={{ left: "100%" }}
+            transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+          />
+        )}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The three steps stacked, each marker sitting on one track. The piece of
+ * track below a step fills as that step advances, so the line itself shows
+ * how far the current step has come.
+ */
+function StepList({ progress, current, details }: { progress: [number, number, number]; current: number; details: (string | null)[] }) {
+  const reduceMotion = useReducedMotion()
+  return (
+    <ol aria-label="Schritte">
+      {steps.map((step, index) => {
+        const done = progress[index] >= 1 || index < current
         const active = index === current && !done
+        const last = index === steps.length - 1
         return (
-          <div key={label} className="min-w-0">
-            <div className="relative h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
-              <motion.div
-                className={cn("absolute inset-y-0 left-0 rounded-full", done ? "bg-success-500" : "bg-brand-500")}
+          <li key={step.label} aria-current={active ? "step" : undefined} className="relative grid grid-cols-[1.5rem_1fr] gap-x-3.5">
+            <div className="relative flex justify-center">
+              <motion.span
                 initial={false}
-                animate={{ width: `${Math.round(progress[index] * 1000) / 10}%` }}
-                transition={reduceMotion ? { duration: 0 } : { duration: 0.9, ease: "easeOut" }}
-              />
-              {active && !reduceMotion && (
-                <motion.div
-                  className="absolute inset-y-0 w-1/4 bg-gradient-to-r from-transparent via-white/50 to-transparent dark:via-white/25"
-                  initial={{ left: "-25%" }}
-                  animate={{ left: "100%" }}
-                  transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
-                />
+                animate={{ scale: done ? [0.7, 1] : 1 }}
+                transition={reduceMotion ? { duration: 0 } : { type: "spring", stiffness: 420, damping: 20 }}
+                className={cn(
+                  "relative z-10 flex size-6 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums transition-colors duration-300",
+                  done && "bg-success-500 text-white",
+                  active && "bg-white ring-2 ring-brand-500 dark:bg-gray-900",
+                  !done && !active && "bg-white text-gray-400 ring-1 ring-gray-200 dark:bg-gray-900 dark:text-gray-500 dark:ring-gray-700",
+                )}
+              >
+                {done ? (
+                  <Check className="size-3.5" strokeWidth={3} />
+                ) : active ? (
+                  <span className="relative flex size-2">
+                    {!reduceMotion && <span className="absolute inset-0 animate-ping rounded-full bg-brand-500/60" />}
+                    <span className="relative size-2 rounded-full bg-brand-500" />
+                  </span>
+                ) : (
+                  index + 1
+                )}
+              </motion.span>
+              {!last && (
+                <span className="absolute left-1/2 top-7 bottom-1 w-0.5 -translate-x-1/2 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
+                  <motion.span
+                    className={cn("absolute inset-x-0 top-0 rounded-full", done ? "bg-success-500" : "bg-brand-500")}
+                    initial={false}
+                    animate={{ height: `${Math.round(Math.min(1, progress[index]) * 1000) / 10}%` }}
+                    transition={reduceMotion ? { duration: 0 } : { duration: 0.9, ease: "easeOut" }}
+                  />
+                </span>
               )}
             </div>
-            <p className={cn(
-              "mt-2 flex items-center gap-1 truncate text-xs",
-              active ? "font-medium text-gray-900 dark:text-white" : done ? "text-gray-500 dark:text-gray-400" : "text-gray-400 dark:text-gray-600",
-            )}>
-              {done && <Check className="size-3 shrink-0 text-success-500" strokeWidth={3} />}
-              <span className="truncate">{label}</span>
-            </p>
-          </div>
+            <div className={cn("min-w-0 pt-0.5", !last && "pb-6")}>
+              <p className={cn(
+                "text-sm transition-colors",
+                active ? "font-medium text-gray-900 dark:text-white" : done ? "text-gray-700 dark:text-gray-300" : "text-gray-400 dark:text-gray-500",
+              )}>
+                {step.label}
+              </p>
+              <p className={cn("mt-0.5 text-xs leading-5", active ? "text-gray-500 dark:text-gray-400" : "text-gray-400 dark:text-gray-500")}>
+                {details[index] ?? step.description}
+              </p>
+            </div>
+          </li>
         )
       })}
-    </div>
+    </ol>
   )
 }
 
@@ -256,6 +323,16 @@ export function CrawlMonitor({ onNew }: { onNew?: () => void }) {
   const pages = currentJob.crawled_pages ?? [...(currentJob.recent_pages ?? [])].reverse()
   const found = currentJob.progress?.current ?? currentJob.pages_crawled
   const limit = crawlPageLimit(currentJob)
+  const indexing = number.format(currentJob.progress?.total || currentJob.pages_crawled)
+  const stepDetails = [
+    currentStep > 0 ? "Gestartet" : null,
+    currentStep === 1
+      ? found > 0
+        ? `${number.format(found)} ${limit ? `von max. ${number.format(limit)} ` : ""}${found === 1 ? "Seite" : "Seiten"} erfasst`
+        : "Seiten werden gesucht …"
+      : currentStep > 1 ? `${number.format(found)} ${found === 1 ? "Seite" : "Seiten"} erfasst` : null,
+    currentStep === 2 ? `${indexing} Seiten werden in Abschnitte zerlegt und gespeichert · meist etwa eine Minute` : null,
+  ]
   // A failed crawl used to be a dead end: the only way on was deleting the
   // knowledge base and setting it up again. Needs the knowledge base id, which
   // a crawl refused before the server assigned one never had.
@@ -310,25 +387,9 @@ export function CrawlMonitor({ onNew }: { onNew?: () => void }) {
             exit={{ opacity: 0 }}
             className="space-y-6"
           >
-            <StepBar progress={progress} current={currentStep} />
+            <OverallBar percent={crawlOverallPercent(progress)} current={currentStep} />
 
-            {currentJob.phase === "indexing" ? (
-              <div>
-                <p className="text-sm font-medium text-gray-900 dark:text-white">
-                  {number.format(currentJob.progress?.total || currentJob.pages_crawled)} Seiten werden durchsuchbar gemacht
-                </p>
-                <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">
-                  Sie werden in Abschnitte zerlegt und so gespeichert, dass der Chat passende Stellen findet. Meist dauert das etwa eine Minute.
-                </p>
-              </div>
-            ) : currentJob.phase === "crawling" ? (
-              <p className="flex items-baseline gap-2">
-                <span className="font-urban text-4xl font-semibold tabular-nums tracking-tight text-gray-900 dark:text-white">{number.format(found)}</span>
-                <span className="text-sm text-gray-500 dark:text-gray-400">{limit ? `von max. ${number.format(limit)} Seiten` : found === 1 ? "Seite" : "Seiten"}</span>
-              </p>
-            ) : (
-              <p className="text-sm text-gray-500 dark:text-gray-400">Der Crawler startet …</p>
-            )}
+            <StepList progress={progress} current={currentStep} details={stepDetails} />
 
             {currentJob.phase !== "queued" && (
               <PageLog key={currentJob.id} pages={pages} running={isRunning} scanning={currentJob.phase === "indexing"} />

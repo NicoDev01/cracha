@@ -89,3 +89,12 @@ export function crawlStepProgress(
       return [0, 0, 0]
   }
 }
+
+/** How much of the whole run each step stands for: starting is quick, fetching takes longest. */
+const STEP_WEIGHTS = [0.1, 0.6, 0.3] as const
+
+/** The three step bars as one figure from 0 to 100, for the bar above the steps. */
+export function crawlOverallPercent(progress: [number, number, number]): number {
+  const total = progress.reduce((sum, value, index) => sum + Math.min(1, Math.max(0, value)) * STEP_WEIGHTS[index], 0)
+  return Math.round(total * 100)
+}
