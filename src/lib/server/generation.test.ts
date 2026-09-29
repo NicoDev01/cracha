@@ -862,6 +862,29 @@ describe('checking citations against the cited page', () => {
     })
   })
 
+  it('keeps a German date and an abbreviation inside their sentence', () => {
+    const page = 'Die Bewerbungsfrist endet am 15. Juli für z. B. Informatik und BWL. Danach ist keine Bewerbung mehr möglich.'
+    expect(anchorFor('Die Frist endet am 15. Juli [1]', page)?.quote)
+      .toBe('Die Bewerbungsfrist endet am 15. Juli für z. B. Informatik und BWL.')
+  })
+
+  it('takes in the next sentence when the line also states what it says', () => {
+    const page = [
+      '## Fristen',
+      'Die Bewerbungsfrist für das Wintersemester endet am 15. Juli. Der Semesterbeitrag beträgt 312,50 Euro. Die Mensa öffnet um 11 Uhr.',
+    ].join('\n')
+    const anchor = anchorFor('Bewerbung bis 15. Juli, Semesterbeitrag 312,50 Euro [1]', page)
+    expect(anchor?.quote).toBe('Die Bewerbungsfrist für das Wintersemester endet am 15. Juli. Der Semesterbeitrag beträgt 312,50 Euro.')
+    expect(anchor).toMatchObject({ start: 'Die Bewerbungsfrist für das', end: 'Semesterbeitrag beträgt 312,50 Euro.', section: 'Fristen' })
+  })
+
+  it('cuts a long passage around the supporting words, not after them', () => {
+    const filler = 'Dieser Absatz beschreibt allgemein die Hochschule und ihre lange Geschichte in der Region. '.repeat(5)
+    const quote = anchorFor('Die Gebühr beträgt 312,50 Euro [1]', `${filler}Die Gebühr beträgt 312,50 Euro pro Semester.`)?.quote ?? ''
+    expect(quote).toContain('Die Gebühr beträgt 312,50 Euro pro Semester.')
+    expect(quote.length).toBeLessThanOrEqual(362)
+  })
+
   it('anchors every marker by line', () => {
     const anchors = citationAnchors('Intro\n1. Christiane Niebuhr-Redder [2]\nGegründet 1996 in Bremen. [1]', blocks)
     expect(anchors['1:2'].phrase).toBe('Christiane Niebuhr-Redder')

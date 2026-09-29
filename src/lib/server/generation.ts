@@ -834,9 +834,19 @@ export interface CitationAnchor {
 
 const ANCHOR_WORDS = 8
 const ANCHOR_EDGE_WORDS = 4
-const ANCHOR_QUOTE_CHARACTERS = 280
+const ANCHOR_QUOTE_CHARACTERS = 360
 /** A number weighs more than a word: it is what a line is least likely to share by chance. */
 const ANCHOR_NUMBER_WEIGHT = 3
+/** Neighbouring sentences a quote may take in when the line draws on them too. */
+const ANCHOR_EXTRA_SENTENCES = 2
+
+/**
+ * A sentence ends at . ! or ? followed by a capital, a digit or an opening
+ * quote — but not after a German ordinal ("am 15. Juli") or a common
+ * abbreviation ("z. B. Informatik", "ca. 400"), which split a date or a
+ * figure from what it belongs to.
+ */
+const SENTENCE_BREAK = /(?<=[.!?])(?<!(?:^|[\s(])\d{1,3}\.)(?<!(?:^|[\s(])(?:z\. ?B|u\. ?a|d\. ?h|o\. ?Ä|s\. ?u|v\. ?a|z|u|d|o|s|v|bzw|ca|Nr|Dr|Prof|St|etc|ggf|inkl|zzgl|usw|vgl|Abs|Art|Tel|evtl|max|min|mind|bspw|Std|Min|Mio|Mrd|Jh|Jan|Feb|Apr|Jun|Jul|Aug|Sep|Sept|Okt|Nov|Dez|e\. ?V|GmbH & Co)\.)\s+(?=[\p{Lu}\p{N}"„»(])/u
 
 function plainSegment(segment: string): string {
   return segment
@@ -868,69 +878,130 @@ function findableWords(words: string[]): string[] {
   return result
 }
 
+interface AnchorSentence {
+  text: string
+  words: string[]
+  section: string
+  /** A heading line: it can name a section, but it is not a statement. */
+  heading: boolean
+  /** Normalised claim tokens this sentence holds. */
+  hits: Set<string>
+  score: number
+  first: number
+}
+
 /**
- * The sentence of a source that best supports one line of the answer. A link to
- * the page opened it at the top, or at the first sentence of the retrieved
- * passage whatever the line said — for eleven services on one start page, the
- * same intro sentence every time.
+ * The passage of a source that best supports one line of the answer: the best
+ * matching sentence, joined by a neighbour when the line also states what only
+ * that neighbour says — a fee in the sentence after the deadline, say. A link
+ * to the page opened it at the top, or at the first sentence of the retrieved
+ * passage whatever the line said.
  */
 export function anchorFor(claim: string, sourceText: string, pageTitle = ''): CitationAnchor | null {
   const claimTokens = new Set(normalizeForMatch(claim.replace(CITATION_MARKERS, '')).split(' ').filter((token) => token.length >= 3 || /\d/u.test(token)))
   if (!claimTokens.size) return null
   const claimed = [...claimTokens]
-  const matches = (token: string) => claimTokens.has(token)
-    // Inflections share a stem, "Bremen" and "Bremens"; "persönlich" and
-    // "Persönlichkeiten" do not, so the ending may differ by a few letters only.
-    || (token.length >= 5 && claimed.some((other) => other.length >= 5
-      && Math.abs(other.length - token.length) <= 3
-      && (token.startsWith(other) || other.startsWith(token))))
+  // Inflections share a stem, "Bremen" and "Bremens"; "persönlich" and
+  // "Persönlichkeiten" do not, so the ending may differ by a few letters only.
+  const claimFor = (token: string) => claimTokens.has(token)
+    ? token
+    : token.length >= 5
+      ? claimed.find((other) => other.length >= 5 && Math.abs(other.length - token.length) <= 3
+        && (token.startsWith(other) || other.startsWith(token)))
+      : undefined
+  const weight = (token: string) => (/^\d+$/u.test(token) ? ANCHOR_NUMBER_WEIGHT : 1)
 
+  const sentences: AnchorSentence[] = []
   let section = ''
-  let best: { words: string[]; score: number; first: number; text: string; section: string } | null = null
-  for (const raw of sourceText.split(/\n+|(?<=[.!?])\s+/u)) {
+  for (const line of sourceText.split(/\n+/u)) {
     // Lines the indexer added — `Quelle: <url>`, `> Title › Section` — and
     // table rules are not text the page shows, but they do say where it is.
-    const context = /^\s*> (.*› .*)$/u.exec(raw)
-    const heading = /^\s*#{1,6}\s+(.+)$/u.exec(raw)
+    const context = /^\s*> (.*› .*)$/u.exec(line)
     if (context) { section = context[1].split('›').at(-1)!.trim(); continue }
-    if (/^\s*(Quelle:\s|---)/u.test(raw)) continue
-    const text = plainSegment(raw)
-    if (heading) section = text
-    const words = text.split(' ').filter(Boolean)
-    if (normalizeForMatch(text).split(' ').filter(Boolean).length < 2) continue
-    let score = 0
-    let first = -1
-    words.forEach((word, index) => {
-      const hits = normalizeForMatch(word).split(' ').filter(matches)
-      if (!hits.length) return
-      score += hits.reduce((sum, token) => sum + (/^\d+$/u.test(token) ? ANCHOR_NUMBER_WEIGHT : 1), 0)
-      if (first === -1) first = index
-    })
-    // The shorter of two equal matches is the more specific one.
-    if (score > (best?.score ?? 0) || (best && score === best.score && text.length < best.text.length)) {
-      best = { words, score, first, text, section: heading ? '' : section }
+    if (/^\s*(Quelle:\s|---)/u.test(line)) continue
+    const heading = /^\s*#{1,6}\s+(.+)$/u.test(line)
+    for (const raw of heading ? [line] : line.split(SENTENCE_BREAK)) {
+      const text = plainSegment(raw)
+      if (heading) section = text
+      const words = text.split(' ').filter(Boolean)
+      if (normalizeForMatch(text).split(' ').filter(Boolean).length < 2) continue
+      const hits = new Set<string>()
+      let score = 0
+      let first = -1
+      words.forEach((word, index) => {
+        const found = normalizeForMatch(word).split(' ').map(claimFor).filter((token): token is string => Boolean(token))
+        if (!found.length) return
+        score += found.reduce((sum, token) => sum + weight(token), 0)
+        found.forEach((token) => hits.add(token))
+        if (first === -1) first = index
+      })
+      sentences.push({ text, words, section: heading ? '' : section, heading, hits, score, first })
     }
   }
+
+  let bestIndex = -1
+  sentences.forEach((sentence, index) => {
+    const best = sentences[bestIndex]
+    // The shorter of two equal matches is the more specific one.
+    if (sentence.score > (best?.score ?? 0) || (best && sentence.score === best.score && sentence.text.length < best.text.length)) bestIndex = index
+  })
+  const best = sentences[bestIndex]
   // One shared word is a coincidence unless the line is a name or a term.
   if (!best || best.score < Math.min(2, claimTokens.size)) return null
 
+  // A neighbour joins when it holds a figure or two words of the line that the
+  // quote does not show yet; the quote stays one passage, in page order.
+  let from = bestIndex
+  let to = bestIndex
+  const covered = new Set(best.hits)
+  const adds = (sentence: AnchorSentence | undefined) => {
+    if (!sentence || sentence.heading || sentence.section !== best.section) return false
+    const fresh = [...sentence.hits].filter((token) => !covered.has(token))
+    return fresh.some((token) => /^\d+$/u.test(token)) || fresh.length >= 2
+  }
+  for (let extra = 0; extra < ANCHOR_EXTRA_SENTENCES; extra += 1) {
+    const next = adds(sentences[to + 1]) ? to + 1 : adds(sentences[from - 1]) ? from - 1 : -1
+    if (next === -1) break
+    const joined = sentences.slice(Math.min(from, next), Math.max(to, next) + 1).map((sentence) => sentence.text).join(' ')
+    if (joined.length > ANCHOR_QUOTE_CHARACTERS) break
+    sentences[next].hits.forEach((token) => covered.add(token))
+    if (next > to) to = next
+    else from = next
+  }
+  const passage = sentences.slice(from, to + 1)
+
   // From the sentence start when the match is near it, so the highlight reads
   // as a sentence; otherwise one word before the first match.
-  const from = best.first < ANCHOR_WORDS / 2 ? 0 : best.first - 1
-  const offset = best.words.length <= ANCHOR_WORDS ? 0 : Math.min(from, best.words.length - ANCHOR_WORDS)
+  const start = best.first < ANCHOR_WORDS / 2 ? 0 : best.first - 1
+  const offset = best.words.length <= ANCHOR_WORDS ? 0 : Math.min(start, best.words.length - ANCHOR_WORDS)
   const phrase = findableWords(best.words.slice(offset, offset + ANCHOR_WORDS)).join(' ')
-  const sentence = findableWords(best.words)
-  const range = sentence.length > ANCHOR_WORDS && sentence.length === best.words.length
-    ? { start: sentence.slice(0, ANCHOR_EDGE_WORDS).join(' '), end: sentence.slice(-ANCHOR_EDGE_WORDS).join(' ') }
+  const opening = findableWords(passage[0].words)
+  const closing = findableWords(passage.at(-1)!.words)
+  const whole = passage.length > 1 || (opening.length > ANCHOR_WORDS && opening.length === best.words.length)
+  const range = whole && opening.length >= ANCHOR_EDGE_WORDS && closing.length === passage.at(-1)!.words.length
+    ? { start: opening.slice(0, ANCHOR_EDGE_WORDS).join(' '), end: closing.slice(-ANCHOR_EDGE_WORDS).join(' ') }
     : {}
   const title = normalizeForMatch(pageTitle)
   const shownSection = best.section && !title.startsWith(normalizeForMatch(best.section)) ? best.section.slice(0, 80) : undefined
   return {
     phrase,
     ...range,
-    quote: best.text.length > ANCHOR_QUOTE_CHARACTERS ? `${best.text.slice(0, ANCHOR_QUOTE_CHARACTERS - 1).trimEnd()}…` : best.text,
+    quote: quoteAround(passage.map((sentence) => sentence.text).join(' '), best.text),
     ...(shownSection ? { section: shownSection } : {}),
   }
+}
+
+/**
+ * A passage longer than a card shows is cut around the sentence that matched,
+ * not at its end: in a long paragraph the supporting words were the ones cut.
+ */
+function quoteAround(passage: string, core: string): string {
+  if (passage.length <= ANCHOR_QUOTE_CHARACTERS) return passage
+  const at = Math.max(0, passage.indexOf(core))
+  const begin = Math.max(0, Math.min(at, passage.length - ANCHOR_QUOTE_CHARACTERS))
+  const cut = passage.slice(begin, begin + ANCHOR_QUOTE_CHARACTERS - 2)
+  const trimmed = begin + cut.length < passage.length ? cut.replace(/\s+\S*$/u, '') : cut
+  return `${begin > 0 ? '… ' : ''}${trimmed.trim()}${begin + cut.length < passage.length ? ' …' : ''}`
 }
 
 /**
