@@ -13,7 +13,11 @@
     "poster:explainer": "remotion still CraChaExplainer out/cracha-explainer-poster.png --frame=2580",
     "music:15": "node scripts/make-music.mjs",
     "render:15": "node scripts/make-music.mjs && remotion render CraCha15 out/cracha-15s.mp4 --crf=16",
-    "poster:15": "remotion still CraCha15 out/cracha-15s-poster.png --frame=880"
+    "poster:15": "remotion still CraCha15 out/cracha-15s-poster.png --frame=880",
+    "music:ad": "node scripts/make-ad-music.mjs public/ad-music-take3.mp3 && node scripts/beat-grid.mjs public/ad-music-take3.mp3",
+    "audio:ad": "node scripts/make-ad-audio.mjs",
+    "render:ad": "node scripts/make-ad-audio.mjs && remotion render CraChaAd out/cracha-ad.mp4 --crf=16",
+    "poster:ad": "remotion still CraChaAd out/cracha-ad-poster.png --frame=2040"
   },
   "dependencies": {
     "@remotion/cli": "4.0.527",

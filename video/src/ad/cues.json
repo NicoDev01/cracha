@@ -1,0 +1,19 @@
+{
+  "duration": 36,
+  "bpm": 120,
+  "music": {
+    "file": "ad-music-take3.mp3",
+    "offset": 0.065,
+    "splice": { "at": 28, "to": 108.065 },
+    "fadeOut": 35.2
+  },
+  "hook": { "words": [0, 1, 2, 3] },
+  "problem": { "start": 4, "clicks": [4.5, 5, 5.5, 6, 6.25, 6.5, 6.75], "implode": 7, "dot": 7.5 },
+  "reveal": { "iris": 8, "sub": 8.5, "collapse": 9, "wipe": 9.25 },
+  "url": { "pill": 9.5, "typeStart": 9.75, "typeEnd": 10.4, "click": 10.5 },
+  "crawl": { "root": 11, "rings": [11.5, 12, 12.5, 13, 13.5], "done": 14.5, "stack": 15, "ready": 15.5 },
+  "chat": { "open": 16, "typeStart": 16.4, "typeEnd": 17.3, "send": 17.5, "search": 18, "answer": 18.5, "source": 20 },
+  "verify": { "click": 21, "page": 21.25, "mark": 22, "implode": 23, "dot": 23.5 },
+  "finale": { "words": [24, 24.5, 25, 26, 26.5, 27, 28, 28.5, 29], "zoom": 29.5, "swirl": 30, "collapse": 31 },
+  "end": { "hit": 32, "claim": 32.5, "cta": 33, "credits": 33.5 }
+}

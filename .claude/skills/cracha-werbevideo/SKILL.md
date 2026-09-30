@@ -7,7 +7,7 @@ description: Stil- und Produktionsleitfaden für CraCha-Werbevideos in Remotion 
 
 Ein Werbevideo nach diesem Skill fühlt sich an wie **ein ruhiges Produkt-UI auf warmer Bühne (2), das im Takt der Musik schneidet (3) und an den Wendepunkten mit kinetischer Typo und Morphs explodiert (1)**.
 
-Die Einzelanalyse mit Zeitmarken steht in [references/analyse.md](references/analyse.md), der erste CraCha-Entwurf in [references/storyboard-30s.md](references/storyboard-30s.md).
+Die Einzelanalyse mit Zeitmarken steht in [references/analyse.md](references/analyse.md), das gebaute Beispiel (`CraChaAd`) in [references/storyboard-ad.md](references/storyboard-ad.md).
 
 ## 1. Die drei Zutaten
 
@@ -15,7 +15,7 @@ Die Einzelanalyse mit Zeitmarken steht in [references/analyse.md](references/ana
 |---|---|---|
 | **1 Showreel** | Kapitel à 1 Takt (2 s), Match-Cuts (Buchstaben → Punkte → nächste Szene), Iris-Wipe aus einem Punkt, Squash & Stretch mit Motion Blur, Form-Morphs mit Geisterspuren, Kinetic-Type-Finale (ein Wort pro Beat, Hintergrund wechselt mit), HUD-Rahmen, Logo aus Partikeln | 3D-Punktwolken, Truchet-Muster, Easing-Demo: Selbstzweck ohne Produktbezug |
 | **2 Minimal-UI** | Warmes Off-White, eine Akzentfarbe, nur das eine Element im Bild, echte UI als Held, Tipp-/Klick-Foley ohne Musik, Wort-für-Wort-Pillen, vertikales Listen-Rad, Logo aus Pillen gemorpht, ruhiger Dauer-Push-in der Kamera | Weißes UI auf weißem Grund ohne Kontrast bei kleinen Größen, lange Wartezeiten auf Fortschrittsbalken |
-| **3 Marketing-Pacing** | Schnitt/Wendung auf jedem 2. Beat (≈ 1 s), Headlines Wort für Wort mit Blur-In, ein Schlüsselwort in Akzentfarbe, Orbit mit Zähler („48 Seiten erfasst“), Haken-Belohnung, Chat-Blasen, Deny/Allow-Klick, Dreiklang („Ask. Analyze. Make changes.“), Durchstreichen, Endkarte mit URL-Pille | Maskottchen (CraCha hat keins, siehe Entscheidungen), fremde Markenlogos |
+| **3 Marketing-Pacing** | Schnitt/Wendung auf jedem 2. Beat (≈ 1 s), Headlines Wort für Wort mit Blur-In, ein Schlüsselwort in Akzentfarbe, Orbit mit Zähler („48 Seiten erfasst“), Haken-Belohnung, Chat-Blasen, Deny/Allow-Klick, Dreiklang („Ask. Analyze. Make changes.“), Durchstreichen, Endkarte mit URL-Pille | Maskottchen (CraCha hat keins), fremde Markenlogos |
 
 ## 2. Look
 
@@ -35,9 +35,9 @@ Regeln: pro Frame höchstens zwei Farbflächen plus Tinte. Keine Verläufe auf U
 
 | Rolle | Schrift | Stil |
 |---|---|---|
-| Kinetic Type (1) | Urbanist 800, Versalien, Tracking −2 %; Alternative mit breiterem Schnitt im Rig testen (ungeprüft: Archivo Black / Unbounded über `@remotion/google-fonts`) | 220–320 px, randfüllend |
-| Headline (3) | Urbanist 700, Tracking −3 %, Zeilenabstand 0,95 | 96–140 px, Schlüsselwort in `accent` |
-| Kontrapunkt (1/2) | Serif kursiv, z. B. Instrument Serif Italic (ungeprüft, im Rig laden) | Unterzeile wie „motion designer“ |
+| Kinetic Type (1) | Archivo als variable Font (`loadVariableFont`), `'wdth' 125, 'wght' 900`, Versalien; die Breitenachse (62–125) animieren für Squash & Stretch | 190–300 px, randfüllend |
+| Caption (3) | Archivo `'wdth' 100, 'wght' 800`, Tracking −2,5 % | 64 px, Schlüsselwort in `accent` |
+| Kontrapunkt (1/2) | Instrument Serif Italic | Unterzeile wie „motion designer“ |
 | UI (2) | Inter 400–600 | echte Dashboard-Beschriftung |
 | HUD (1) | JetBrains Mono (in `film15/look.ts` geladen), 14 px, Versalien, Tracking +10 % | Ecken, Kapitel, Timecode |
 
@@ -79,11 +79,11 @@ Verboten: lineare Bewegung (außer als Pointe wie „LINEAR.“ in 1), Crossfade
   - Endkarte: 2 Takte Stillstand, Ausklang.
 - **Wendung alle 1–2 s** (Ref. 3). Nichts steht länger als 2 Takte ohne neue Information.
 - **Foley (Haptik aus 2):** Tastatur pro Zeichen (leicht zufällig in Tonhöhe und Lautstärke), Klick auf jeden Cursor-Klick, weicher Whoosh auf Morph und Kamera, Pop auf Pillen und Haken, Tick pro Zählerschritt. Quellen: `@remotion/sfx` (MIT-Paket, Lizenz jedes Sounds einzeln prüfen) oder synthetisch per `scripts/make-sfx.mjs`.
-- **Musik:** synthetisch aus den Cues (`scripts/make-music.mjs`) oder Lyria (`scripts/make-bed.mjs`), Drop per `music.offset` auf die Bildmarke legen.
+- **Musik:** Lyria 3 über OpenRouter (`scripts/make-ad-music.mjs`, Struktur im Prompt nach Sekunden). Lyria liefert 80–120 s statt der verlangten Länge, hält aber das Tempo exakt. Mehrere Takes erzeugen, mit `scripts/beat-grid.mjs` Tempo, Beat-Offset und Lautheit pro Takt messen, den Take wählen, dessen Struktur (Intro, Stopp-Beat, Breakdown, Drop) zur Dramaturgie passt, und in dessen eigenes Ende schneiden (gleiche Position in der 4-Takt-Phrase). `scripts/make-ad-audio.mjs` schneidet und synthetisiert die Foley aus `cues.json`.
 
 ## 5. Inhalt
 
-- Nur belegbare Aussagen (Stand `STORYBOARD-15s.md`): bis 500 Seiten pro Crawl, bis 5 Ebenen, jede Antwort mit Quelle, 100 Start-Credits gratis. Neue Zahlen vorher im Code oder auf der Landingpage belegen.
+- **Keine Zahlen** (Seitenlimits, Ebenen, Credits ändern sich). Nur Funktionen zeigen: Website eingeben, jede Unterseite wird gecrawlt (visuell: Dutzende Seiten), Wissensbasis, Chat, Antwort mit Quelle, Stelle auf der Originalseite markiert. CTA: „Kostenlos starten“ + `cracha-app.com`.
 - UI 1:1 aus dem Quellcode nachbauen (Dashboard liegt hinter Login). Beispiel-Domain `docs.example.com`.
 - Pro Szene **eine** Botschaft, maximal 5 Wörter Bildschirmtext außerhalb der UI.
 - Deutsch, Du-Form, kurze Imperative und Nominalsätze („Link rein.“, „Frag.“, „Mit Quelle.“).
@@ -91,7 +91,7 @@ Verboten: lineare Bewegung (außer als Pointe wie „LINEAR.“ in 1), Crossfade
 ## 6. Arbeitsablauf
 
 1. **Brief:** Länge, Format (16:9, 9:16, 1:1), Ziel (Anwerben, Launch, Feature), Personalisierung (Zielgruppe, Beispiel-Website, Claim) festhalten.
-2. **Beat-Sheet** als `STORYBOARD-<name>.md` nach dem Muster in `references/storyboard-30s.md`: Szene, Beats, Welt (hell/voll), Match-Cut rein/raus, Bildschirmtext, Ton.
+2. **Beat-Sheet** als `STORYBOARD-<name>.md` nach dem Muster in `references/storyboard-ad.md`: Szene, Beats, Welt (hell/voll), Match-Cut rein/raus, Bildschirmtext, Ton.
 3. **Cues:** `src/<name>/cues.json` in Beats; Musik und SFX lesen dieselbe Datei.
 4. **Rig:** HUD, Blur-In-Wort, Slam, Iris, Morph-Container, Cursor, Orbit, Zähler als Komponenten in `src/<name>/kit.tsx`. Vorhanden und zuerst wiederverwenden: `explainer/kit.tsx` (`Kinetic`, `Headline`, `Pointer`, `Ripple`, `MotionBlur`, `pressAt`, `sp`), `film15/look.ts` (Palette `K`, `settle`, `glide`, JetBrains Mono), `film15/Box.tsx`, `MorphBox.tsx`, `Logo.tsx`.
 5. **Standbilder:** je Szene ein `remotion still`, als Contact Sheet prüfen (Lesbarkeit, eine Botschaft, Palette).
@@ -103,8 +103,6 @@ Verboten: lineare Bewegung (außer als Pointe wie „LINEAR.“ in 1), Crossfade
 
 Alles Variable steht als Props an der Komposition (`defaultProps` + Zod-Schema, falls nötig): `domain`, `question`, `answer`, `sourceTitle`, `claim`, `cta`, `accent`, `format`. Varianten entstehen über neue Props, nicht über kopierte Szenen.
 
-## Offene Entscheidungen
+## Entscheidungen
 
-- **Maskottchen:** Ref. 3 lebt stark von seiner Figur. Optionen: keins (Logo übernimmt die Rolle), oder eine abstrakte Figur aus dem CraCha-Logo (Punkt/Pille mit Augen).
-- **Voice-over:** Ref. 1–3 haben keins. Empfehlung: ohne, damit der Beat trägt.
-- **Display-Schrift:** Urbanist 800 oder eine breitere Grotesk für Kinetic Type.
+- Kein Maskottchen, keine Zahlen, kein Voice-over; der Beat trägt.

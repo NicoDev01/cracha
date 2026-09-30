@@ -1,4 +1,6 @@
 import { Composition } from "remotion";
+import { Ad } from "./ad/Ad";
+import adCues from "./ad/cues.json";
 import { Explainer } from "./explainer/Explainer";
 import explainerCues from "./explainer/cues.json";
 import { Film15 } from "./film15/Film15";
@@ -28,6 +30,14 @@ export const Root: React.FC = () => (
       id="CraCha15"
       component={Film15}
       durationInFrames={cues.duration * FPS}
+      fps={FPS}
+      width={WIDTH}
+      height={HEIGHT}
+    />
+    <Composition
+      id="CraChaAd"
+      component={Ad}
+      durationInFrames={adCues.duration * FPS}
       fps={FPS}
       width={WIDTH}
       height={HEIGHT}
