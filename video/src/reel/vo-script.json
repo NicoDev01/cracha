@@ -1,0 +1,50 @@
+{
+  "voice": "Puck",
+  "style": "Freundlicher, selbstbewusster deutscher Werbesprecher. Warm, klar, zügig, mit einem Lächeln in der Stimme. Hochdeutsch, natürliche Betonung, keine Pausen am Satzanfang.",
+  "lines": [
+    {
+      "id": "hook",
+      "text": "Du suchst eine bestimmte Info auf einer Website?"
+    },
+    {
+      "id": "klick",
+      "text": "Du klickst. Und klickst. Und klickst."
+    },
+    {
+      "id": "nichts",
+      "text": "Und am Ende findest du nichts."
+    },
+    {
+      "id": "link",
+      "text": "Mit Kratscha gibst du einfach den Link ein."
+    },
+    {
+      "id": "crawl",
+      "text": "Kratscha liest jede Unterseite für dich"
+    },
+    {
+      "id": "base",
+      "text": "und macht daraus deine eigene Wissensbasis."
+    },
+    {
+      "id": "ask",
+      "text": "Dann fragst du einfach, was du wissen willst."
+    },
+    {
+      "id": "answer",
+      "text": "Die Antwort kommt mit Quelle."
+    },
+    {
+      "id": "source",
+      "text": "Ein Klick, und du siehst genau, wo es steht."
+    },
+    {
+      "id": "brand",
+      "text": "Das ist Kratscha, dein Crawl-Chat-Agent."
+    },
+    {
+      "id": "cta",
+      "text": "Jetzt kostenlos starten."
+    }
+  ]
+}

@@ -22,12 +22,17 @@
     "audio:spot": "node scripts/make-spot-audio.mjs",
     "render:spot": "node scripts/make-spot-audio.mjs && remotion render CraChaSpot out/cracha-spot.mp4 --crf=16",
     "poster:spot": "remotion still CraChaSpot out/cracha-spot-poster.png --frame=1080",
-    "vo:spot": "node scripts/make-ad-vo.mjs src/spot/vo-script.json public/spot/vo-take-new.wav"
+    "vo:spot": "node scripts/make-ad-vo.mjs src/spot/vo-script.json public/spot/vo-take-new.wav",
+    "vo:reel": "node scripts/reel/vo.mjs",
+    "audio:reel": "node scripts/reel/music.mjs && node scripts/reel/sfx.mjs",
+    "render:reel": "node scripts/reel/music.mjs && node scripts/reel/sfx.mjs && remotion render CraChaReel out/cracha-reel.mp4 --crf=16",
+    "poster:reel": "remotion still CraChaReel out/cracha-reel-poster.png --frame=1740"
   },
   "dependencies": {
     "@remotion/cli": "4.0.527",
     "@remotion/google-fonts": "4.0.527",
     "@remotion/motion-blur": "4.0.527",
+    "@remotion/paths": "^4.0.527",
     "@types/flubber": "0.4.0",
     "flubber": "0.4.2",
     "lucide-react": "0.539.0",

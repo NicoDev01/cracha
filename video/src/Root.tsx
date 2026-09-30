@@ -6,6 +6,8 @@ import explainerCues from "./explainer/cues.json";
 import { Film15 } from "./film15/Film15";
 import cues from "./film15/cues.json";
 import { Promo } from "./Promo";
+import { Reel } from "./reel/Reel";
+import reelCues from "./reel/cues.json";
 import { Spot } from "./spot/Spot";
 import spotCues from "./spot/cues.json";
 import { DURATION_S, FPS, HEIGHT, WIDTH } from "./theme";
@@ -51,6 +53,14 @@ export const Root: React.FC = () => (
       fps={FPS}
       width={WIDTH}
       height={HEIGHT}
+    />
+    <Composition
+      id="CraChaReel"
+      component={Reel}
+      durationInFrames={Math.round(reelCues.duration * reelCues.fps)}
+      fps={reelCues.fps}
+      width={1920}
+      height={1080}
     />
   </>
 );
