@@ -23,6 +23,8 @@
   "dependencies": {
     "@remotion/cli": "4.0.527",
     "@remotion/google-fonts": "4.0.527",
+    "@types/flubber": "0.4.0",
+    "flubber": "0.4.2",
     "lucide-react": "0.539.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",

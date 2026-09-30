@@ -41,7 +41,7 @@
   "problem": { "start": 2.0, "switches": [2.5, 3.0, 3.5, 4.0, 4.75, 5.0, 5.25], "overview": 5.75, "implode": 6.9, "dot": 7.4 },
   "reveal": { "logo": 8.0, "collapse": 9.75 },
   "url": { "pill": 10.0, "typeStart": 10.5, "typeEnd": 11.25, "click": 11.5 },
-  "crawl": { "root": 12.0, "rings": [12.25, 12.75, 13.25, 13.75], "stack": 15.0, "ready": 15.75 },
+  "crawl": { "root": 12.0, "rings": [12.25, 12.75, 13.25, 13.75], "stack": 15.0, "ready": 16.0 },
   "chat": { "input": 16.5, "typeStart": 17.0, "typeEnd": 18.2, "send": 18.5, "answer": 20.0, "mark": 20.9, "source": 21.5 },
   "verify": { "click": 22.5, "mark": 24.6, "implode": 26.5, "dot": 27.2 },
   "finale": { "words": [28.05, 29.05, 30.05], "collapse": 31.0 },

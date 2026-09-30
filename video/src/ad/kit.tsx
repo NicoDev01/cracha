@@ -1,6 +1,6 @@
 import React from "react";
 import { AbsoluteFill } from "remotion";
-import { CX, CY, P, clamp01, ez, prog, sp, ui, useT, wide } from "./look";
+import { CX, CY, P, clamp01, ez, font, prog, sp, ui, useT } from "./look";
 
 export const SHADOW_SOFT = "0 1px 2px rgba(20,17,16,0.04), 0 14px 36px -14px rgba(20,17,16,0.14), 0 40px 90px -40px rgba(20,17,16,0.14)";
 export const SHADOW_TINY = "0 1px 2px rgba(20,17,16,0.04), 0 8px 18px -10px rgba(20,17,16,0.16)";
@@ -22,7 +22,7 @@ export const Stack: React.FC<{ words: StackWord[]; out?: number; collapse?: numb
   const n = w.reduce((a, b) => a + b, 0);
   if (n <= 0.001) return null;
   const longest = Math.max(...words.map((word, i) => (w[i] > 0.02 ? word.text.length : 0)));
-  const size = Math.min(maxSize, 1640 / (longest * 0.64), 800 / (0.98 * Math.max(1, n)));
+  const size = Math.min(maxSize, 1640 / (longest * 0.56), 800 / (0.98 * Math.max(1, n)));
   const lh = size * 0.98;
   const blockH = w.reduce((a, b) => a + b * lh, 0);
   // Exit: the block whips up out of frame. Collapse: it shrinks into a dot.
@@ -58,13 +58,14 @@ export const Stack: React.FC<{ words: StackWord[]; out?: number; collapse?: numb
               lineHeight: `${lh}px`,
               textAlign: "center",
               fontSize: size,
-              letterSpacing: "-0.035em",
+              letterSpacing: "-0.04em",
               color: P.ink,
               whiteSpace: "nowrap",
               opacity: q,
               transform: `translateY(${(1 - w[i]) * lh * 0.7}px) scale(${0.7 + 0.3 * Math.min(1, w[i])})`,
               filter: q < 1 ? `blur(${(1 - q) * 14}px)` : undefined,
-              ...wide(112, 900),
+              fontFamily: font,
+              fontWeight: 800,
             }}
           >
             {body}
@@ -131,8 +132,8 @@ export const Ring: React.FC<{ x: number; y: number; at: number; color?: string; 
 export const Dot: React.FC<{ x?: number; y?: number; size?: number; color?: string; scale?: number; pulseFrom?: number }> = ({
   x = CX,
   y = CY,
-  size = 22,
-  color = P.accent,
+  size = 26,
+  color = P.ink,
   scale = 1,
   pulseFrom,
 }) => {

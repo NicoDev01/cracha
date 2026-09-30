@@ -1,9 +1,9 @@
 import { ArrowRight } from "lucide-react";
 import React from "react";
 import { AbsoluteFill } from "remotion";
-import { LOGO_LETTERS, LOGO_VIEWBOX } from "../logo-paths";
 import { Dot, Ring, Stack } from "./kit";
-import { CX, CY, K, P, URL_CTA, clamp01, ez, mono, prog, serif, sp, ui, useT } from "./look";
+import { LogoMorph } from "./LogoMorph";
+import { CX, CY, K, P, URL_CTA, clamp01, ez, prog, sp, ui, useT } from "./look";
 
 const FI = K.finale;
 const E = K.end;
@@ -22,7 +22,6 @@ export const Finale: React.FC = () => {
 };
 
 const LOGO_W = 860;
-const LOGO_H = (LOGO_W * 19.6) / 80.7;
 
 export const End: React.FC = () => {
   const t = useT();
@@ -33,19 +32,9 @@ export const End: React.FC = () => {
   const rise = prog(t, E.claim - 0.1, E.claim + 0.5, ez.inOut);
   return (
     <AbsoluteFill>
-      <Ring x={CX} y={CY} at={E.hit} size={1500} dur={1.1} width={3} />
+      <Ring x={CX} y={CY} at={E.hit + 0.1} size={1500} dur={1.1} width={3} />
       <Ring x={CX} y={CY} at={E.hit + 0.1} size={900} dur={1.0} width={2} color={P.ink} />
-      <svg
-        viewBox={LOGO_VIEWBOX}
-        width={LOGO_W}
-        height={LOGO_H}
-        style={{ position: "absolute", left: CX - LOGO_W / 2, top: CY - LOGO_H / 2 - rise * 150, overflow: "visible", transform: `scale(${1 - rise * 0.12})` }}
-      >
-        {LOGO_LETTERS.map((d, i) => {
-          const p = sp(t, E.hit + i * 0.04, 12, 210, 0.7);
-          return <path key={i} d={d} fill={P.ink} opacity={clamp01(p * 2)} transform={`translate(0 ${(1 - p) * 10})`} />;
-        })}
-      </svg>
+      <LogoMorph cx={CX} cy={CY - rise * 150} width={LOGO_W * (1 - rise * 0.12)} p={prog(t, E.hit, E.hit + 0.5, ez.inOut)} />
       <div
         style={{
           position: "absolute",
@@ -53,9 +42,10 @@ export const End: React.FC = () => {
           right: 0,
           top: CY + 10,
           textAlign: "center",
-          fontFamily: serif,
-          fontStyle: "italic",
-          fontSize: 100,
+          fontFamily: ui,
+          fontWeight: 700,
+          fontSize: 76,
+          letterSpacing: "-0.03em",
           color: P.ink,
           opacity: claim,
           filter: `blur(${(1 - claim) * 12}px)`,
@@ -94,15 +84,15 @@ export const End: React.FC = () => {
           right: 0,
           top: CY + 330,
           textAlign: "center",
-          fontFamily: mono,
-          fontSize: 26,
-          letterSpacing: "0.14em",
+          fontFamily: ui,
+          fontWeight: 600,
+          fontSize: 30,
           color: P.muted,
           opacity: url,
           transform: `translateY(${(1 - url) * 10}px)`,
         }}
       >
-        {URL_CTA.toUpperCase()}
+        {URL_CTA}
       </div>
     </AbsoluteFill>
   );

@@ -1,7 +1,4 @@
-import { loadVariableFont as loadArchivo } from "@remotion/google-fonts/Archivo";
-import { loadFont as loadInter } from "@remotion/google-fonts/Inter";
-import { loadFont as loadSerif } from "@remotion/google-fonts/InstrumentSerif";
-import { loadFont as loadMono } from "@remotion/google-fonts/JetBrainsMono";
+import { loadFont as loadUrbanist } from "@remotion/google-fonts/Urbanist";
 import { Easing, interpolate, spring, useCurrentFrame } from "remotion";
 import cues from "./cues.json";
 
@@ -14,18 +11,9 @@ export const H = 1080;
 export const CX = W / 2;
 export const CY = H / 2;
 
-// Archivo's width axis runs from 62 to 125: 125 at weight 900 is the extra-wide
-// display cut of the showreel reference, and animating it gives squash & stretch.
-export const display = loadArchivo("normal", { subsets: ["latin", "latin-ext"] }).fontFamily;
-export const serif = loadSerif("italic", { weights: ["400"], subsets: ["latin"] }).fontFamily;
-export const ui = loadInter("normal", { weights: ["400", "500", "600", "700"], subsets: ["latin", "latin-ext"] }).fontFamily;
-export const mono = loadMono("normal", { weights: ["400", "500"], subsets: ["latin"] }).fontFamily;
-
-export const wide = (wdth = 125, wght = 900) => ({
-  fontFamily: display,
-  fontWeight: wght,
-  fontVariationSettings: `'wdth' ${wdth}, 'wght' ${wght}`,
-});
+// One rounded family, like the landing page: headings 800/700, text 500/600.
+export const font = loadUrbanist("normal", { weights: ["500", "600", "700", "800"], subsets: ["latin", "latin-ext"] }).fontFamily;
+export const ui = font;
 
 // One white stage, ink, and a single orange accent.
 export const P = {

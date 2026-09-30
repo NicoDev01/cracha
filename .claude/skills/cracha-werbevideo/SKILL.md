@@ -5,7 +5,7 @@ description: Stil- und Produktionsleitfaden für CraCha-Werbevideos in Remotion 
 
 # CraCha-Werbevideo
 
-Ein Werbevideo nach diesem Skill ist **minimalistisch auf Weiß (2, 3): ein Element im Fokus, ein professionelles Voice-over erzählt, Schnitte und Wendungen liegen auf dem Beat (3), und die Übergänge sind Morphs, Whips und Kollaps-zum-Punkt (1)**. Text auf dem Bildschirm nur, wo er selbst die Grafik ist.
+Ein Werbevideo nach diesem Skill ist **minimalistisch auf der Pastell-Bühne der Landingpage (2, 3): ein Element im Fokus, ein professionelles Voice-over erzählt, Schnitte und Wendungen liegen auf dem Beat (3), und die Übergänge sind Morphs, Whips und Kollaps-zum-Punkt (1)**. Text auf dem Bildschirm nur, wo er selbst die Grafik ist.
 
 Die Einzelanalyse mit Zeitmarken steht in [references/analyse.md](references/analyse.md), das gebaute Beispiel (`CraChaAd`) in [references/storyboard-ad.md](references/storyboard-ad.md).
 
@@ -19,11 +19,11 @@ Die Einzelanalyse mit Zeitmarken steht in [references/analyse.md](references/ana
 
 ## 2. Look
 
-**Eine weiße Bühne.** Kein Wechsel der Hintergrundfarbe, keine Vollflächen, kein HUD, kein Korn. UI ohne Rahmen, wo es geht (Chat = nur Blasen, keine Fensterkarte).
+**Eine Bühne:** der Pastellverlauf aus `video/src/Background.tsx` (derselbe wie `public/videos/cracha-promo-poster.webp`), damit weiße UI sich abhebt. Kein Wechsel der Hintergrundfarbe, keine Vollflächen, kein HUD, kein Korn. UI ohne Rahmen, wo es geht (Chat = nur Blasen, keine Fensterkarte).
 
 | Token | Wert | Einsatz |
 |---|---|---|
-| `paper` | `#ffffff` | Hintergrund, immer |
+| Hintergrund | `Background.tsx` | Pastell-Blobs, langsam driftend, immer |
 | `ink` | `#141110` | Text, Frage-Blase, Punkt |
 | `accent` | `#ea580c` | Einziges Signal: Satzzeichen im Wort-Stapel, Button, Haken, Markierung |
 | `soft` / `line` | `#f5f2ee` / `#ece8e3` | Antwort-Blase, Skeleton-Zeilen, Umrisse |
@@ -31,13 +31,13 @@ Die Einzelanalyse mit Zeitmarken steht in [references/analyse.md](references/ana
 
 Schatten weich und neutral (`SHADOW_SOFT`, `SHADOW_TINY` in `src/ad/kit.tsx`). Keine Verläufe, keine Glows.
 
-**Schrift:**
+**Schrift:** nur **Urbanist** (rund wie das Logo, wie die Landingpage), keine zweite Familie, kein Kursiv, keine Mono.
 
-| Rolle | Schrift | Stil |
-|---|---|---|
-| Wort-Stapel | Archivo variabel, `'wdth' 112, 'wght' 900`, normale Schreibung, Tracking −3,5 % | passt sich an: ein Wort bis 340 px, vier Zeilen ≈ 200 px |
-| Claim | Instrument Serif Italic | „Frag deine Website.“ |
-| UI | Inter 400–700 | echte Beschriftung, 36–50 px, damit sie auf dem Handy lesbar bleibt |
+| Rolle | Stil |
+|---|---|
+| H1 (Wort-Stapel) | 800, Tracking −4 %, passt sich an: ein Wort bis 340 px, vier Zeilen ≈ 200 px |
+| H2 (Claim, Seitentitel) | 700–800, 54–76 px |
+| Text (UI) | 500–600, 30–50 px, damit es auf dem Handy lesbar bleibt |
 
 ## 3. Bewegung
 
@@ -53,6 +53,9 @@ Kurven liegen in `video/src/theme.ts` (`ease`, `prog`, `track`). Zusätzlich:
 
 Bausteine:
 
+- **Punkt ↔ Logo:** Szenen enden in einem **schwarzen** Punkt; der Punkt morpht per `flubber.separate` in die Buchstaben der Wortmarke und zurück (`LogoMorph` in `src/ad/LogoMorph.tsx`).
+- **Problem als Browser:** eine Website im Vollbild mit wachsender Tab-Leiste, Menü und Unterreitern; jeder Klick öffnet einen Tab mehr. Zoom-out auf viele Browserfenster voller Tabs.
+- **Wissensbasis als Bild:** die gecrawlten Seiten fließen auf Kurven in eine Datenbank aus drei Scheiben, die sich von unten orange füllt.
 0. **Wort-Stapel (3, der Hook-Effekt):** ein Wort erscheint groß in der Mitte; jedes neue Wort ploppt darunter auf, der Block schiebt sich nach oben und verkleinert sich, bis alle Zeilen passen (Federn für das Gewicht jeder Zeile, Größe = min(Maximalgröße, Breite, Höhe/n)). Abgang: Whip nach oben mit Unschärfe oder Kollaps zum Punkt. `Stack` in `src/ad/kit.tsx`.
 1. **Blur-In-Wort (3):** jedes Wort `opacity 0→1`, `blur 12→0 px`, `y +24→0`, 0,35 s `ease.out`, Versatz 1 Beat/2 zwischen Wörtern.
 2. **Slam (1):** Wort kommt mit `scaleX 1.6→1`, `scaleY 0.6→1` in 0,2 s `expoOut`, dazu Richtungs-Motion-Blur (`@remotion/motion-blur` `CameraMotionBlur`, `shutterAngle 180`, `samples 8`).
@@ -104,6 +107,7 @@ Alles Variable steht als Props an der Komposition (`defaultProps` + Zod-Schema, 
 
 ## Entscheidungen
 
-- Weißer Hintergrund durchgehend, keine Hintergrundwechsel, kein HUD.
+- Pastell-Hintergrund der Landingpage durchgehend, keine Hintergrundwechsel, kein HUD.
+- Eine Schriftfamilie (Urbanist), schwarze Punkte, Punkt morpht zum Logo.
 - Kein Maskottchen, keine Zahlen.
 - Professionelles Voice-over statt Bildschirmtext.
