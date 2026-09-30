@@ -1,0 +1,15 @@
+{
+  "note": "CraCha is spelled 'Kratscha' so the voice says it like the brand. Only [annoyed] and [deadpan] are tags the voice obeys without reading them aloud.",
+  "lines": [
+    { "id": "hook", "text": "Irgendwo auf dieser Website steht die Antwort. Aber wo?" },
+    { "id": "click", "text": "[annoyed] Du klickst. Und klickst. Und klickst." },
+    { "id": "nothing", "text": "[deadpan] Und findest … nichts." },
+    { "id": "intro", "text": "[excited] Mit Kratscha fragst du einfach die ganze Website." },
+    { "id": "crawl", "text": "[excited] Link rein. Und Kratscha liest jede Unterseite, bis in die tiefste Ebene." },
+    { "id": "base", "text": "Und macht daraus deine eigene Wissensbasis." },
+    { "id": "ask", "text": "Jetzt stellst du einfach deine Frage." },
+    { "id": "answer", "text": "Und bekommst sofort die Antwort. Mit Quelle, direkt zur richtigen Stelle." },
+    { "id": "edge", "text": "Wie eine KI-Suche, nur gründlicher. Für jede Website, bis in die letzte Unterseite." },
+    { "id": "cta", "text": "Frag einfach die ganze Website, mit Kratscha. Jetzt kostenlos testen." }
+  ]
+}

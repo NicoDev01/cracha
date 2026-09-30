@@ -1,0 +1,27 @@
+{
+  "duration": 44.5,
+  "music": { "offset": 4.5, "fadeIn": 0.4, "fadeOut": 42.6 },
+  "vo": {
+    "hook": 0.5,
+    "click": 4.6,
+    "nothing": 7.9,
+    "intro": 11.9,
+    "crawl": 15.3,
+    "base": 20.2,
+    "ask": 24.6,
+    "answer": 27.2,
+    "edge": 32.2,
+    "cta": 37.6
+  },
+  "hook": { "answer": 2.35, "where": 3.8, "dive": 4.3 },
+  "problem": { "hits": [5.87, 6.65, 7.3], "cascade": 7.45, "implode": 9.35, "nothing": 10.35, "dissolve": 10.95 },
+  "drop": 11.5,
+  "intro": { "words": 12.3, "out": 14.95 },
+  "url": { "morph": 15.0, "paste": 15.35, "enter": 15.85 },
+  "crawl": { "root": 16.0, "rings": [16.45, 17.05, 17.8, 18.6], "done": 19.6 },
+  "base": { "collapse": 19.85, "db": 20.35, "label": 21.7, "toInput": 23.8 },
+  "ask": { "typeStart": 25.05, "typeEnd": 26.3, "send": 26.8 },
+  "answer": { "card": 27.3, "sources": 29.05, "dive": 30.1, "marker": 30.8 },
+  "edge": { "back": 31.9, "surface": 32.75, "deep": 33.4, "sites": 34.6, "implode": 37.0 },
+  "cta": { "logo": 37.6, "pulse": 39.55, "button": 40.5, "click": 41.55, "sub": 41.9, "url": 42.3 }
+}

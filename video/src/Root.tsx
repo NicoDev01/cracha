@@ -1,6 +1,6 @@
 import { Composition } from "remotion";
 import { Explainer } from "./explainer/Explainer";
-import { E } from "./explainer/timeline";
+import explainerCues from "./explainer/cues.json";
 import { Film15 } from "./film15/Film15";
 import cues from "./film15/cues.json";
 import { Promo } from "./Promo";
@@ -19,7 +19,7 @@ export const Root: React.FC = () => (
     <Composition
       id="CraChaExplainer"
       component={Explainer}
-      durationInFrames={E.end * FPS}
+      durationInFrames={Math.round(explainerCues.duration * FPS)}
       fps={FPS}
       width={WIDTH}
       height={HEIGHT}

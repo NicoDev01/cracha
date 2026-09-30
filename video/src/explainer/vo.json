@@ -1,0 +1,42 @@
+{
+  "hook": {
+    "text": "Irgendwo auf dieser Website steht die Antwort. Aber wo?",
+    "duration": 3.943
+  },
+  "click": {
+    "text": "[annoyed] Du klickst. Und klickst. Und klickst.",
+    "duration": 3.03
+  },
+  "nothing": {
+    "text": "[deadpan] Und findest … nichts.",
+    "duration": 3.163
+  },
+  "intro": {
+    "text": "[excited] Mit Kratscha fragst du einfach die ganze Website.",
+    "duration": 2.941
+  },
+  "crawl": {
+    "text": "[excited] Link rein. Und Kratscha liest jede Unterseite, bis in die tiefste Ebene.",
+    "duration": 4.452
+  },
+  "base": {
+    "text": "Und macht daraus deine eigene Wissensbasis.",
+    "duration": 2.442
+  },
+  "ask": {
+    "text": "Jetzt stellst du einfach deine Frage.",
+    "duration": 1.575
+  },
+  "answer": {
+    "text": "Und bekommst sofort die Antwort. Mit Quelle, direkt zur richtigen Stelle.",
+    "duration": 4.236
+  },
+  "edge": {
+    "text": "Wie eine KI-Suche, nur gründlicher. Für jede Website, bis in die letzte Unterseite.",
+    "duration": 5
+  },
+  "cta": {
+    "text": "Frag einfach die ganze Website, mit Kratscha. Jetzt kostenlos testen.",
+    "duration": 4.196
+  }
+}
