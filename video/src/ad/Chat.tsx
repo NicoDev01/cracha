@@ -1,24 +1,23 @@
 import { ArrowUp, Globe, Sparkles } from "lucide-react";
 import React from "react";
 import { AbsoluteFill } from "remotion";
-import { Caption, Pointer, Ring } from "./kit";
-import { CX, CY, K, P, SHADOW, SHADOW_SM, SITE, clamp01, ez, lerp, pressAt, prog, sp, ui, useT, wide } from "./look";
+import { Dot, Pointer, Ring, SHADOW_SOFT, SHADOW_TINY, Tile } from "./kit";
+import { CX, CY, K, P, SITE, clamp01, ez, lerp, pressAt, prog, sp, ui, useT } from "./look";
 
 const CH = K.chat;
 const V = K.verify;
 
-const WIN = { w: 1240, h: 760, cx: CX, cy: CY + 50 };
-const WL = WIN.cx - WIN.w / 2;
-const WT = WIN.cy - WIN.h / 2;
-const INPUT = { x: 28, y: WIN.h - 28 - 88, w: WIN.w - 56, h: 88 };
-const SEND = { x: WL + INPUT.x + INPUT.w - 14 - 30, y: WT + INPUT.y + INPUT.h / 2 };
 const QUESTION = "Wo ändere ich meine Rechnungsadresse?";
-export const SOURCE_PATH = "/hilfe/konto/rechnungsadresse";
-const CHIP = { x: 40, y: 430, w: 640, h: 64 };
-const CHIP_C = { x: WL + CHIP.x + CHIP.w / 2, y: WT + CHIP.y + CHIP.h / 2 };
-const PAGE = { w: 1320, h: 760, cx: CX, cy: CY + 50 };
+const SOURCE_PATH = "/hilfe/konto/rechnungsadresse";
+const INPUT = { w: 1100, h: 104, cy: 900 };
+const SEND = { x: CX + INPUT.w / 2 - 14 - 38, y: INPUT.cy };
+const Q = { right: 1640, top: 250 };
+const A = { left: 280, top: 390, w: 1320 };
+const CHIP = { left: 280, top: 620, w: 700, h: 72 };
+const CHIP_C = { x: CHIP.left + CHIP.w / 2, y: CHIP.top + CHIP.h / 2 };
+const PAGE = { w: 1400, h: 800, cx: CX, cy: CY };
 
-type Tok = { w: string; mark?: boolean; cite?: boolean; br?: boolean };
+type Tok = { w: string; mark?: boolean; cite?: boolean };
 const TOKENS: Tok[] = [
   ..."Das geht unter".split(" ").map((w) => ({ w })),
   { w: "Konto › Einstellungen › Rechnungsdaten", mark: true },
@@ -27,31 +26,10 @@ const TOKENS: Tok[] = [
   { w: "1", cite: true },
 ];
 
-const Cite: React.FC<{ glow: number }> = ({ glow }) => (
-  <span
-    style={{
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      width: 36,
-      height: 36,
-      borderRadius: 10,
-      fontSize: 20,
-      fontWeight: 700,
-      color: glow > 0.05 ? "white" : P.accent,
-      background: glow > 0.05 ? P.accent : P.accentSoft,
-      transform: `scale(${1 + glow * 0.15})`,
-      verticalAlign: "3px",
-    }}
-  >
-    1
-  </span>
-);
-
 const ChipContent: React.FC = () => (
-  <div style={{ display: "flex", alignItems: "center", gap: 14, height: CHIP.h, padding: "0 26px 0 12px", fontFamily: ui, fontSize: 23, fontWeight: 500, color: P.text, whiteSpace: "nowrap" }}>
-    <div style={{ width: 40, height: 40, borderRadius: 20, background: P.accentSoft, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 19, fontWeight: 700, color: P.accent }}>1</div>
-    <Globe size={22} color={P.muted} strokeWidth={2} />
+  <div style={{ display: "flex", alignItems: "center", gap: 14, height: CHIP.h, padding: "0 28px 0 14px", fontFamily: ui, fontSize: 25, fontWeight: 500, color: P.text, whiteSpace: "nowrap" }}>
+    <div style={{ width: 44, height: 44, borderRadius: 22, background: P.accentSoft, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 21, fontWeight: 700, color: P.accent }}>1</div>
+    <Globe size={24} color={P.muted} strokeWidth={2} />
     {SITE}
     {SOURCE_PATH}
   </div>
@@ -62,23 +40,19 @@ const SourcePage: React.FC<{ t: number }> = ({ t }) => {
   const mark = prog(t, V.mark, V.mark + 0.5, ez.inOut);
   return (
     <div style={{ position: "absolute", left: 0, top: 0, width: PAGE.w, height: PAGE.h, fontFamily: ui, background: "white" }}>
-      <div style={{ height: 74, borderBottom: `1px solid ${P.line}`, display: "flex", alignItems: "center", gap: 10, padding: "0 28px" }}>
-        {["#ff8a80", "#ffd166", "#7bdcb5"].map((c) => (
-          <div key={c} style={{ width: 15, height: 15, borderRadius: 8, background: c }} />
+      <div style={{ height: 78, borderBottom: `1px solid ${P.line}`, display: "flex", alignItems: "center", gap: 10, padding: "0 30px" }}>
+        {[0, 1, 2].map((i) => (
+          <div key={i} style={{ width: 15, height: 15, borderRadius: 8, background: "#e6e0da" }} />
         ))}
-        <div style={{ marginLeft: 18, padding: "9px 22px", borderRadius: 24, background: "#f8f3ed", fontSize: 23, fontWeight: 500, color: P.muted }}>
+        <div style={{ marginLeft: 18, padding: "10px 24px", borderRadius: 26, background: P.soft, fontSize: 24, fontWeight: 500, color: P.muted }}>
           {SITE}
           <span style={{ color: P.ink }}>{SOURCE_PATH}</span>
         </div>
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, padding: "8px 20px 8px 10px", borderRadius: 24, background: P.accentSoft, fontSize: 21, fontWeight: 700, color: P.accent }}>
-          <div style={{ width: 30, height: 30, borderRadius: 15, background: P.accent, color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>1</div>
-          Quelle
-        </div>
       </div>
-      <div style={{ position: "absolute", left: 80, right: 80, top: 130 }}>
-        <div style={{ fontSize: 25, fontWeight: 500, color: P.muted }}>Start › Hilfe › Konto › Rechnungsadresse</div>
-        <div style={{ marginTop: 14, fontSize: 70, fontWeight: 800, letterSpacing: "-0.03em", color: P.ink }}>Rechnungsadresse ändern</div>
-        <div style={{ marginTop: 26, fontSize: 36, lineHeight: 1.65, color: P.text, maxWidth: 1100 }}>
+      <div style={{ position: "absolute", left: 90, right: 90, top: 140 }}>
+        <div style={{ fontSize: 26, fontWeight: 500, color: P.muted }}>Start › Hilfe › Konto › Rechnungsadresse</div>
+        <div style={{ marginTop: 14, fontSize: 74, fontWeight: 800, letterSpacing: "-0.03em", color: P.ink }}>Rechnungsadresse ändern</div>
+        <div style={{ marginTop: 28, fontSize: 38, lineHeight: 1.65, color: P.text, maxWidth: 1180 }}>
           Deine Rechnungsadresse änderst du jederzeit unter{" "}
           <span
             style={{
@@ -98,9 +72,48 @@ const SourcePage: React.FC<{ t: number }> = ({ t }) => {
           </span>
           . Die neue Adresse gilt ab der nächsten Rechnung.
         </div>
-        {[820, 700, 760].map((w, i) => (
-          <div key={i} style={{ marginTop: i ? 16 : 44, width: w, height: 16, borderRadius: 16, background: "#f0e9e1" }} />
+        {[860, 720, 800].map((w, i) => (
+          <div key={i} style={{ marginTop: i ? 18 : 48, width: w, height: 16, borderRadius: 16, background: P.soft }} />
         ))}
+      </div>
+    </div>
+  );
+};
+
+/** While searching: a row of pages flicks past and lights up one by one. */
+const Searching: React.FC<{ t: number }> = ({ t }) => {
+  const on = prog(t, CH.send + 0.25, CH.send + 0.45, ez.out) * (1 - prog(t, CH.answer - 0.15, CH.answer, ez.out));
+  if (on <= 0) return null;
+  const sweep = ((t - CH.send) * 170) % 180 - 40;
+  const n = 9;
+  const lit = ((t - CH.send - 0.35) / (CH.answer - CH.send - 0.5)) * n;
+  return (
+    <div style={{ position: "absolute", left: A.left, top: A.top, opacity: on }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 16, fontFamily: ui }}>
+        <Sparkles size={34} color={P.accent} strokeWidth={2.2} />
+        <span
+          style={{
+            fontSize: 34,
+            fontWeight: 600,
+            backgroundImage: `linear-gradient(90deg, ${P.faint} 0%, ${P.faint} ${sweep}%, ${P.accent} ${sweep + 20}%, ${P.faint} ${sweep + 40}%, ${P.faint} 100%)`,
+            WebkitBackgroundClip: "text",
+            backgroundClip: "text",
+            color: "transparent",
+          }}
+        >
+          Durchsucht die Wissensbasis …
+        </span>
+      </div>
+      <div style={{ display: "flex", gap: 18, marginTop: 30 }}>
+        {Array.from({ length: n }, (_, i) => {
+          const a = sp(t, CH.send + 0.3 + i * 0.05, 13, 200);
+          const hit = lit >= i && lit < i + 1.6;
+          return (
+            <div key={i} style={{ position: "relative", width: 96, height: 64, transform: `translateY(${(1 - a) * 24}px) scale(${a * (hit ? 1.08 : 1)})`, opacity: a }}>
+              <Tile w={96} h={64} seed={i + 3} read={hit ? 1 : 0} hot={hit} />
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -108,209 +121,211 @@ const SourcePage: React.FC<{ t: number }> = ({ t }) => {
 
 export const Chat: React.FC = () => {
   const t = useT();
-  if (t < CH.open || t >= K.finale.words[0]) return null;
-  // The "ready" pill grows into the chat window.
-  const open = prog(t, CH.open, CH.open + 0.4, ez.inOut);
-  const w = lerp(600, WIN.w, open);
-  const h = lerp(96, WIN.h, open);
-  const cy = lerp(CY + 198, WIN.cy, open);
-  const inner = clamp01((t - CH.open - 0.25) / 0.2);
+  if (t < CH.input || t >= K.finale.words[0]) return null;
+  // The "ready" pill slides down and becomes the input.
+  const inputIn = prog(t, CH.input, CH.input + 0.35, ez.inOut);
+  const inputOut = prog(t, CH.send + 0.1, CH.send + 0.4, ez.inOut);
   const typedN = Math.round(prog(t, CH.typeStart, CH.typeEnd, (x) => x) * QUESTION.length);
   const sent = t >= CH.send;
-  const rise = prog(t, CH.send, CH.send + 0.35, ez.out);
-  const press = pressAt(t, CH.send);
-  const searching = t >= CH.search && t < CH.answer + 0.1;
-  const perWord = 1.1 / TOKENS.length;
-  const markP = prog(t, CH.answer + 1.2, CH.answer + 1.55, ez.inOut);
+  const rise = prog(t, CH.send, CH.send + 0.4, ez.out);
+  const pressSend = pressAt(t, CH.send);
+  const perWord = 0.85 / TOKENS.length;
+  const answerIn = sp(t, CH.answer, 14, 200);
+  const markP = prog(t, CH.mark, CH.mark + 0.4, ez.inOut);
   const chip = sp(t, CH.source, 11, 200);
   const clickP = pressAt(t, V.click);
-  // Verify: the chip grows into the source page, the chat falls back.
-  const dive = prog(t, V.click, V.click + 0.5, ez.whip);
+  const grow = prog(t, V.click, V.click + 0.55, ez.whip);
   const diving = t >= V.click;
-  const implode = prog(t, V.implode, V.dot - 0.05, ez.in);
-  const sweep = ((t - CH.search) * 170) % 180 - 40;
-  const cursorPath = [
-    { at: CH.typeEnd - 0.4, x: 1600, y: 1040 },
-    { at: CH.send - 0.1, x: SEND.x + 6, y: SEND.y + 6 },
-    { at: CH.source + 0.4, x: SEND.x + 6, y: SEND.y + 6 },
-    { at: V.click - 0.1, x: CHIP_C.x + 60, y: CHIP_C.y + 8 },
+  const away = prog(t, V.click, V.click + 0.35, ez.in);
+  const implode = prog(t, V.implode, V.dot, ez.in);
+
+  const path = [
+    { at: CH.typeEnd - 0.5, x: 1640, y: 1060 },
+    { at: CH.send - 0.1, x: SEND.x + 6, y: SEND.y + 8 },
+    { at: CH.source + 0.2, x: SEND.x + 6, y: SEND.y + 8 },
+    { at: V.click - 0.1, x: CHIP_C.x + 120, y: CHIP_C.y + 10 },
   ];
-  let cx = cursorPath[0].x;
-  let cyy = cursorPath[0].y;
-  for (let i = 1; i < cursorPath.length; i++) {
-    const p = prog(t, cursorPath[i - 1].at, cursorPath[i].at, ez.inOut);
-    if (t >= cursorPath[i - 1].at) {
-      cx = lerp(cursorPath[i - 1].x, cursorPath[i].x, p);
-      cyy = lerp(cursorPath[i - 1].y, cursorPath[i].y, p);
+  let px = path[0].x;
+  let py = path[0].y;
+  for (let i = 1; i < path.length; i++) {
+    if (t >= path[i - 1].at) {
+      const p = prog(t, path[i - 1].at, path[i].at, ez.inOut);
+      px = lerp(path[i - 1].x, path[i].x, p);
+      py = lerp(path[i - 1].y, path[i].y, p);
     }
   }
-  const cursorO = prog(t, CH.typeEnd - 0.4, CH.typeEnd - 0.2, ez.out) * (1 - prog(t, V.click + 0.15, V.click + 0.35, ez.out));
+  const pointerO = prog(t, CH.typeEnd - 0.5, CH.typeEnd - 0.3, ez.out) * (1 - prog(t, V.click + 0.15, V.click + 0.35, ez.out));
 
-  const pw = lerp(CHIP.w, PAGE.w, dive);
-  const ph = lerp(CHIP.h, PAGE.h, dive);
-  const pcx = lerp(CHIP_C.x, PAGE.cx, dive);
-  const pcy = lerp(CHIP_C.y, PAGE.cy, dive);
-  const shrink = 1 - implode;
+  const pw = lerp(CHIP.w, PAGE.w, grow);
+  const ph = lerp(CHIP.h, PAGE.h, grow);
+  const pcx = lerp(CHIP_C.x, PAGE.cx, grow);
+  const pcy = lerp(CHIP_C.y, PAGE.cy, grow);
   return (
     <AbsoluteFill>
-      <AbsoluteFill
-        style={{
-          transformOrigin: `${CHIP_C.x}px ${CHIP_C.y}px`,
-          transform: `scale(${1 + dive * 0.25})`,
-          filter: dive > 0.01 ? `blur(${dive * 12}px)` : undefined,
-          opacity: (1 - dive * 0.9) * (1 - prog(t, V.implode, V.implode + 0.3, ez.out)),
-        }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            left: CX - w / 2,
-            top: cy - h / 2,
-            width: w,
-            height: h,
-            borderRadius: lerp(48, 30, open),
-            background: P.card,
-            boxShadow: SHADOW,
-            overflow: "hidden",
-            fontFamily: ui,
-          }}
-        >
-          <div style={{ opacity: inner }}>
-            <div style={{ height: 86, borderBottom: `1px solid ${P.line}`, display: "flex", alignItems: "center", padding: "0 32px", gap: 16 }}>
-              <span style={{ fontSize: 30, color: P.ink, letterSpacing: "-0.02em", ...wide(100, 800) }}>CraCha</span>
-              <span style={{ fontSize: 24, color: P.muted, fontWeight: 500 }}>Chat</span>
-              <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, padding: "9px 18px", borderRadius: 22, background: "#f8f3ed", fontSize: 21, fontWeight: 500, color: P.text }}>
-                <Globe size={20} color={P.muted} strokeWidth={2} />
-                {SITE} · Wissensbasis
-              </div>
-            </div>
-            {/* The question: typed in the input, then rises into a bubble. */}
-            {sent ? (
-              <div
-                style={{
-                  position: "absolute",
-                  right: 40,
-                  top: lerp(INPUT.y + 10, 120, rise),
-                  padding: "18px 26px",
-                  borderRadius: 26,
-                  borderBottomRightRadius: 8,
-                  background: P.ink,
-                  color: "white",
-                  fontSize: 29,
-                  fontWeight: 500,
-                  opacity: clamp01(rise * 3),
-                }}
-              >
-                {QUESTION}
-              </div>
-            ) : null}
-            {searching ? (
-              <div style={{ position: "absolute", left: 40, top: 230, display: "flex", alignItems: "center", gap: 14 }}>
-                <Sparkles size={30} color={P.accent} strokeWidth={2.2} />
-                <span
-                  style={{
-                    fontSize: 28,
-                    fontWeight: 600,
-                    backgroundImage: `linear-gradient(90deg, ${P.faint} 0%, ${P.faint} ${sweep}%, ${P.accent} ${sweep + 20}%, ${P.faint} ${sweep + 40}%, ${P.faint} 100%)`,
-                    WebkitBackgroundClip: "text",
-                    backgroundClip: "text",
-                    color: "transparent",
-                  }}
-                >
-                  Durchsucht die Wissensbasis …
-                </span>
-              </div>
-            ) : null}
-            <div style={{ position: "absolute", left: 40, top: 226, width: WIN.w - 200, fontSize: 36, lineHeight: 1.6, color: P.text }}>
-              {TOKENS.map((tok, i) => {
-                const at = CH.answer + i * perWord;
-                if (t < at) return null;
-                const q = clamp01((t - at) / 0.18);
-                return (
-                  <span
-                    key={i}
-                    style={{
-                      display: "inline-block",
-                      marginRight: tok.mark || TOKENS[i + 1]?.w === "." ? 0 : "0.26em",
-                      opacity: q,
-                      filter: `blur(${(1 - q) * 6}px)`,
-                      transform: `translateY(${(1 - q) * 10}px)`,
-                      fontWeight: tok.mark ? 700 : 400,
-                      color: tok.mark ? P.ink : undefined,
-                      backgroundImage: tok.mark ? `linear-gradient(90deg, ${P.accentMark}, ${P.accentMark})` : undefined,
-                      backgroundRepeat: "no-repeat",
-                      backgroundSize: tok.mark ? `${markP * 100}% 100%` : undefined,
-                      borderRadius: 6,
-                      padding: tok.mark ? "0 4px" : undefined,
-                    }}
-                  >
-                    {tok.cite ? <Cite glow={prog(t, CH.source, CH.source + 0.2, ez.out)} /> : tok.w}
-                  </span>
-                );
-              })}
-            </div>
-            {/* Source chip. */}
-            {chip > 0 && !diving ? (
-              <div
-                style={{
-                  position: "absolute",
-                  left: CHIP.x,
-                  top: CHIP.y,
-                  width: CHIP.w,
-                  height: CHIP.h,
-                  borderRadius: CHIP.h / 2,
-                  background: "white",
-                  boxShadow: SHADOW_SM,
-                  outline: `${1 + clickP * 2}px solid ${clickP > 0.05 ? P.accent : P.line}`,
-                  transform: `translateY(${(1 - chip) * 30}px) scale(${(0.7 + 0.3 * chip) * (1 - clickP * 0.04)})`,
-                  opacity: clamp01(chip * 2),
-                }}
-              >
-                <ChipContent />
-              </div>
-            ) : null}
+      <AbsoluteFill style={{ opacity: 1 - away, transform: `translateY(${-away * 60}px)` }}>
+        {/* Input */}
+        {inputOut < 1 ? (
+          <div
+            style={{
+              position: "absolute",
+              left: CX - lerp(290, INPUT.w / 2, inputIn),
+              top: lerp(CY + 130, INPUT.cy - INPUT.h / 2, inputIn),
+              width: lerp(580, INPUT.w, inputIn),
+              height: lerp(96, INPUT.h, inputIn),
+              borderRadius: 52,
+              background: P.card,
+              boxShadow: SHADOW_SOFT,
+              outline: `1.5px solid ${t > CH.typeStart && !sent ? P.accent : P.line}`,
+              display: "flex",
+              alignItems: "center",
+              padding: "0 34px",
+              fontFamily: ui,
+              fontSize: 36,
+              color: P.ink,
+              opacity: 1 - inputOut,
+              transform: `translateY(${inputOut * 40}px)`,
+            }}
+          >
+            <span style={{ opacity: prog(t, CH.input + 0.25, CH.input + 0.45, ez.out), whiteSpace: "nowrap" }}>
+              {sent || typedN === 0 ? <span style={{ color: P.faint }}>Frag deine Website …</span> : QUESTION.slice(0, typedN)}
+            </span>
+            {!sent && t > CH.typeStart ? <span style={{ width: 3, height: 42, marginLeft: 2, background: P.accent }} /> : null}
             <div
               style={{
                 position: "absolute",
-                left: INPUT.x,
-                top: INPUT.y,
-                width: INPUT.w,
-                height: INPUT.h,
-                borderRadius: INPUT.h / 2,
-                background: "#faf7f3",
-                outline: `1.5px solid ${t > CH.typeStart && !sent ? P.accent : P.line}`,
+                right: 14,
+                top: (INPUT.h - 76) / 2,
+                width: 76,
+                height: 76,
+                borderRadius: 38,
+                background: typedN > 0 ? P.accent : "#e9e3dd",
                 display: "flex",
                 alignItems: "center",
-                padding: "0 30px",
-                fontSize: 30,
-                color: P.ink,
+                justifyContent: "center",
+                transform: `scale(${prog(t, CH.input + 0.2, CH.input + 0.4, ez.out) * (1 - pressSend * 0.1)})`,
               }}
             >
-              {sent || typedN === 0 ? <span style={{ color: P.faint }}>Frag deine Website …</span> : QUESTION.slice(0, typedN)}
-              {!sent && t > CH.typeStart ? <span style={{ width: 3, height: 38, marginLeft: 2, background: P.accent }} /> : null}
-              <div
-                style={{
-                  position: "absolute",
-                  right: 14,
-                  top: 14,
-                  width: 60,
-                  height: 60,
-                  borderRadius: 30,
-                  background: typedN > 0 && !sent ? P.accent : "#e7dfd6",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  transform: `scale(${1 - press * 0.1})`,
-                }}
-              >
-                <ArrowUp size={32} color="white" strokeWidth={2.6} />
-              </div>
+              <ArrowUp size={38} color="white" strokeWidth={2.6} />
             </div>
           </div>
-        </div>
-        <Ring x={SEND.x} y={SEND.y} at={CH.send} size={160} />
+        ) : null}
+        <Ring x={SEND.x} y={SEND.y} at={CH.send} size={180} />
+        {/* Question bubble */}
+        {sent ? (
+          <div
+            style={{
+              position: "absolute",
+              right: 1920 - Q.right,
+              top: lerp(INPUT.cy - 40, Q.top, rise),
+              padding: "22px 32px",
+              borderRadius: 34,
+              borderBottomRightRadius: 10,
+              background: P.ink,
+              color: "white",
+              fontFamily: ui,
+              fontSize: 36,
+              fontWeight: 500,
+              opacity: clamp01(rise * 3),
+              transform: `scale(${0.9 + 0.1 * rise})`,
+              transformOrigin: "100% 100%",
+            }}
+          >
+            {QUESTION}
+          </div>
+        ) : null}
+        <Searching t={t} />
+        {/* Answer bubble */}
+        {answerIn > 0 ? (
+          <div
+            style={{
+              position: "absolute",
+              left: A.left,
+              top: A.top,
+              width: A.w,
+              padding: "30px 38px",
+              borderRadius: 34,
+              borderTopLeftRadius: 10,
+              background: P.soft,
+              fontFamily: ui,
+              fontSize: 38,
+              lineHeight: 1.5,
+              color: P.text,
+              transform: `scale(${0.92 + 0.08 * answerIn})`,
+              transformOrigin: "0 0",
+              opacity: clamp01(answerIn * 2),
+            }}
+          >
+            {TOKENS.map((tok, i) => {
+              const at = CH.answer + 0.1 + i * perWord;
+              if (t < at) return null;
+              const q = clamp01((t - at) / 0.18);
+              return (
+                <span
+                  key={i}
+                  style={{
+                    display: "inline-block",
+                    marginRight: tok.mark || TOKENS[i + 1]?.w === "." ? 0 : "0.26em",
+                    opacity: q,
+                    filter: `blur(${(1 - q) * 6}px)`,
+                    transform: `translateY(${(1 - q) * 10}px)`,
+                    fontWeight: tok.mark ? 700 : 400,
+                    color: tok.mark ? P.ink : undefined,
+                    backgroundImage: tok.mark ? `linear-gradient(90deg, ${P.accentMark}, ${P.accentMark})` : undefined,
+                    backgroundRepeat: "no-repeat",
+                    backgroundSize: tok.mark ? `${markP * 100}% 100%` : undefined,
+                    borderRadius: 8,
+                    padding: tok.mark ? "0 6px" : undefined,
+                  }}
+                >
+                  {tok.cite ? (
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        width: 40,
+                        height: 40,
+                        borderRadius: 12,
+                        fontSize: 22,
+                        fontWeight: 700,
+                        color: chip > 0.1 ? "white" : P.accent,
+                        background: chip > 0.1 ? P.accent : P.accentSoft,
+                        verticalAlign: "4px",
+                      }}
+                    >
+                      1
+                    </span>
+                  ) : (
+                    tok.w
+                  )}
+                </span>
+              );
+            })}
+          </div>
+        ) : null}
+        {chip > 0 && !diving ? (
+          <div
+            style={{
+              position: "absolute",
+              left: CHIP.left,
+              top: CHIP.top,
+              width: CHIP.w,
+              height: CHIP.h,
+              borderRadius: CHIP.h / 2,
+              background: "white",
+              boxShadow: SHADOW_TINY,
+              outline: `${1.5 + clickP * 2}px solid ${clickP > 0.05 ? P.accent : P.line}`,
+              transform: `translateY(${(1 - chip) * 30}px) scale(${(0.7 + 0.3 * chip) * (1 - clickP * 0.04)})`,
+              transformOrigin: "0 50%",
+              opacity: clamp01(chip * 2),
+            }}
+          >
+            <ChipContent />
+          </div>
+        ) : null}
       </AbsoluteFill>
-      {diving ? (
+      {/* The source chip grows into the original page. */}
+      {diving && implode < 1 ? (
         <div
           style={{
             position: "absolute",
@@ -318,31 +333,26 @@ export const Chat: React.FC = () => {
             top: pcy - ph / 2,
             width: pw,
             height: ph,
-            borderRadius: lerp(CHIP.h / 2, 28, dive),
+            borderRadius: lerp(CHIP.h / 2, 30, grow),
             background: "white",
-            boxShadow: SHADOW,
-            outline: `${2.5 * (1 - dive) + 1}px solid ${dive < 0.9 ? P.accent : P.line}`,
+            boxShadow: SHADOW_SOFT,
+            outline: `${2 * (1 - grow) + 1.5}px solid ${grow < 0.9 ? P.accent : P.line}`,
             overflow: "hidden",
             transformOrigin: `${CX - (pcx - pw / 2)}px ${CY - (pcy - ph / 2)}px`,
-            transform: `scale(${shrink}) rotate(${implode * 25}deg)`,
-            opacity: shrink > 0.02 ? 1 : 0,
+            transform: `scale(${(1 - implode) * (1 + prog(t, V.click + 0.55, V.implode, (x) => x) * 0.05)})`,
           }}
         >
           <div style={{ position: "absolute", inset: 0, opacity: 1 - prog(t, V.click, V.click + 0.15, ez.out) }}>
             <ChipContent />
           </div>
-          <div style={{ position: "absolute", left: 0, top: 0, transformOrigin: "0 0", transform: `scale(${pw / PAGE.w}, ${ph / PAGE.h})`, opacity: prog(t, V.click + 0.2, V.page + 0.2, ez.out) }}>
+          <div style={{ position: "absolute", left: 0, top: 0, transformOrigin: "0 0", transform: `scale(${pw / PAGE.w}, ${ph / PAGE.h})`, opacity: prog(t, V.click + 0.2, V.click + 0.45, ez.out) }}>
             <SourcePage t={t} />
           </div>
         </div>
       ) : null}
-      {implode > 0.9 ? (
-        <div style={{ position: "absolute", left: CX - 9, top: CY - 9, width: 18, height: 18, borderRadius: 9, background: P.accent }} />
-      ) : null}
-      <Pointer x={cx} y={cyy} opacity={cursorO} press={Math.max(press, clickP)} />
-      <Caption text="Dann *frag einfach.*" from={CH.open + 0.1} to={CH.search - 0.05} y={78} />
-      <Caption text="Antwort *mit Quelle.*" from={CH.search + 0.05} to={V.click - 0.02} y={78} />
-      <Caption text="Direkt *auf der Seite markiert.*" from={V.page + 0.2} to={V.implode} y={78} />
+      <Ring x={CX - 20} y={CY + 30} at={V.mark + 0.35} size={1100} width={2} dur={0.8} />
+      <Dot scale={prog(t, V.dot - 0.12, V.dot, ez.out)} pulseFrom={V.dot + 0.1} />
+      <Pointer x={px} y={py} opacity={pointerO} press={Math.max(pressSend, clickP)} />
     </AbsoluteFill>
   );
 };

@@ -1,195 +1,87 @@
 import React from "react";
 import { AbsoluteFill } from "remotion";
-import { CX, CY, H, K, P, W, bgAt, clamp01, ez, isDark, mono, prog, sp, ui, useT, wide } from "./look";
+import { CX, CY, P, clamp01, ez, prog, sp, ui, useT, wide } from "./look";
 
-/** One line of kinetic type: letters rise out of a mask one after another, the line settles from a stretch. */
-export const SlamLine: React.FC<{
-  text: string;
-  at: number;
-  size: number;
-  color: string;
-  dotColor?: string;
-  wdth?: number;
-  stagger?: number;
-}> = ({ text, at, size, color, dotColor, wdth = 125, stagger = 0.018 }) => {
-  const t = useT();
-  if (t < at) return <div style={{ height: size * 0.86 }} />;
-  const p = prog(t, at, at + 0.3, ez.expo);
-  const chars = [...text];
-  return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "center",
-        height: size * 0.86,
-        lineHeight: `${size * 0.86}px`,
-        fontSize: size,
-        letterSpacing: "-0.02em",
-        color,
-        transform: `scaleX(${1.18 - 0.18 * p}) scaleY(${0.82 + 0.18 * p})`,
-        ...wide(wdth),
-      }}
-    >
-      {chars.map((c, i) => {
-        const q = prog(t, at + i * stagger, at + i * stagger + 0.28, ez.expo);
-        const isDot = (c === "." || c === "?") && dotColor;
-        return (
-          <span key={i} style={{ display: "inline-block", overflow: "hidden", height: size * 0.86, paddingTop: size * 0.02 }}>
-            <span
-              style={{
-                display: "inline-block",
-                transform: `translateY(${(1 - q) * 105}%)`,
-                color: isDot ? dotColor : undefined,
-                whiteSpace: "pre",
-              }}
-            >
-              {c}
-            </span>
-          </span>
-        );
-      })}
-    </div>
-  );
-};
+export const SHADOW_SOFT = "0 1px 2px rgba(20,17,16,0.04), 0 14px 36px -14px rgba(20,17,16,0.14), 0 40px 90px -40px rgba(20,17,16,0.14)";
+export const SHADOW_TINY = "0 1px 2px rgba(20,17,16,0.04), 0 8px 18px -10px rgba(20,17,16,0.16)";
 
-type Word = { text: string; accent?: boolean };
-/** "Du klickst. *Jedes Mal wieder.*": starred words get the accent. */
-const parse = (s: string): Word[] => {
-  let on = false;
-  return s.split(" ").map((raw) => {
-    let text = raw;
-    const opens = text.startsWith("*");
-    if (opens) text = text.slice(1);
-    const closes = text.endsWith("*");
-    if (closes) text = text.slice(0, -1);
-    const w = { text, accent: on || opens };
-    if (opens) on = true;
-    if (closes) on = false;
-    return w;
-  });
-};
+type StackWord = { text: string; at: number };
 
-/** A caption: words sharpen out of a blur one by one and leave together. */
-export const Caption: React.FC<{ text: string; from: number; to: number; y?: number; size?: number; dark?: boolean; stagger?: number }> = ({
-  text,
-  from,
-  to,
-  y = 96,
-  size = 64,
-  dark,
-  stagger = 0.07,
+/**
+ * Words stack up in the middle of the frame: each new word pops in below and the
+ * block slides up and shrinks until everything fits, like a type stack on the beat.
+ */
+export const Stack: React.FC<{ words: StackWord[]; out?: number; collapse?: number; maxSize?: number }> = ({
+  words,
+  out,
+  collapse,
+  maxSize = 340,
 }) => {
   const t = useT();
-  if (t < from - 0.02 || t > to + 0.02) return null;
-  const out = prog(t, to - 0.22, to, ez.in);
+  const w = words.map((word) => sp(t, word.at, 16, 170, 0.8));
+  const n = w.reduce((a, b) => a + b, 0);
+  if (n <= 0.001) return null;
+  const longest = Math.max(...words.map((word, i) => (w[i] > 0.02 ? word.text.length : 0)));
+  const size = Math.min(maxSize, 1640 / (longest * 0.64), 800 / (0.98 * Math.max(1, n)));
+  const lh = size * 0.98;
+  const blockH = w.reduce((a, b) => a + b * lh, 0);
+  // Exit: the block whips up out of frame. Collapse: it shrinks into a dot.
+  const whip = out ? prog(t, out, out + 0.28, ez.in) : 0;
+  const shrink = collapse ? prog(t, collapse, collapse + 0.28, ez.in) : 0;
+  if (shrink >= 1 || whip >= 1) return null;
+  let y = CY - blockH / 2;
   return (
-    <div
+    <AbsoluteFill
       style={{
-        position: "absolute",
-        top: y,
-        left: 100,
-        right: 100,
-        display: "flex",
-        justifyContent: "center",
-        flexWrap: "wrap",
-        columnGap: size * 0.26,
-        fontSize: size,
-        lineHeight: 1.1,
-        letterSpacing: "-0.025em",
-        color: dark ? P.paper : P.ink,
-        ...wide(100, 800),
+        transform: `translateY(${-whip * 1300}px) scale(${1 - shrink})`,
+        transformOrigin: `${CX}px ${CY}px`,
+        filter: whip > 0.02 ? `blur(${whip * 16}px)` : undefined,
       }}
     >
-      {parse(text).map((w, i) => {
-        const at = from + i * stagger;
-        const q = clamp01((t - at) / 0.32);
-        const s = sp(t, at, 15, 200, 0.7);
+      {words.map((word, i) => {
+        if (w[i] <= 0.001) return null;
+        const top = y;
+        y += w[i] * lh;
+        const q = clamp01((t - word.at) / 0.2);
+        const last = word.text.slice(-1);
+        const punct = last === "?" || last === "." ? last : "";
+        const body = punct ? word.text.slice(0, -1) : word.text;
         return (
-          <span
+          <div
             key={i}
             style={{
-              display: "inline-block",
-              opacity: q * (1 - out),
-              transform: `translateY(${(1 - s) * size * 0.45 - out * size * 0.3}px)`,
-              filter: `blur(${(1 - q) * 12 + out * 10}px)`,
-              color: w.accent ? P.accent : undefined,
+              position: "absolute",
+              left: 0,
+              right: 0,
+              top: top + (w[i] * lh - lh) / 2,
+              height: lh,
+              lineHeight: `${lh}px`,
+              textAlign: "center",
+              fontSize: size,
+              letterSpacing: "-0.035em",
+              color: P.ink,
+              whiteSpace: "nowrap",
+              opacity: q,
+              transform: `translateY(${(1 - w[i]) * lh * 0.7}px) scale(${0.7 + 0.3 * Math.min(1, w[i])})`,
+              filter: q < 1 ? `blur(${(1 - q) * 14}px)` : undefined,
+              ...wide(112, 900),
             }}
           >
-            {w.text}
-          </span>
+            {body}
+            <span style={{ color: P.accent }}>{punct}</span>
+          </div>
         );
       })}
-    </div>
-  );
-};
-
-const CHAPTERS: [number, string][] = [
-  [0, "01 · PROBLEM"],
-  [8, "02 · CRACHA"],
-  [11, "03 · CRAWL"],
-  [16, "04 · CHAT"],
-  [21, "05 · QUELLE"],
-  [24, "06 · KURZ"],
-  [32, "07 · START"],
-];
-
-/** Corner marks, chapter, timecode and bar counter: the frame that binds every scene. */
-export const Hud: React.FC = () => {
-  const t = useT();
-  const dark = isDark(bgAt(t));
-  const color = dark ? P.paper : P.ink;
-  const chapter = CHAPTERS.reduce((c, [at, l]) => (t >= at ? l : c), CHAPTERS[0][1]);
-  const beat = Math.floor(t * 2);
-  const bar = Math.floor(beat / 4) + 1;
-  const frames = Math.floor((t % 1) * 60);
-  const tc = `00:00:${String(Math.floor(t)).padStart(2, "0")}:${String(frames).padStart(2, "0")}`;
-  const intro = prog(t, 0, 0.4, ez.out);
-  const m = 44;
-  const corner = (x: number, y: number, rx: number, ry: number) => (
-    <div
-      style={{
-        position: "absolute",
-        left: x,
-        top: y,
-        width: 22,
-        height: 22,
-        borderLeft: rx < 0 ? `2px solid ${color}` : undefined,
-        borderRight: rx > 0 ? `2px solid ${color}` : undefined,
-        borderTop: ry < 0 ? `2px solid ${color}` : undefined,
-        borderBottom: ry > 0 ? `2px solid ${color}` : undefined,
-      }}
-    />
-  );
-  return (
-    <AbsoluteFill style={{ opacity: 0.42 * intro, fontFamily: mono, fontSize: 15, letterSpacing: "0.12em", color, pointerEvents: "none" }}>
-      {corner(m, m, -1, -1)}
-      {corner(W - m - 22, m, 1, -1)}
-      {corner(m, H - m - 22, -1, 1)}
-      {corner(W - m - 22, H - m - 22, 1, 1)}
-      <div style={{ position: "absolute", right: m + 40, top: m + 2 }}>{chapter}</div>
-      <div style={{ position: "absolute", left: m + 40, top: m + 2 }}>CRACHA · {Math.round(K.duration)} SEC</div>
-      <div style={{ position: "absolute", left: m + 40, bottom: m + 2 }}>{tc}</div>
-      <div style={{ position: "absolute", left: m + 40, bottom: m - 10, width: 240, height: 1, background: color, opacity: 0.35 }} />
-      <div style={{ position: "absolute", left: m + 40, bottom: m - 10, width: (240 * t) / K.duration, height: 1, background: color }} />
-      <div style={{ position: "absolute", right: m + 40, bottom: m + 2, display: "flex", alignItems: "center", gap: 10 }}>
-        <span>{K.bpm} BPM</span>
-        <span style={{ display: "flex", gap: 4 }}>
-          {[0, 1, 2, 3].map((i) => (
-            <span key={i} style={{ width: 9, height: 9, border: `1.5px solid ${color}`, background: beat % 4 === i ? color : "transparent" }} />
-          ))}
-        </span>
-        <span>BAR {String(bar).padStart(2, "0")}</span>
-      </div>
     </AbsoluteFill>
   );
 };
 
 /** The pointer. `press` is 0..1 while clicking. */
-export const Pointer: React.FC<{ x: number; y: number; opacity: number; press: number; light?: boolean }> = ({ x, y, opacity, press, light }) =>
+export const Pointer: React.FC<{ x: number; y: number; opacity: number; press: number }> = ({ x, y, opacity, press }) =>
   opacity <= 0 ? null : (
     <svg
-      width={48}
-      height={48}
+      width={46}
+      height={46}
       viewBox="0 0 24 24"
       style={{
         position: "absolute",
@@ -198,10 +90,10 @@ export const Pointer: React.FC<{ x: number; y: number; opacity: number; press: n
         opacity,
         transform: `scale(${1 - press * 0.16})`,
         transformOrigin: "7px 4px",
-        filter: "drop-shadow(0 6px 10px rgba(0,0,0,0.35))",
+        filter: "drop-shadow(0 6px 10px rgba(0,0,0,0.25))",
       }}
     >
-      <path d="M4 2.5 L19.5 12 L12.4 13.6 L9 20.5 Z" fill={light ? "#fff" : P.ink} stroke={light ? P.ink : "#fff"} strokeWidth={1.6} strokeLinejoin="round" />
+      <path d="M4 2.5 L19.5 12 L12.4 13.6 L9 20.5 Z" fill={P.ink} stroke="#fff" strokeWidth={1.6} strokeLinejoin="round" />
     </svg>
   );
 
@@ -213,7 +105,7 @@ export const Ring: React.FC<{ x: number; y: number; at: number; color?: string; 
   color = P.accent,
   size = 140,
   dur = 0.55,
-  width = 4,
+  width = 3,
 }) => {
   const t = useT();
   const p = prog(t, at, at + dur, ez.out);
@@ -235,73 +127,71 @@ export const Ring: React.FC<{ x: number; y: number; at: number; color?: string; 
   );
 };
 
-/** Full-frame iris: a circle of `color` grows out of the centre. */
-export const Iris: React.FC<{ at: number; color: string; dur?: number; x?: number; y?: number; fringe?: boolean; children?: React.ReactNode }> = ({
-  at,
-  color,
-  dur = 0.22,
+/** A dot that holds the frame between scenes. */
+export const Dot: React.FC<{ x?: number; y?: number; size?: number; color?: string; scale?: number; pulseFrom?: number }> = ({
   x = CX,
   y = CY,
-  fringe = true,
-  children,
+  size = 22,
+  color = P.accent,
+  scale = 1,
+  pulseFrom,
 }) => {
   const t = useT();
-  if (t < at) return null;
-  const p = prog(t, at, at + dur, ez.expo);
-  const r = 8 + p * 1250;
-  const done = p >= 0.999;
-  return (
-    <AbsoluteFill>
-      {fringe && !done ? (
-        <>
-          <div style={{ position: "absolute", left: x - r - 4, top: y - r - 4, width: 2 * r + 8, height: 2 * r + 8, borderRadius: "50%", background: "#7b61ff", opacity: 0.8, filter: "blur(4px)" }} />
-          <div style={{ position: "absolute", left: x - r - 1, top: y - r - 1, width: 2 * r + 2, height: 2 * r + 2, borderRadius: "50%", background: "#9cff7a", opacity: 0.35, filter: "blur(2px)" }} />
-        </>
-      ) : null}
-      <AbsoluteFill style={{ background: color, clipPath: done ? undefined : `circle(${r}px at ${x}px ${y}px)` }}>{children}</AbsoluteFill>
-    </AbsoluteFill>
+  const pulse = pulseFrom !== undefined && t > pulseFrom ? 1 + 0.18 * Math.max(0, Math.sin((t - pulseFrom) * Math.PI * 4)) : 1;
+  return scale <= 0 ? null : (
+    <div style={{ position: "absolute", left: x - size / 2, top: y - size / 2, width: size, height: size, borderRadius: size, background: color, transform: `scale(${scale * pulse})` }} />
   );
 };
 
-/** A tiny browser page, drawn at 300 × 200 and scaled by the caller. */
-export const MiniPage: React.FC<{ title: string; path: string; dark?: boolean; seed: number; hot?: number }> = ({ title, path, dark, seed, hot = 0 }) => {
-  const bg = dark ? P.night : P.card;
-  const skel = dark ? "rgba(255,240,230,0.11)" : "#efe8e0";
-  const txt = dark ? "rgba(255,240,230,0.85)" : P.ink;
-  const widths = [0.9, 0.7, 0.82, 0.55, 0.75].map((w, i) => w - ((seed * 7 + i * 3) % 5) * 0.05);
+/** A minimal page: address bar, a title bar and a few lines. Drawn at w × h. */
+export const Tile: React.FC<{ w: number; h: number; seed: number; read?: number; hot?: boolean; title?: string; path?: string }> = ({
+  w,
+  h,
+  seed,
+  read = 0,
+  hot,
+  title,
+  path,
+}) => {
+  const u = h / 100;
+  const widths = [0.86, 0.64, 0.78, 0.5].map((x, i) => x - ((seed * 7 + i * 3) % 5) * 0.05);
   return (
     <div
       style={{
         position: "absolute",
         left: 0,
         top: 0,
-        width: 300,
-        height: 200,
-        borderRadius: 14,
-        background: bg,
+        width: w,
+        height: h,
+        borderRadius: 10 * u,
+        background: P.card,
         overflow: "hidden",
-        boxShadow: dark ? "0 20px 40px -20px rgba(0,0,0,0.8)" : SHADOW_TINY,
-        outline: `${hot > 0 ? 2 + hot * 2 : 1}px solid ${hot > 0 ? P.accent : dark ? "rgba(255,240,230,0.07)" : P.line}`,
+        boxShadow: SHADOW_TINY,
+        outline: `${hot || read > 0 ? 1.5 * u : 1 * u}px solid ${hot ? P.accent : read > 0 ? `rgba(234,88,12,${0.25 + 0.5 * read})` : P.line}`,
         fontFamily: ui,
       }}
     >
-      <div style={{ height: 30, display: "flex", alignItems: "center", gap: 5, padding: "0 10px", borderBottom: `1px solid ${dark ? "rgba(255,240,230,0.06)" : P.line}` }}>
+      <div style={{ height: 18 * u, display: "flex", alignItems: "center", gap: 3 * u, padding: `0 ${7 * u}px`, borderBottom: `${0.8 * u}px solid ${P.line}` }}>
         {[0, 1, 2].map((i) => (
-          <div key={i} style={{ width: 7, height: 7, borderRadius: 4, background: dark ? "rgba(255,240,230,0.2)" : "#e2d9cf" }} />
+          <div key={i} style={{ width: 4.5 * u, height: 4.5 * u, borderRadius: 3 * u, background: "#e6e0da" }} />
         ))}
-        <div style={{ marginLeft: 6, fontSize: 11, color: dark ? "rgba(255,240,230,0.5)" : P.muted, whiteSpace: "nowrap", overflow: "hidden" }}>{path}</div>
+        {path ? <div style={{ marginLeft: 4 * u, fontSize: 7.5 * u, color: P.muted, whiteSpace: "nowrap" }}>{path}</div> : null}
       </div>
-      <div style={{ padding: "14px 16px" }}>
-        <div style={{ fontSize: 22, fontWeight: 800, color: txt, letterSpacing: "-0.02em", whiteSpace: "nowrap" }}>{title}</div>
-        {widths.map((w, i) => (
+      <div style={{ padding: `${8 * u}px ${10 * u}px` }}>
+        {title ? (
+          <div style={{ fontSize: 15 * u, fontWeight: 800, color: P.ink, letterSpacing: "-0.02em", whiteSpace: "nowrap" }}>{title}</div>
+        ) : (
+          <div style={{ width: "46%", height: 8 * u, borderRadius: 4 * u, background: "#d9d2cb" }} />
+        )}
+        {widths.map((x, i) => (
           <div
             key={i}
             style={{
-              marginTop: i ? 8 : 12,
-              width: `${w * 100}%`,
-              height: 8,
-              borderRadius: 4,
-              background: i === (seed % 4) + 1 ? (dark ? "rgba(234,88,12,0.55)" : P.accentMark) : skel,
+              marginTop: i ? 5.5 * u : 8 * u,
+              width: `${x * 100}%`,
+              height: 5 * u,
+              borderRadius: 3 * u,
+              background: i === (seed % 3) + 1 ? P.accentMark : P.soft,
             }}
           />
         ))}
@@ -309,9 +199,8 @@ export const MiniPage: React.FC<{ title: string; path: string; dark?: boolean; s
     </div>
   );
 };
-const SHADOW_TINY = "0 1px 2px rgba(48,39,32,0.06), 0 10px 24px -10px rgba(90,45,20,0.22)";
 
-/** Horizontal directional blur for whips, via an SVG filter. */
+/** Directional blur for whips, via an SVG filter. */
 export const Smear: React.FC<{ id: string; x: number; y?: number; children: React.ReactNode }> = ({ id, x, y = 0, children }) => {
   const on = x > 0.3 || y > 0.3;
   return (
@@ -326,11 +215,4 @@ export const Smear: React.FC<{ id: string; x: number; y?: number; children: Reac
       <AbsoluteFill style={{ filter: on ? `url(#${id})` : undefined }}>{children}</AbsoluteFill>
     </>
   );
-};
-
-/** Fixed-width letter boxes, so each letter's centre is known (for collapse-to-dot match cuts). */
-export const letterBoxes = (text: string, size: number, advance = 0.9) => {
-  const w = size * advance;
-  const total = w * text.length;
-  return [...text].map((c, i) => ({ c, x: CX - total / 2 + w * (i + 0.5), w }));
 };

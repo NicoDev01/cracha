@@ -5,7 +5,7 @@ description: Stil- und Produktionsleitfaden für CraCha-Werbevideos in Remotion 
 
 # CraCha-Werbevideo
 
-Ein Werbevideo nach diesem Skill fühlt sich an wie **ein ruhiges Produkt-UI auf warmer Bühne (2), das im Takt der Musik schneidet (3) und an den Wendepunkten mit kinetischer Typo und Morphs explodiert (1)**.
+Ein Werbevideo nach diesem Skill ist **minimalistisch auf Weiß (2, 3): ein Element im Fokus, ein professionelles Voice-over erzählt, Schnitte und Wendungen liegen auf dem Beat (3), und die Übergänge sind Morphs, Whips und Kollaps-zum-Punkt (1)**. Text auf dem Bildschirm nur, wo er selbst die Grafik ist.
 
 Die Einzelanalyse mit Zeitmarken steht in [references/analyse.md](references/analyse.md), das gebaute Beispiel (`CraChaAd`) in [references/storyboard-ad.md](references/storyboard-ad.md).
 
@@ -13,35 +13,31 @@ Die Einzelanalyse mit Zeitmarken steht in [references/analyse.md](references/ana
 
 | Aus | Übernehmen | Nicht übernehmen |
 |---|---|---|
-| **1 Showreel** | Kapitel à 1 Takt (2 s), Match-Cuts (Buchstaben → Punkte → nächste Szene), Iris-Wipe aus einem Punkt, Squash & Stretch mit Motion Blur, Form-Morphs mit Geisterspuren, Kinetic-Type-Finale (ein Wort pro Beat, Hintergrund wechselt mit), HUD-Rahmen, Logo aus Partikeln | 3D-Punktwolken, Truchet-Muster, Easing-Demo: Selbstzweck ohne Produktbezug |
+| **1 Showreel** | Kapitel à 1 Takt (2 s), Match-Cuts (Buchstaben → Punkte → nächste Szene), Iris-Wipe aus einem Punkt, Squash & Stretch mit Motion Blur, Form-Morphs mit Geisterspuren, Wort-für-Wort-Finale auf dem Beat, Logo-Auftritt mit Schockwellen-Ring | Wechselnde Vollflächen, HUD, 3D-Punktwolken, Muster: zu viel im Bild |
 | **2 Minimal-UI** | Warmes Off-White, eine Akzentfarbe, nur das eine Element im Bild, echte UI als Held, Tipp-/Klick-Foley ohne Musik, Wort-für-Wort-Pillen, vertikales Listen-Rad, Logo aus Pillen gemorpht, ruhiger Dauer-Push-in der Kamera | Weißes UI auf weißem Grund ohne Kontrast bei kleinen Größen, lange Wartezeiten auf Fortschrittsbalken |
 | **3 Marketing-Pacing** | Schnitt/Wendung auf jedem 2. Beat (≈ 1 s), Headlines Wort für Wort mit Blur-In, ein Schlüsselwort in Akzentfarbe, Orbit mit Zähler („48 Seiten erfasst“), Haken-Belohnung, Chat-Blasen, Deny/Allow-Klick, Dreiklang („Ask. Analyze. Make changes.“), Durchstreichen, Endkarte mit URL-Pille | Maskottchen (CraCha hat keins), fremde Markenlogos |
 
 ## 2. Look
 
-**Zwei Welten, eine Palette.** Die Produktwelt ist hell und ruhig (2), die Punchline-Welt ist vollflächig und laut (1). Gewechselt wird nur per Iris, Wipe oder Match-Cut, nie per Crossfade.
+**Eine weiße Bühne.** Kein Wechsel der Hintergrundfarbe, keine Vollflächen, kein HUD, kein Korn. UI ohne Rahmen, wo es geht (Chat = nur Blasen, keine Fensterkarte).
 
 | Token | Wert | Einsatz |
 |---|---|---|
-| `paper` | `#f5f0e9` | Produktwelt, Endkarte (wie `film15/look.ts`) |
-| `ink` | `#17120f` | Text, dunkle Punchline-Frames, HUD |
-| `accent` | `#ea580c` | Einziges Akzent-Orange: Schlüsselwort, Pillen, Vollflächen-Frame |
-| `flash` | `#465fff` | Nur in Kinetic-Type-Frames als Kontrastfläche (Dashboard-Blau); nie in der UI-Welt |
-| `card` | `#ffffff` | UI-Container, Schatten aus `theme.ts` (`SHADOW`, `SHADOW_SM`) |
+| `paper` | `#ffffff` | Hintergrund, immer |
+| `ink` | `#141110` | Text, Frage-Blase, Punkt |
+| `accent` | `#ea580c` | Einziges Signal: Satzzeichen im Wort-Stapel, Button, Haken, Markierung |
+| `soft` / `line` | `#f5f2ee` / `#ece8e3` | Antwort-Blase, Skeleton-Zeilen, Umrisse |
+| `accentMark` | `#ffd6b8` | Textmarker in Antwort und Quelle |
 
-Regeln: pro Frame höchstens zwei Farbflächen plus Tinte. Keine Verläufe auf UI, keine Glows. Leichtes Filmkorn (2–3 % Opazität) auf Vollflächen ist erlaubt.
+Schatten weich und neutral (`SHADOW_SOFT`, `SHADOW_TINY` in `src/ad/kit.tsx`). Keine Verläufe, keine Glows.
 
-**Schrift** (vorhandene Fonts zuerst, Display-Font im Rig prüfen):
+**Schrift:**
 
 | Rolle | Schrift | Stil |
 |---|---|---|
-| Kinetic Type (1) | Archivo als variable Font (`loadVariableFont`), `'wdth' 125, 'wght' 900`, Versalien; die Breitenachse (62–125) animieren für Squash & Stretch | 190–300 px, randfüllend |
-| Caption (3) | Archivo `'wdth' 100, 'wght' 800`, Tracking −2,5 % | 64 px, Schlüsselwort in `accent` |
-| Kontrapunkt (1/2) | Instrument Serif Italic | Unterzeile wie „motion designer“ |
-| UI (2) | Inter 400–600 | echte Dashboard-Beschriftung |
-| HUD (1) | JetBrains Mono (in `film15/look.ts` geladen), 14 px, Versalien, Tracking +10 % | Ecken, Kapitel, Timecode |
-
-**HUD-Rahmen (1):** Eckwinkel in allen vier Ecken, oben rechts Kapitel („02 · CRAWL“), unten links Timecode, unten rechts Takt-Anzeige (vier Quadrate, das aktive gefüllt). Opazität 35 %, in der hellen Welt `ink`, in Vollflächen invertiert. Er bindet alle Szenen zu einem Film.
+| Wort-Stapel | Archivo variabel, `'wdth' 112, 'wght' 900`, normale Schreibung, Tracking −3,5 % | passt sich an: ein Wort bis 340 px, vier Zeilen ≈ 200 px |
+| Claim | Instrument Serif Italic | „Frag deine Website.“ |
+| UI | Inter 400–700 | echte Beschriftung, 36–50 px, damit sie auf dem Handy lesbar bleibt |
 
 ## 3. Bewegung
 
@@ -57,6 +53,7 @@ Kurven liegen in `video/src/theme.ts` (`ease`, `prog`, `track`). Zusätzlich:
 
 Bausteine:
 
+0. **Wort-Stapel (3, der Hook-Effekt):** ein Wort erscheint groß in der Mitte; jedes neue Wort ploppt darunter auf, der Block schiebt sich nach oben und verkleinert sich, bis alle Zeilen passen (Federn für das Gewicht jeder Zeile, Größe = min(Maximalgröße, Breite, Höhe/n)). Abgang: Whip nach oben mit Unschärfe oder Kollaps zum Punkt. `Stack` in `src/ad/kit.tsx`.
 1. **Blur-In-Wort (3):** jedes Wort `opacity 0→1`, `blur 12→0 px`, `y +24→0`, 0,35 s `ease.out`, Versatz 1 Beat/2 zwischen Wörtern.
 2. **Slam (1):** Wort kommt mit `scaleX 1.6→1`, `scaleY 0.6→1` in 0,2 s `expoOut`, dazu Richtungs-Motion-Blur (`@remotion/motion-blur` `CameraMotionBlur`, `shutterAngle 180`, `samples 8`).
 3. **Kollaps zum Punkt → Iris (1):** Form schrumpft in 0,1 s auf 12 px Punkt, 1 Beat Pause, Kreis wächst in 0,15 s über die Diagonale; neue Welt liegt im Kreis. Leichter Farbsaum (1–2 px Chroma-Versatz) am Rand.
@@ -71,6 +68,7 @@ Verboten: lineare Bewegung (außer als Pointe wie „LINEAR.“ in 1), Crossfade
 ## 4. Timing und Ton
 
 - **Raster:** 120 BPM, 60 fps → 1 Beat = 0,5 s = 30 Frames, 1 Takt = 2 s. Alle Zeitmarken in einer `cues.json` in Beats, wie bei `film15`.
+- **Voice-over trägt die Geschichte.** Gemini 3.8 Flash TTS über OpenRouter, Stimme „Puck“, Stil per `speech_metadata`. Das ganze Skript in **einem** Take sprechen lassen (einzelne kurze Zeilen klingen flach und uneinheitlich), mehrere Takes erzeugen, mit einem Audio-Modell bewerten und transkribieren, an den Pausen in Phrasen schneiden und jede Phrase auf einen Beat legen (`vo.clips` in `cues.json`). CraCha als „Kratscha“ schreiben. Das Bild folgt der Stimme; die Musik wird unter der Stimme um ≈ 5 dB abgesenkt.
 - **Dramaturgie (Ref. 1 misst ≈ 128 BPM, Ref. 3 ≈ 120 BPM):**
   - Hook laut, 1 Idee pro Beat.
   - Produktteil „Breakdown“: Musik ausgedünnt oder tiefpassgefiltert, UI-Foley vorn (Ref. 2 ist bis 15,7 s fast stumm).
@@ -85,7 +83,8 @@ Verboten: lineare Bewegung (außer als Pointe wie „LINEAR.“ in 1), Crossfade
 
 - **Keine Zahlen** (Seitenlimits, Ebenen, Credits ändern sich). Nur Funktionen zeigen: Website eingeben, jede Unterseite wird gecrawlt (visuell: Dutzende Seiten), Wissensbasis, Chat, Antwort mit Quelle, Stelle auf der Originalseite markiert. CTA: „Kostenlos starten“ + `cracha-app.com`.
 - UI 1:1 aus dem Quellcode nachbauen (Dashboard liegt hinter Login). Beispiel-Domain `docs.example.com`.
-- Pro Szene **eine** Botschaft, maximal 5 Wörter Bildschirmtext außerhalb der UI.
+- Pro Szene **eine** Botschaft. Was die Stimme sagt, steht nicht zusätzlich als Untertitel im Bild; großer Text nur im Hook-Stapel, im Finale-Stapel und auf der Endkarte.
+- Genug Zeit zum Sehen: Suche ≈ 1,5 s, markierte Quelle ≥ 2 s stehen lassen.
 - Deutsch, Du-Form, kurze Imperative und Nominalsätze („Link rein.“, „Frag.“, „Mit Quelle.“).
 
 ## 6. Arbeitsablauf
@@ -93,7 +92,7 @@ Verboten: lineare Bewegung (außer als Pointe wie „LINEAR.“ in 1), Crossfade
 1. **Brief:** Länge, Format (16:9, 9:16, 1:1), Ziel (Anwerben, Launch, Feature), Personalisierung (Zielgruppe, Beispiel-Website, Claim) festhalten.
 2. **Beat-Sheet** als `STORYBOARD-<name>.md` nach dem Muster in `references/storyboard-ad.md`: Szene, Beats, Welt (hell/voll), Match-Cut rein/raus, Bildschirmtext, Ton.
 3. **Cues:** `src/<name>/cues.json` in Beats; Musik und SFX lesen dieselbe Datei.
-4. **Rig:** HUD, Blur-In-Wort, Slam, Iris, Morph-Container, Cursor, Orbit, Zähler als Komponenten in `src/<name>/kit.tsx`. Vorhanden und zuerst wiederverwenden: `explainer/kit.tsx` (`Kinetic`, `Headline`, `Pointer`, `Ripple`, `MotionBlur`, `pressAt`, `sp`), `film15/look.ts` (Palette `K`, `settle`, `glide`, JetBrains Mono), `film15/Box.tsx`, `MorphBox.tsx`, `Logo.tsx`.
+4. **Rig:** Wort-Stapel, Blur-In-Wort, Slam, Iris, Morph-Container, Cursor, Orbit, Zähler als Komponenten in `src/<name>/kit.tsx`. Vorhanden und zuerst wiederverwenden: `explainer/kit.tsx` (`Kinetic`, `Headline`, `Pointer`, `Ripple`, `MotionBlur`, `pressAt`, `sp`), `film15/look.ts` (Palette `K`, `settle`, `glide`, JetBrains Mono), `film15/Box.tsx`, `MorphBox.tsx`, `Logo.tsx`.
 5. **Standbilder:** je Szene ein `remotion still`, als Contact Sheet prüfen (Lesbarkeit, eine Botschaft, Palette).
 6. **Bewegung:** Szene für Szene im Studio, danach komplette Renderprüfung auf Takt (`ffmpeg` Frames bei Beat-Marken).
 7. **Ton:** Musik und SFX erzeugen, Pegel: Musik −14 LUFS, Foley deutlich hörbar, im Produktteil über der Musik.
@@ -105,4 +104,6 @@ Alles Variable steht als Props an der Komposition (`defaultProps` + Zod-Schema, 
 
 ## Entscheidungen
 
-- Kein Maskottchen, keine Zahlen, kein Voice-over; der Beat trägt.
+- Weißer Hintergrund durchgehend, keine Hintergrundwechsel, kein HUD.
+- Kein Maskottchen, keine Zahlen.
+- Professionelles Voice-over statt Bildschirmtext.

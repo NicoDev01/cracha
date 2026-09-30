@@ -1,19 +1,49 @@
 {
-  "duration": 36,
+  "duration": 36.5,
   "bpm": 120,
   "music": {
     "file": "ad-music-take3.mp3",
     "offset": 0.065,
-    "splice": { "at": 28, "to": 108.065 },
-    "fadeOut": 35.2
+    "parts": [
+      { "at": 0, "from": 0.065, "to": 20.065 },
+      { "at": 20, "from": 16.065, "to": 20.065 },
+      { "at": 24, "from": 20.065, "to": 28.0 },
+      { "at": 28, "from": 108.065, "to": 116.6 }
+    ],
+    "fadeOut": 35.6
   },
-  "hook": { "words": [0, 1, 2, 3] },
-  "problem": { "start": 4, "clicks": [4.5, 5, 5.5, 6, 6.25, 6.5, 6.75], "implode": 7, "dot": 7.5 },
-  "reveal": { "iris": 8, "sub": 8.5, "collapse": 9, "wipe": 9.25 },
-  "url": { "pill": 9.5, "typeStart": 9.75, "typeEnd": 10.4, "click": 10.5 },
-  "crawl": { "root": 11, "rings": [11.5, 12, 12.5, 13, 13.5], "done": 14.5, "stack": 15, "ready": 15.5 },
-  "chat": { "open": 16, "typeStart": 16.4, "typeEnd": 17.3, "send": 17.5, "search": 18, "answer": 18.5, "source": 20 },
-  "verify": { "click": 21, "page": 21.25, "mark": 22, "implode": 23, "dot": 23.5 },
-  "finale": { "words": [24, 24.5, 25, 26, 26.5, 27, 28, 28.5, 29], "zoom": 29.5, "swirl": 30, "collapse": 31 },
-  "end": { "hit": 32, "claim": 32.5, "cta": 33, "credits": 33.5 }
+  "vo": {
+    "file": "ad-vo-take.wav",
+    "clips": [
+      { "id": "hook", "src": [0.26, 1.62], "at": 0.2 },
+      { "id": "problem1", "src": [2.35, 4.33], "at": 2.25 },
+      { "id": "problem2", "src": [4.69, 5.51], "at": 4.75 },
+      { "id": "problem3", "src": [6.04, 7.35], "at": 5.75 },
+      { "id": "reveal1", "src": [8.28, 9.16], "at": 8.0 },
+      { "id": "reveal2", "src": [9.44, 10.33], "at": 9.0 },
+      { "id": "url", "src": [11.01, 12.19], "at": 10.25 },
+      { "id": "crawl", "src": [12.74, 14.4], "at": 12.0 },
+      { "id": "base", "src": [15.09, 17.22], "at": 14.0 },
+      { "id": "ask", "src": [18.03, 19.76], "at": 16.75 },
+      { "id": "answer", "src": [20.48, 21.54], "at": 20.0 },
+      { "id": "source", "src": [22.26, 22.83], "at": 21.5 },
+      { "id": "click", "src": [23.62, 24.11], "at": 22.5 },
+      { "id": "verify", "src": [24.42, 26.77], "at": 23.25 },
+      { "id": "link", "src": [27.61, 28.21], "at": 28.0 },
+      { "id": "ask2", "src": [28.7, 29.23], "at": 29.0 },
+      { "id": "see", "src": [29.65, 30.22], "at": 30.0 },
+      { "id": "brand", "src": [31.06, 31.59], "at": 32.0 },
+      { "id": "claim", "src": [32.25, 33.12], "at": 33.0 },
+      { "id": "cta", "src": [33.63, 34.85], "at": 34.0 }
+    ]
+  },
+  "hook": { "words": [0.24, 0.54, 0.76, 0.96], "out": 2.0 },
+  "problem": { "start": 2.0, "switches": [2.5, 3.0, 3.5, 4.0, 4.75, 5.0, 5.25], "overview": 5.75, "implode": 6.9, "dot": 7.4 },
+  "reveal": { "logo": 8.0, "collapse": 9.75 },
+  "url": { "pill": 10.0, "typeStart": 10.5, "typeEnd": 11.25, "click": 11.5 },
+  "crawl": { "root": 12.0, "rings": [12.25, 12.75, 13.25, 13.75], "stack": 15.0, "ready": 15.75 },
+  "chat": { "input": 16.5, "typeStart": 17.0, "typeEnd": 18.2, "send": 18.5, "answer": 20.0, "mark": 20.9, "source": 21.5 },
+  "verify": { "click": 22.5, "mark": 24.6, "implode": 26.5, "dot": 27.2 },
+  "finale": { "words": [28.05, 29.05, 30.05], "collapse": 31.0 },
+  "end": { "hit": 32.0, "claim": 33.0, "cta": 34.05, "url": 34.6 }
 }

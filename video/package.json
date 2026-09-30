@@ -17,7 +17,8 @@
     "music:ad": "node scripts/make-ad-music.mjs public/ad-music-take3.mp3 && node scripts/beat-grid.mjs public/ad-music-take3.mp3",
     "audio:ad": "node scripts/make-ad-audio.mjs",
     "render:ad": "node scripts/make-ad-audio.mjs && remotion render CraChaAd out/cracha-ad.mp4 --crf=16",
-    "poster:ad": "remotion still CraChaAd out/cracha-ad-poster.png --frame=2040"
+    "poster:ad": "remotion still CraChaAd out/cracha-ad-poster.png --frame=2100",
+    "vo:ad": "node scripts/make-ad-vo.mjs"
   },
   "dependencies": {
     "@remotion/cli": "4.0.527",

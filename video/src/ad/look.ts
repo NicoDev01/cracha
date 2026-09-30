@@ -27,21 +27,19 @@ export const wide = (wdth = 125, wght = 900) => ({
   fontVariationSettings: `'wdth' ${wdth}, 'wght' ${wght}`,
 });
 
-// Two worlds, one palette: the calm product stage and the loud punchline frames.
+// One white stage, ink, and a single orange accent.
 export const P = {
-  paper: "#f5f0e9",
-  ink: "#17120f",
-  text: "#302720",
-  muted: "#786f69",
-  faint: "#b3aaa3",
-  line: "#e9e4de",
+  paper: "#ffffff",
+  ink: "#141110",
+  text: "#2b2522",
+  muted: "#8a827c",
+  faint: "#c4bdb6",
+  line: "#ece8e3",
+  soft: "#f5f2ee",
   card: "#ffffff",
   accent: "#ea580c",
   accentSoft: "#fff1e8",
-  accentMark: "#ffd2b0",
-  flash: "#465fff",
-  night: "#1d1714",
-  night2: "#2a221e",
+  accentMark: "#ffd6b8",
 };
 
 export const SHADOW =
@@ -80,25 +78,6 @@ export const rnd = (i: number, salt = 1) => {
 
 /** 0..1..0 around a click. */
 export const pressAt = (t: number, at: number) => prog(t, at - 0.1, at, ez.out) - prog(t, at, at + 0.25, ez.out);
-
-// The flat background colour over time; transitions draw on top of it.
-const BG: [number, string][] = [
-  [0, P.accent],
-  [1, P.ink],
-  [2, P.flash],
-  [3, P.paper],
-  [4, P.ink],
-  [8, P.accent],
-  [9.25, P.paper],
-  [24, P.accent],
-  [25, P.ink],
-  [26, P.flash],
-  [27, P.paper],
-  [28, P.ink],
-  [30, P.accent],
-];
-export const bgAt = (t: number) => BG.reduce((c, [at, col]) => (t >= at ? col : c), BG[0][1]);
-export const isDark = (c: string) => c === P.ink || c === P.flash || c === P.night;
 
 export const SITE = "example.com";
 export const URL_CTA = "cracha-app.com";

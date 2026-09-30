@@ -38,11 +38,11 @@ npm run bed:explainer   # neue Musik; danach "music.offset" in cues.json auf den
 
 ## Werbevideo
 
-Komposition `CraChaAd` (1920×1080, 60 fps, 36 s) nach dem Skill `.claude/skills/cracha-werbevideo`: Kinetic-Type-Hook, Klick-Dschungel, Crawl über Dutzende Unterseiten, Chat mit Quelle und markierter Stelle, Kinetic-Type-Finale auf dem Drop. Zeitmarken in `src/ad/cues.json`, Musik ist ein Lyria-3-Take (`public/ad-music-take3.mp3`, 120 BPM).
+Komposition `CraChaAd` (1920×1080, 60 fps, 36,5 s) nach dem Skill `.claude/skills/cracha-werbevideo`: minimalistisch auf Weiß, Voice-over (Gemini TTS „Puck“, ein Take in `public/ad-vo-take.wav`) auf dem Beat eines Lyria-3-Takes (`public/ad-music-take3.mp3`, 120 BPM). Zeitmarken, Musikschnitt und Sprechphrasen stehen in `src/ad/cues.json`, der Sprechertext in `src/ad/vo-script.json`.
 
 ```bash
-npm run audio:ad    # schneidet die Musik und erzeugt die Soundeffekte (auch für die Studio-Vorschau nötig)
+npm run audio:ad    # schneidet Musik und Stimme, erzeugt die Soundeffekte (auch für die Studio-Vorschau nötig)
 npm run render:ad   # schreibt out/cracha-ad.mp4
 npm run poster:ad   # schreibt out/cracha-ad-poster.png
-npm run music:ad    # neuer Lyria-Take (kostet ein paar Cent), danach Offset und Schnitt in cues.json anpassen
+npm run vo:ad       # neuer Sprecher-Take (ein paar Cent), listet die Phrasen für vo.clips
 ```

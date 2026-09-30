@@ -1,0 +1,18 @@
+{
+  "note": "CraCha is spelled 'Kratscha' so the voice says it like the brand. Spoken as one take; paragraphs become the pauses the take is cut at (see vo.clips in cues.json).",
+  "voice": "Puck",
+  "style": "Moderner deutscher Werbesprecher für einen Tech-Werbespot: warm, selbstbewusst, natürlich und locker, mit echten Betonungen und Lächeln in der Stimme. Zwischen den Absätzen jeweils eine deutliche Pause von etwa einer Sekunde. Der erste Satz klingt leicht genervt und fragend, der Schluss einladend.",
+  "lines": [
+    "Wo stand das nochmal?",
+    "Du klickst dich durch Dutzende Unterseiten. Immer wieder. Für eine einzige Info.",
+    "Mit Kratscha geht das einfacher.",
+    "Gib einfach deine Website ein.",
+    "Kratscha liest jede Unterseite",
+    "und macht daraus deine Wissensbasis.",
+    "Jetzt stellst du einfach deine Frage.",
+    "Und bekommst die Antwort. Mit Quelle.",
+    "Ein Klick, und du siehst die Stelle direkt auf der Seite markiert.",
+    "Link rein. Fragen. Quelle sehen.",
+    "Kratscha. Frag deine Website. Jetzt kostenlos starten."
+  ]
+}
