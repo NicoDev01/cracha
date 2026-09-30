@@ -8,9 +8,9 @@ export const { fontFamily: FONT } = loadFont("normal", { weights: ["500", "600",
 export const FPS = cues.fps;
 export const W = 1920;
 export const H = 1080;
-/** Screen point the camera looks at; the strip below 900 px belongs to the captions. */
+/** Screen point the camera looks at: world (0, 0). */
 export const CX = 960;
-export const CY = 470;
+export const CY = 540;
 
 export const C = {
   ink: "#141110",
@@ -27,6 +27,10 @@ export const C = {
 export const shadow = (a = 1) =>
   `0 30px 80px -20px rgba(40, 30, 90, ${0.28 * a}), 0 8px 24px -8px rgba(40, 30, 90, ${0.16 * a})`;
 export const SHADOW = shadow();
+/** Key words, borders and rings: CraCha orange into pink and violet, like the Bard/Gemini gradient. */
+export const GRADIENT = "linear-gradient(90deg, #ea580c 0%, #e0457b 52%, #8b5cf6 100%)";
+export const GRAD_STOPS = ["#ea580c", "#e0457b", "#8b5cf6"];
+
 export const SHADOW_SM = "0 10px 30px -10px rgba(40, 30, 90, 0.3)";
 
 export const ease = {

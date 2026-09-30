@@ -62,16 +62,17 @@ node scripts/transcribe.mjs out/spot-mix.wav                     # Kontrolle: Tr
 
 ## Reel (30,5 s)
 
-Komposition `CraChaReel` (1920×1080, 60 fps), von Grund auf neu und im Stil eines SaaS-Marketingclips: Problem (Klick-Chaos im Browser, „Keine Treffer“) → Lösung (ein Punkt wird Logo, Eingabefeld, Startseite, Wissensbasis und Chat-Frage) → Antwort mit markierter Quelle → „Crawl-Chat-Agent“ → „Jetzt kostenlos starten“. Code in `src/reel/`, Skripte in `scripts/reel/`.
+Komposition `CraChaReel` (1920×1080, 60 fps) im Stil der Google-Filme zu Bard, AI Mode und Gemini Spark: helle Pastellbühne, jeder gesprochene Satz erscheint Wort für Wort genau mit der Stimme (Schlüsselwort im Orange-Violett-Verlauf), dazu ruhige Produkt-UI. Problem (Tabs häufen sich bei jedem „klickst“) → Link rein → jede Unterseite als Symbol mit Haken → Wissensbasis → Frage → Antwort mit Quelle → Quellseite mit markierter Stelle → „Das ist CraCha, dein Crawl-Chat-Agent“ → „Jetzt kostenlos starten“. Code in `src/reel/`, Skripte in `scripts/reel/`.
 
-- `src/reel/cues.json`: alle Zeitpunkte in Sekunden (Sprechzeilen, Klicks, Morphs, Kamera). Bild, Untertitel, Musik und Soundeffekte lesen nur diese Datei.
-- `src/reel/vo-script.json`: Sprechertext, „CraCha“ als „Kratscha“ geschrieben (die Untertitel schreiben es richtig). Die Takes liegen in `public/reel/vo/`.
-- Musik und Soundeffekte werden synthetisiert (kostenlos, lizenzfrei, Drop exakt auf dem Logo).
+- `src/reel/cues.json`: alle Zeitpunkte in Sekunden (Sprechzeilen, Bildereignisse `t`, Musikmarken `m`). Bild, Musik und Soundeffekte lesen nur diese Datei.
+- `src/reel/words.json`: Startzeit jedes Worts pro Sprechzeile (Whisper, an Lautstärke-Einsätzen ausgerichtet; Klicks und Markenname von Hand gemessen).
+- `src/reel/vo-script.json`: Sprechertext, „CraCha“ als „Kratscha“ geschrieben (im Bild steht „CraCha“). Die Takes liegen in `public/reel/vo/`.
+- Musik und Soundeffekte werden synthetisiert (kostenlos, lizenzfrei, Drop auf „Mit CraCha“).
 
 ```bash
 npm run vo:reel -- klick brand   # einzelne Zeilen neu sprechen (Gemini TTS, ein paar Cent) und gegenhören lassen
+npm run words:reel               # Wortzeiten neu messen; braucht einen lokalen whisper.cpp-Server auf Port 8765 (siehe Skriptkopf)
 npm run audio:reel               # Musik, Soundeffekte und Mix (auch für die Studio-Vorschau nötig)
 npm run render:reel              # schreibt out/cracha-reel.mp4
 npm run poster:reel              # schreibt out/cracha-reel-poster.png
-node scripts/word-onsets.mjs public/reel/vo/klick.wav 0 3.2   # Wortanfänge, z. B. die drei „klickst“
 ```

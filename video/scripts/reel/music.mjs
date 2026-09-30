@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { SR, at, writeWav } from "./lib.mjs";
 
 const cues = JSON.parse(readFileSync(at("src/reel/cues.json")));
-const { t, duration, bpm } = cues;
+const { m, duration, bpm } = cues;
 const BEAT = 60 / bpm;
 const N = Math.ceil(duration * SR);
 const L = new Float32Array(N);
@@ -18,10 +18,10 @@ let seed = 7;
 const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647) * 2 - 1;
 
 const hz = (m) => 440 * 2 ** ((m - 69) / 12);
-const DROP = t.drop;
-const CUT = t.collapse - 0.15; // everything stops on "nichts"
-const BRAND = t.logo2;
-const OUTRO = t.outro;
+const DROP = m.drop;
+const CUT = m.cut; // everything stops on "nichts"
+const BRAND = m.brand;
+const OUTRO = m.outro;
 
 /** Tiny state-variable filter (TPT), cutoff may change every sample. */
 function svf() {
@@ -232,18 +232,18 @@ const ramp = (time, a, b) => Math.max(0, Math.min(1, (time - a) / (b - a)));
 // Drums first: the kicks write the sidechain that bass and chords read.
 // Problem (0 → CUT): ticking hats, a kick that comes in with the first click.
 for (let x = 1.0; x < CUT; x += BEAT / 2) hat(x, x % BEAT < 1e-6 ? 0.35 : 0.65);
-for (let x = t.clicks[0]; x < CUT; x += BEAT) kick(x, 0.7);
-riser(t.zoomOut, CUT, 0.7);
+for (let x = m.first; x < CUT; x += BEAT) kick(x, 0.7);
+riser(m.build, CUT, 0.7);
 // Dead stop, then a swell that sucks into the drop.
-riser(t.stop, DROP, 1.2);
+riser(m.stop, DROP, 1.2);
 
 // Drop → collapse: full groove. Collapse → brand: a short breath. Brand → outro: full again.
-const grooveEnd = t.collapse2;
+const grooveEnd = m.breath;
 const groove = (from, to) => {
   for (let x = from; x < to - 1e-6; x += BEAT) {
     kick(x);
-    hat(x + BEAT / 2, 1, true);
-    if (Math.round((x - from) / BEAT) % 2 === 1) clap(x);
+    hat(x + BEAT / 2, 0.6, true);
+    if (Math.round((x - from) / BEAT) % 2 === 1) clap(x, 0.6);
   }
   for (let x = from; x < to - 1e-6; x += BEAT / 4) hat(x, Math.round(x / (BEAT / 4)) % 2 ? 0.55 : 0.3);
 };
@@ -260,11 +260,11 @@ crash(OUTRO, 1, 2.5);
 
 // Harmony.
 chords(0, CUT + 0.05, (x) => 380 + 900 * ramp(x, 0, CUT), (x) => 0.7 * ramp(x, 0, 1.2) * (x > CUT - 0.05 ? 0 : 1));
-bass(t.clicks[0], CUT, () => 0.8, (x) => 250 + 500 * ramp(x, t.clicks[0], CUT));
+bass(m.first, CUT, () => 0.8, (x) => 250 + 500 * ramp(x, m.first, CUT));
 chords(DROP, grooveEnd, () => 3200, () => 1, true);
 bass(DROP, grooveEnd, () => 1, () => 900);
-arp(t.inputToPage, t.dbToAsk, () => 0.55);
-arp(t.dbToAsk, grooveEnd, () => 0.9);
+arp(m.arpA, m.arpB, () => 0.55);
+arp(m.arpB, grooveEnd, () => 0.9);
 chords(grooveEnd, BRAND, (x) => 3200 * 0.15 ** ramp(x, grooveEnd, BRAND), () => 0.8);
 chords(BRAND, OUTRO, () => 4200, () => 1, true);
 bass(BRAND, OUTRO, () => 1, () => 1100);

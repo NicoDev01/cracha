@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { SR, at, envelope, readMono, writeWav } from "./lib.mjs";
 
 const cues = JSON.parse(readFileSync(at("src/reel/cues.json")));
-const { t, duration } = cues;
+const { t, m, duration } = cues;
 const N = Math.ceil(duration * SR);
 const L = new Float32Array(N);
 const R = new Float32Array(N);
@@ -119,43 +119,44 @@ const typing = ([from, to], chars) => {
 };
 
 // ---- the sheet ----
-pop(t.dotIn, 0.9);
-whoosh(t.browserIn + 0.25, 0.45, 0.8);
-t.clicks.forEach((c, k) => {
+const PAGES = cues.pages;
+// Tabs piling up: a click and three soft pops per "klickst".
+t.tabs.forEach((c) => {
   click(c);
-  whoosh(c + 0.2, 0.3, 0.45, true, k % 2 ? 0.5 : -0.5);
+  [0, 0.09, 0.18].forEach((d, k) => pop(c + d, 0.55, 500 + k * 120, 900 + k * 150));
 });
-whoosh(t.zoomOut + 0.4, 0.8, 0.8, false);
-typing([t.search + 0.1, t.search + 0.55], 15);
-thud(t.empty);
-whoosh(t.collapse + 0.3, 0.45, 0.9, false);
-pop(t.stop, 0.7, 900, 500);
+whoosh(t.nichts + 0.3, 0.6, 0.8, false);
+pop(t.nichtsOut + 0.1, 0.4, 900, 500);
 
-pop(t.drop, 1.1);
-whoosh(t.logoToInput + 0.25, 0.45, 0.8);
+pop(m.drop, 0.9);
+whoosh(t.field + 0.2, 0.4, 0.6);
 typing(t.type, cues.text.domain.length);
 click(t.submit);
-pop(t.submit + 0.06, 1);
-whoosh(t.inputToPage + 0.25, 0.45, 0.8);
-whoosh(t.spawn[0] + 0.3, 1.0, 0.6, false);
-for (let k = 0; k < cues.pages; k++) tick(t.spawn[0] + ((t.spawn[1] - t.spawn[0]) * k) / (cues.pages - 1), 1, 1500 + k * 60);
-whoosh(t.dbIn + 0.2, 0.4, 0.6);
-for (let k = 0; k < cues.pages; k++) tick(t.gather[0] + ((t.gather[1] - t.gather[0]) * k) / (cues.pages - 1), 0.8, 2400 - k * 50);
-pop(t.dbCheck, 1);
-whoosh(t.dbToAsk + 0.25, 0.45, 0.8);
+pop(t.submit + 0.06, 0.9);
+whoosh(t.hub + 0.25, 0.45, 0.7);
+// Pages pop in the order they appear (their slots are shuffled round the ring).
+for (let k = 0; k < PAGES; k++) {
+  const at = t.pages[0] + ((t.pages[1] - t.pages[0]) * ((k * 5) % PAGES)) / (PAGES - 1);
+  whoosh(at + 0.12, 0.22, 0.25, true, Math.cos(-Math.PI / 2 + (k / PAGES) * Math.PI * 2));
+  pop(at + 0.15, 0.45, 600 + ((k * 5) % PAGES) * 40, 1100 + ((k * 5) % PAGES) * 50);
+}
+whoosh(t.gather[0] + 0.1, 0.9, 0.7, false);
+for (let k = 0; k < PAGES; k++) tick(t.gather[0] + ((t.gather[1] - t.gather[0]) * k) / (PAGES - 1), 0.7, 2400 - k * 50);
+pop(t.kb, 1.1);
+whoosh(t.askField + 0.25, 0.45, 0.7);
 typing(t.typeQ, cues.text.question.length);
 click(t.send);
-whoosh(t.send + 0.25, 0.4, 0.7);
+whoosh(t.qUp + 0.25, 0.4, 0.6);
 for (let x = t.answer[0]; x < t.answer[1]; x += 0.09) tick(x, 0.25, 2600);
 pop(t.cite, 0.9);
+pop(t.sourceChip + 0.05, 0.6);
 click(t.sourceClick);
-whoosh(t.sourceOpen + 0.25, 0.45, 0.8);
+whoosh(t.sourceOpen + 0.3, 0.55, 0.8);
 marker(t.mark[0], t.mark[1]);
-whoosh(t.collapse2 + 0.3, 0.45, 0.9, false);
-pop(t.logo2, 1.1);
-t.tagline.forEach((x) => pop(x, 0.7, 600, 1200));
-pop(t.cta, 1);
-tick(t.url, 0.6);
+whoosh(t.sourceOut + 0.25, 0.5, 0.7, false);
+pop(cues.vo.find((v) => v.id === "brand").at + 0.59, 1);
+whoosh(t.endLogo + 0.2, 0.45, 0.5);
+pop(t.url, 0.8);
 click(t.ctaClick);
 sparkle(t.ctaClick + 0.03);
 

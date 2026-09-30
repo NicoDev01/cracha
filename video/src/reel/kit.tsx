@@ -1,4 +1,3 @@
-import { interpolate as flubber, interpolateAll, separate, combine } from "flubber";
 import React from "react";
 import { C, FONT, SHADOW, clamp01, ease, lerp, prog } from "./theme";
 
@@ -160,44 +159,6 @@ export const Cursor: React.FC<{
       <path d="M6 4 L6 36 L14.5 28 L20 40 L26 37.5 L20.5 25.5 L32 25.5 Z" fill={C.ink} stroke="white" strokeWidth={2.5} strokeLinejoin="round" />
     </svg>
   );
-};
-
-// ---------- flubber morphs ----------
-
-type Interp = (p: number) => string;
-const cache = new Map<string, Interp[]>();
-
-/** Interpolators between shape lists, built once per pair and reused on every frame. */
-export function morphs(key: string, from: string[], to: string[], seg = 0.4): Interp[] {
-  const hit = cache.get(key);
-  if (hit) return hit;
-  const opts = { maxSegmentLength: seg };
-  let list: Interp[];
-  if (from.length === 1 && to.length > 1) {
-    const all = separate(from[0], to, { ...opts, single: false }) as unknown as Interp | Interp[];
-    list = Array.isArray(all) ? all : [all];
-  } else if (from.length > 1 && to.length === 1) {
-    const all = combine(from, to[0], { ...opts, single: false }) as unknown as Interp | Interp[];
-    list = Array.isArray(all) ? all : [all];
-  } else if (from.length === to.length && from.length > 1) {
-    list = interpolateAll(from, to, { ...opts, single: false }) as unknown as Interp[];
-  } else {
-    list = [flubber(from[0], to[0], opts)];
-  }
-  cache.set(key, list);
-  return list;
-}
-
-/** Circle as a path, for morphs out of a dot. */
-export const circlePath = (cx: number, cy: number, r: number) =>
-  `M${cx - r},${cy} A${r},${r} 0 1,0 ${cx + r},${cy} A${r},${r} 0 1,0 ${cx - r},${cy} Z`;
-
-/** Rounded rectangle as a path, for morphs into a pill or a card. */
-export const roundRectPath = (cx: number, cy: number, w: number, h: number, r: number) => {
-  const x = cx - w / 2;
-  const y = cy - h / 2;
-  r = Math.min(r, w / 2, h / 2);
-  return `M${x + r},${y} H${x + w - r} A${r},${r} 0 0 1 ${x + w},${y + r} V${y + h - r} A${r},${r} 0 0 1 ${x + w - r},${y + h} H${x + r} A${r},${r} 0 0 1 ${x},${y + h - r} V${y + r} A${r},${r} 0 0 1 ${x + r},${y} Z`;
 };
 
 /** Headline word that sharpens out of a blur while it rises into place. */
