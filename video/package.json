@@ -18,11 +18,16 @@
     "audio:ad": "node scripts/make-ad-audio.mjs",
     "render:ad": "node scripts/make-ad-audio.mjs && remotion render CraChaAd out/cracha-ad.mp4 --crf=16",
     "poster:ad": "remotion still CraChaAd out/cracha-ad-poster.png --frame=2100",
-    "vo:ad": "node scripts/make-ad-vo.mjs"
+    "vo:ad": "node scripts/make-ad-vo.mjs",
+    "audio:spot": "node scripts/make-spot-audio.mjs",
+    "render:spot": "node scripts/make-spot-audio.mjs && remotion render CraChaSpot out/cracha-spot.mp4 --crf=16",
+    "poster:spot": "remotion still CraChaSpot out/cracha-spot-poster.png --frame=1080",
+    "vo:spot": "node scripts/make-ad-vo.mjs src/spot/vo-script.json public/spot/vo-take-new.wav"
   },
   "dependencies": {
     "@remotion/cli": "4.0.527",
     "@remotion/google-fonts": "4.0.527",
+    "@remotion/motion-blur": "4.0.527",
     "@types/flubber": "0.4.0",
     "flubber": "0.4.2",
     "lucide-react": "0.539.0",

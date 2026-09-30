@@ -1,11 +1,12 @@
 // Speaks the whole ad script as one take with Gemini TTS via OpenRouter (one take
 // sounds far more natural than line by line) and lists its phrases, so they can be
 // placed on the beat in src/ad/cues.json (vo.clips).
-// Usage: node scripts/make-ad-vo.mjs  →  public/ad-vo-take-new.wav
+// Usage: node scripts/make-ad-vo.mjs [script.json] [out.wav]  →  default: src/ad/vo-script.json, public/ad-vo-take-new.wav
 import { readFileSync, writeFileSync } from "node:fs";
 
 const root = new URL("../", import.meta.url);
-const sc = JSON.parse(readFileSync(new URL("src/ad/vo-script.json", root)));
+const sc = JSON.parse(readFileSync(new URL(process.argv[2] ?? "src/ad/vo-script.json", root)));
+const out = process.argv[3] ?? "public/ad-vo-take-new.wav";
 const key =
   process.env.OPENROUTER_API_KEY ??
   readFileSync(new URL("../.env.local", root), "utf8").match(/^OPENROUTER_API_KEY=(.*)$/m)?.[1].trim().replace(/^"|"$/g, "");
@@ -37,7 +38,7 @@ head.writeUInt16LE(2, 32);
 head.writeUInt16LE(16, 34);
 head.write("data", 36);
 head.writeUInt32LE(pcm.length, 40);
-writeFileSync(new URL("public/ad-vo-take-new.wav", root), Buffer.concat([head, pcm]));
+writeFileSync(new URL(out, root), Buffer.concat([head, pcm]));
 
 // Phrases: runs of sound separated by at least 0.3 s of quiet (10 ms frames).
 const hop = RATE / 100;
@@ -61,4 +62,4 @@ env.forEach((v, i) => {
   }
 });
 if (start >= 0) console.log(`[${Math.max(0, start - 3) / 100}, ${env.length / 100}]`);
-console.log("public/ad-vo-take-new.wav – anhören, dann als ad-vo-take.wav übernehmen und vo.clips anpassen");
+console.log(`${out} – anhören, dann übernehmen und vo.clips anpassen`);

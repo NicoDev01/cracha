@@ -16,21 +16,21 @@ export const Hook: React.FC = () => {
 
 // --- A browser full of tabs ---------------------------------------------------
 
-const BW = 1600;
-const BH = 900;
-const TAB_H = 58;
+export const BW = 1600;
+export const BH = 900;
+export const TAB_H = 58;
 const BAR_H = 62;
-const NAV_H = 84;
+export const NAV_H = 84;
 const SUB_H = 62;
-const TOP = TAB_H + BAR_H;
-const NAV = ["Produkte", "Preise", "Hilfe", "Service", "Konto", "Blog", "Kontakt"];
-const SUB = ["Übersicht", "Details", "Downloads", "FAQ", "Formulare"];
-const PAGES = ["Start", "Hilfe", "Häufige Fragen", "Downloads", "Kundenkonto", "Service", "Kontakt", "Einstellungen", "Blog", "Tarife", "Support", "Profil"];
-const tabW = (n: number) => Math.min(210, (BW - 110) / n);
+export const TOP = TAB_H + BAR_H;
+export const NAV = ["Produkte", "Preise", "Hilfe", "Service", "Konto", "Blog", "Kontakt"];
+export const SUB = ["Übersicht", "Details", "Downloads", "FAQ", "Formulare"];
+export const PAGES = ["Start", "Hilfe", "Häufige Fragen", "Downloads", "Kundenkonto", "Service", "Kontakt", "Einstellungen", "Blog", "Tarife", "Support", "Profil"];
+export const tabW = (n: number) => Math.min(210, (BW - 110) / n);
 
-type State = { tabs: string[]; active: number; nav: number; sub: number; title: string; path: string };
+export type State = { tabs: string[]; active: number; nav: number; sub: number; title: string; path: string };
 
-const Browser: React.FC<{ s: State; swap?: number; seed: number }> = ({ s, swap = 1, seed }) => {
+export const Browser: React.FC<{ s: State; swap?: number; seed: number }> = ({ s, swap = 1, seed }) => {
   const tw = tabW(s.tabs.length);
   return (
     <div style={{ position: "absolute", left: 0, top: 0, width: BW, height: BH, borderRadius: 24, overflow: "hidden", background: P.card, boxShadow: SHADOW_SOFT, fontFamily: ui }}>

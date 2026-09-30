@@ -46,3 +46,16 @@ npm run render:ad   # schreibt out/cracha-ad.mp4
 npm run poster:ad   # schreibt out/cracha-ad-poster.png
 npm run vo:ad       # neuer Sprecher-Take (ein paar Cent), listet die Phrasen für vo.clips
 ```
+
+## Spot (18,5 s)
+
+Komposition `CraChaSpot` (1920×1080, 60 fps, 18,5 s): Kurzfassung des Werbevideos, Problem → Lösung → Vorteil → CTA. Ein Element verwandelt sich nacheinander in Logo, Eingabefeld, Startseite, Wissensbasis und Chat-Frage; schnelle Bewegungen bekommen echte Bewegungsunschärfe (`@remotion/motion-blur`, Zeitfenster `blur` in der Cue-Datei). Ablauf in [STORYBOARD-spot.md](STORYBOARD-spot.md), Zeitmarken in `src/spot/cues.json`, Sprechertext in `src/spot/vo-script.json`, Sprecher-Take in `public/spot/vo-take3.wav`. Die Musik ist der vorhandene Lyria-Take, auf Beat-Grenzen neu geschnitten.
+
+```bash
+npm run audio:spot    # schneidet Musik und Stimme, erzeugt die Soundeffekte (auch für die Studio-Vorschau nötig)
+npm run render:spot   # schreibt out/cracha-spot.mp4
+npm run poster:spot   # schreibt out/cracha-spot-poster.png
+npm run vo:spot       # neuer Sprecher-Take (ein paar Cent), listet die Phrasen für vo.clips
+node scripts/word-onsets.mjs public/spot/vo-take3.wav 1.9 4.6   # Wortanfänge in einem Stück des Takes
+node scripts/transcribe.mjs out/spot-mix.wav                     # Kontrolle: Transkript und Bewertung
+```
