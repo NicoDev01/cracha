@@ -10,7 +10,7 @@ async function check() {
     const response = await fetch(new URL(path, origin), { cache: 'no-store', signal: AbortSignal.timeout(15000) });
     const html = await response.text();
     if (!response.ok || !html.includes('<title>')) throw new Error(`Page unavailable: ${path}`);
-    if (path === '/' && (!html.includes('Verwandle jede Website') || !html.includes('kein Abo'))) throw new Error('Landing page does not show the current headline and pricing FAQ');
+    if (path === '/' && (!html.includes('Frag nicht das Internet') || !html.includes('kein Abo'))) throw new Error('Landing page does not show the current headline and pricing FAQ');
   }
   // A router prefetch asks for one segment. Answered with the whole page
   // payload instead, the router rejects it and asks again, forever — which is
