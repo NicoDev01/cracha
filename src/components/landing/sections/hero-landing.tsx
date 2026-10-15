@@ -24,8 +24,9 @@ export default function HeroLanding() {
           Frag <span className="text-orange-400">die Website.</span>
         </h1>
         <p className="max-w-2xl text-pretty text-base leading-relaxed text-white/80 sm:text-lg">
-          CraCha, dein Crawl-Chat-Agent, liest Websites Unterseite für Unterseite und zeigt dir
-          jede Antwort mit Quelle, auch von Seiten, die keine Suchmaschine findet.
+          CraCha, dein Crawl-Chat-Agent, liest Websites bis in die letzte Unterseite und
+          beantwortet deine Fragen aus dem gesamten Inhalt: präzise, mit Quelle und auch von
+          Seiten, die keine Suchmaschine findet.
         </p>
         <div className="mt-3 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4">
           <HeroStartButton />
