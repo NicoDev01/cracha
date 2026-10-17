@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { BadgeCheck, Filter, Network, SlidersHorizontal, Zap } from "lucide-react";
+import { BadgeCheck, FileCheck, Languages, Network, SearchX } from "lucide-react";
 
 import MaxWidthWrapper from "@/components/shared/max-width-wrapper";
 import { GridItem } from "@/components/landing/ui/grid-item";
@@ -28,22 +28,10 @@ interface Feature {
  */
 const features: Feature[] = [
   {
-    title: "Aus hunderten Seiten wird Wissen",
+    title: "Findet die Unterseiten selbst",
     description:
-      "CraCha liest erreichbare Seiten ein und bereitet deren Text für deine Fragen auf. Wähle einen passenden Website-Bereich statt Inhalte einzulesen, die du gar nicht brauchst.",
-    icon: <Filter className="h-4 w-4" />,
-  },
-  {
-    title: "Du bestimmst den Umfang",
-    description:
-      "Folge Links bis zu fünf Ebenen tief oder nutze eine Sitemap. Pro Crawl sind bis zu 500 Seiten möglich, sofern sie erreichbar sind und dein Guthaben ausreicht.",
+      "Du gibst eine Adresse ein, nicht hundert. CraCha folgt den Links und der Sitemap und liest die Website Seite für Seite.",
     icon: <Network className="h-4 w-4" />,
-  },
-  {
-    title: "Du sagst, was reinkommt",
-    description:
-      "Wie tief, wie viele Seiten, welche Bereiche — das legst du vorher fest. Was dich nicht interessiert, lässt CraCha einfach weg.",
-    icon: <SlidersHorizontal className="h-4 w-4" />,
   },
   {
     title: "Jede Antwort mit Quelle",
@@ -52,10 +40,22 @@ const features: Feature[] = [
     icon: <BadgeCheck className="h-4 w-4" />,
   },
   {
-    title: "Fortschritt im Blick",
+    title: "Sagt, wenn es nicht drinsteht",
     description:
-      "Verfolge das Einlesen und die Aufbereitung im Dashboard. Die Dauer hängt von Umfang und Erreichbarkeit der Website ab. Sobald deine Wissensbasis bereit ist, kannst du Fragen stellen.",
-    icon: <Zap className="h-4 w-4" />,
+      "CraCha antwortet nur aus der Website, die du gewählt hast. Steht die Antwort dort nicht, sagt CraCha dir das, statt etwas zu erfinden.",
+    icon: <SearchX className="h-4 w-4" />,
+  },
+  {
+    title: "Frag auf Deutsch",
+    description:
+      "Auch wenn die Website englisch ist. Die Quellenlinks führen auf die Originalseiten.",
+    icon: <Languages className="h-4 w-4" />,
+  },
+  {
+    title: "Texte gegen die Website prüfen",
+    description:
+      "Füg einen Entwurf oder eine Preisliste in den Content-Check ein. CraCha zeigt Widersprüche und veraltete Angaben, mit Quelle.",
+    icon: <FileCheck className="h-4 w-4" />,
   },
 ];
 
@@ -65,7 +65,7 @@ export default function Features() {
         <MaxWidthWrapper>
              <div className="mx-auto mb-12 max-w-3xl text-center">
                 <h2 className="font-heading text-3xl leading-tight md:text-5xl text-foreground">
-                    Das macht CraCha für <span className="text-orange-600 dark:text-orange-400">dich</span>
+                    Was du <span className="text-orange-600 dark:text-orange-400">davon hast</span>
                 </h2>
             </div>
 

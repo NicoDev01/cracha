@@ -24,7 +24,7 @@ export default function NewPasswordPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-gray-900">CraCha</h1>
-              <p className="text-sm text-gray-600">RAG-as-a-Service</p>
+              <p className="text-sm text-gray-600">Frag die Website.</p>
             </div>
           </div>
         </div>

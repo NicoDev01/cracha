@@ -19,15 +19,15 @@ export const metadata: Metadata = {
   // Absolute, because the root layout carries a "%s | CraCha" template and the
   // brand is already the first word here — otherwise the tab reads
   // "CraCha – … | CraCha".
-  title: { absolute: "CraCha – Verwandle Websites in Wissensbasen" },
+  title: { absolute: "CraCha – Website mit KI durchsuchen, Unterseite für Unterseite" },
   description: siteConfig.description,
   keywords: [
-    "Website in Wissensbasis verwandeln",
     "Website mit KI durchsuchen",
+    "ganze Website durchsuchen",
     "Fragen an eine Website stellen",
-    "KI Wissensdatenbank",
+    "Unterseiten durchsuchen",
     "Website crawlen KI",
-    "RAG Chatbot deutsch",
+    "Dokumentation mit KI durchsuchen",
   ],
   alternates: { canonical: "/" },
   openGraph: {
@@ -35,12 +35,12 @@ export const metadata: Metadata = {
     locale: "de_DE",
     url: "/",
     siteName: siteConfig.name,
-    title: "CraCha – Verwandle Websites in Wissensbasen",
+    title: "CraCha – Website mit KI durchsuchen, Unterseite für Unterseite",
     description: siteConfig.description,
   },
   twitter: {
     card: "summary_large_image",
-    title: "CraCha – Verwandle Websites in Wissensbasen",
+    title: "CraCha – Website mit KI durchsuchen, Unterseite für Unterseite",
     description: siteConfig.description,
   },
 };

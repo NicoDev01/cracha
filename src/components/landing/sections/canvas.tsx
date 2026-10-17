@@ -9,12 +9,12 @@ export default function CanvasSection() {
       <MaxWidthWrapper>
         <div className="flex flex-col items-center gap-6 text-center md:gap-7">
           <h2 className="font-heading text-2xl leading-tight text-foreground sm:text-3xl md:text-5xl">
-            Verwandle Websites <br /> in{" "}
-            <span className="text-orange-600 dark:text-orange-400">Wissensbasen</span>
+            Welche Website willst du{" "}
+            <span className="text-orange-600 dark:text-orange-400">fragen?</span>
           </h2>
           <AppEntryLink prefetch={true} signedOutHref="/register">
             <RainbowButton className="gap-2">
-              <span>Jetzt loslegen</span>
+              <span>Kostenlos starten</span>
               <Icons.arrowRight className="size-4" />
             </RainbowButton>
           </AppEntryLink>

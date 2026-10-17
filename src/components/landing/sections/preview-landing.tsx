@@ -55,7 +55,7 @@ export default function PreviewLanding() {
           loop
           playsInline
           preload="auto"
-          aria-label="CraCha in 33 Sekunden: eine Website wird gecrawlt, zur Wissensbasis und im Chat mit Quellen befragt"
+          aria-label="CraCha in 33 Sekunden: eine Website wird Seite für Seite gelesen und im Chat mit Quellen befragt"
         />
       </div>
     </div>

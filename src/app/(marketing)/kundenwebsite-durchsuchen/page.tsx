@@ -37,8 +37,8 @@ const content: UseCaseContent = {
       text: `Bis zu ${CREDITS.maxDatabases} Wissensbasen je Konto. Die eingelesenen Inhalte bleiben verfügbar, bis du sie löschst.`,
     },
     {
-      title: "Auf Deutsch",
-      text: "Du fragst in deinen eigenen Worten auf Deutsch – ohne Suchoperatoren und ohne die Seitenstruktur der Website zu kennen.",
+      title: "Texte gegen die Website prüfen",
+      text: "Füg einen Entwurf, ein Angebot oder eine Preisliste in den Content-Check ein. CraCha zeigt Widersprüche zur Kundenwebsite und veraltete Angaben, mit Quelle.",
     },
   ],
   exampleQuestions: [

@@ -22,19 +22,24 @@ const lowestPackPrice = new Intl.NumberFormat("de-DE", {
  */
 export const landingFaq: FaqItem[] = [
   {
-    question: "Für wen ist CraCha gedacht?",
+    question: "Ist CraCha ein normaler KI-Chat?",
     answer:
-      "Für alle, die Antworten aus Websites mit vielen Unterseiten brauchen – ob Firmenwebsite, Dokumentation, Hilfe-Center oder Hochschulseite. Du arbeitest im Browser in deinem eigenen CraCha-Konto. Anregungen findest du auf der Seite „Beispiele zur Nutzung“.",
+      "Nein. Eine KI-Suche wie der KI-Modus von Google, ChatGPT oder Perplexity geht bei jeder Frage neu ins Netz und nimmt ein paar Treffer aus vielen Websites. CraCha liest eine Website, die du wählst, vorab Seite für Seite und beantwortet deine Fragen nur aus ihr, mit Link zur Quelle. Für die schnelle Frage zwischendurch reicht die KI-Suche; wenn es genau sein muss oder du immer wieder zur selben Website zurückkommst, ist CraCha gemacht.",
   },
   {
-    question: "Was unterscheidet CraCha von Suchmaschinen wie Perplexity?",
+    question: "Für wen ist CraCha gedacht?",
     answer:
-      "Eine KI-Suche sucht bei jeder Frage neu nach einzelnen Treffern im Netz. CraCha crawlt die Unterseiten einer Website – bis zu 500 pro Durchgang – und speichert sie als Wissensbasis in deinem Konto. Deine Fragen beziehen sich dann genau auf diese Inhalte, auch auf Seiten, die eine Suchmaschine nicht weit oben zeigt.",
+      "Für alle, die immer wieder etwas auf einer großen Website suchen: Agenturen und Berater bei Kundenwebsites, Entwicklerinnen und Entwickler in Dokumentationen, Studierende auf Hochschulseiten. CraCha ist ein Recherchewerkzeug für dich im Browser, kein Chatbot für die Besucher einer Website. Anregungen findest du auf der Seite „Beispiele zur Nutzung“.",
+  },
+  {
+    question: "Wie findet CraCha Seiten, die keine Suchmaschine zeigt?",
+    answer:
+      "CraCha folgt selbst den Links und der Sitemap der Website. Eine Unterseite muss deshalb nicht bei Google gelistet sein, es reicht, dass sie auf der Website verlinkt ist oder in ihrer Sitemap steht. Seiten, auf die nirgends ein Link zeigt, findet auch CraCha nicht.",
   },
   {
     question: "Welche Inhalte kann ich verwenden?",
     answer:
-      "Öffentlich erreichbare HTML-Seiten, die du crawlen darfst. Login-Bereiche, Paywalls und PDF-Dateien werden nicht gecrawlt. Wie viele Seiten CraCha erreicht, hängt von Verlinkung, Sitemap und technischen Sperren der Website ab.",
+      "Öffentlich erreichbare HTML-Seiten, die du einlesen darfst, bis zu 500 pro Durchgang. Login-Bereiche, Paywalls und PDF-Dateien liest CraCha nicht. Wie viele Seiten CraCha erreicht, hängt von Verlinkung, Sitemap und technischen Sperren der Website ab.",
   },
   {
     question: "Was kostet CraCha?",

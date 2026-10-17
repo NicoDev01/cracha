@@ -22,7 +22,7 @@ export const siteConfig: SiteConfig = {
   name: "CraCha",
   // About 150 characters: Google cuts the search snippet off beyond that.
   description:
-    "Verwandle Websites in Wissensbasen: CraCha liest die Unterseiten ein und beantwortet deine Fragen mit Link zur Originalseite. 100 Start-Credits gratis.",
+    "Frag nicht das Internet, frag die Website: CraCha liest Websites bis in die letzte Unterseite und beantwortet deine Fragen mit Quelle. 100 Credits gratis.",
   url: site_url,
   links: {
     twitter: "https://twitter.com/cracha_ai",

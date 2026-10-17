@@ -18,7 +18,7 @@ export const metadata = marketingPageMetadata({
   path: "/preise",
   title: "Preise: Credits statt Abo",
   description: `CraCha kostet nur, was du nutzt: ${CREDITS.welcome} Start-Credits gratis, danach Credit-Pakete ab ${formatEuro(Math.min(...CREDIT_PACKAGES.map((pack) => pack.priceCents)))} als einmalige Aufladung. Kein Abo, keine Kreditkarte zum Start.`,
-  keywords: ["CraCha Preise", "Website Chatbot Kosten", "KI Wissensdatenbank Preis", "Website mit KI durchsuchen kostenlos"],
+  keywords: ["CraCha Preise", "Website Chatbot Kosten", "Website durchsuchen KI Preis", "Website mit KI durchsuchen kostenlos"],
 });
 
 function formatEuro(cents: number) {
@@ -73,7 +73,7 @@ export default function PreisePage() {
       <JsonLd data={faqPageJsonLd(faq)} />
       <header className="max-w-3xl">
         <Link href="/" className="text-sm text-muted-foreground underline">CraCha kennenlernen</Link>
-        <h1 className="mt-6 text-balance text-4xl font-bold tracking-tight sm:text-5xl">Preise: du zahlst nur, was du nutzt</h1>
+        <h1 className="mt-6 text-balance text-4xl font-bold tracking-tight sm:text-5xl">Preise: Credits statt Abo</h1>
         <p className="mt-5 text-lg leading-8 text-muted-foreground">
           Du startest mit {CREDITS.welcome} Credits gratis und ohne Kreditkarte. Reicht das nicht, lädst du dein Guthaben
           mit einem Paket auf. Kein Abo, keine Grundgebühr.

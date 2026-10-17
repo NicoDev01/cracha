@@ -23,7 +23,7 @@ const content: UseCaseContent = {
   benefits: [
     {
       title: "Direkt zur richtigen Seite",
-      text: "Statt dich durch Sidebar und Suchergebnisse zu klicken, bekommst du eine Antwort und die Links zu den Doku-Seiten, auf die sie sich stützt.",
+      text: "CraCha sucht nach Bedeutung und nach exakten Begriffen wie Funktions- oder Optionsnamen. Statt dich durch Sidebar und Suchergebnisse zu klicken, bekommst du eine Antwort mit Links zu den Doku-Seiten, auf die sie sich stützt.",
     },
     {
       title: "Codebeispiele bleiben erhalten",

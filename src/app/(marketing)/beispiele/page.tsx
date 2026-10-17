@@ -8,8 +8,8 @@ export const metadata = marketingPageMetadata({
   path: "/beispiele",
   title: "Beispiele zur Nutzung: Was du mit CraCha fragen kannst",
   description:
-    "Von der Firmenwebsite über Dokumentationen und Hilfe-Center bis zu Förderprogrammen: Beispiele, wie du Websites mit CraCha in eine Wissensbasis verwandelst – mit Beispielfragen.",
-  keywords: ["Website mit KI durchsuchen Beispiele", "Website Wissensbasis Beispiele", "Fragen an eine Website stellen"],
+    "Von der Firmenwebsite über Dokumentationen und Hilfe-Center bis zu Förderprogrammen: Beispiele, wie du eine ganze Website mit CraCha befragst – mit Beispielfragen.",
+  keywords: ["Website mit KI durchsuchen Beispiele", "ganze Website durchsuchen Beispiele", "Fragen an eine Website stellen"],
 });
 
 const ctaClass =

@@ -3,12 +3,12 @@ import { cn } from "@/lib/utils";
 import { LazyVideo } from "@/components/landing/ui/lazy-video";
 
 /**
- * The comparison against a plain AI chat.
- *
- * The text here used to be built from "unstrukturierte Daten", "dialogfähiger
- * Wissens-Hub" and "an der Oberfläche kratzen" — three phrases that sound like
- * a difference without naming one. The difference is countable: one page
- * versus every page the crawl reaches.
+ * The comparison against AI search — Google's AI mode, ChatGPT with search,
+ * Perplexity — which is what a visitor would otherwise use, not a plain chat.
+ * It names the difference without running the others down: they search the
+ * web anew for every question, CraCha has read the one website beforehand.
+ * Google itself says not every page gets indexed ("Indexing isn't
+ * guaranteed", Search Central: How Search works).
  *
  * The `data` object also carried a `title` the markup never read and an empty
  * `list` nothing rendered.
@@ -23,15 +23,20 @@ export default function ProductShowcase() {
                 <div className="grid gap-10 px-2.5 lg:grid-cols-2 lg:items-center lg:px-7">
                     <div className={cn(reverse ? "lg:order-2" : "lg:order-1")}>
                         <h2 className="font-heading text-3xl leading-tight text-foreground md:text-5xl">
-                           Warum <span className="text-orange-600 dark:text-orange-400">CraCha</span>?
+                           Die KI-Suche sucht. <span className="text-orange-600 dark:text-orange-400">CraCha kennt sich aus.</span>
                         </h2>
                         <p className="mt-4 text-base text-muted-foreground">
-                            Statt einzelne Seiten in einen KI-Chat zu kopieren, befragst du mit
-                            CraCha alle Seiten, die du eingelesen hast – eine ganze Kundenwebsite
-                            oder eine umfangreiche Dokumentation. Jede Antwort verlinkt die
-                            Seiten, aus denen sie stammt. Die Wissensbasis bleibt in
-                            deinem Konto, du musst also nicht bei jeder Frage von vorn anfangen.
-                            <br /><strong>Eine Website, deine Fragen, nachvollziehbare Quellen.</strong>
+                            Eine KI-Suche geht bei jeder Frage neu ins Netz und nimmt ein paar
+                            Treffer, die eine Suchmaschine weit oben zeigt. Was tief in einer
+                            Website steckt, taucht dort selten auf. CraCha liest die Website, die
+                            du gewählt hast, vorab Seite für Seite, auch Unterseiten, die Google
+                            nicht listet. Deine Fragen beantwortet CraCha nur aus dieser Website,
+                            mit Link zur Quelle. Und weil sie in deinem Konto bleibt, fragst du
+                            morgen einfach weiter.
+                        </p>
+                        <p className="mt-4 text-base font-semibold text-foreground">
+                            Für die schnelle Frage zwischendurch reicht die KI-Suche.
+                            Wenn’s genau sein muss, frag CraCha.
                         </p>
                     </div>
                     <div

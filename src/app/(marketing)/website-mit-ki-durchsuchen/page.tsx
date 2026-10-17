@@ -27,6 +27,11 @@ export default function WebsiteGuide() {
         <p className="leading-7 text-muted-foreground">CraCha ist eine Rechercheanwendung. Du baust damit derzeit keinen öffentlich eingebetteten Supportbot und durchsuchst auch nicht automatisch das gesamte Internet.</p>
       </section>
       <section className="space-y-4">
+        <h2 className="text-2xl font-semibold">Warum nicht einfach eine KI-Suche?</h2>
+        <p className="leading-7 text-muted-foreground">Eine KI-Suche wie der KI-Modus von Google, ChatGPT oder Perplexity geht bei jeder Frage neu ins Netz und arbeitet mit den Treffern, die eine Suchmaschine liefert. Für eine schnelle Frage reicht das. Was tief in einer Website steckt oder gar nicht bei Google gelistet ist, taucht dort aber selten auf.</p>
+        <p className="leading-7 text-muted-foreground">CraCha liest die Website vorab Seite für Seite und folgt dabei selbst den Links und der Sitemap. Deine Fragen beantwortet CraCha nur aus dieser Website, mit Link zur Quelle. Das lohnt sich, wenn es genau sein muss oder du immer wieder zur selben Website zurückkommst. Einen ausführlichen Vergleich findest du im Artikel <Link href="/blog/cracha-vs-chatgpt-perplexity" className="underline underline-offset-4">CraCha vs. ChatGPT und Perplexity</Link>.</p>
+      </section>
+      <section className="space-y-4">
         <h2 className="text-2xl font-semibold">Zwei typische Anwendungsfälle</h2>
         <ul className="list-disc space-y-3 pl-5 leading-7 text-muted-foreground">
           <li><Link href="/kundenwebsite-durchsuchen" className="font-medium text-foreground underline underline-offset-4">Kundenwebsite durchsuchen</Link>: für Agenturen und Marketing-Teams, die sich schnell in die Website eines Kunden einarbeiten wollen.</li>
