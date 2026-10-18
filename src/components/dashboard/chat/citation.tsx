@@ -6,6 +6,7 @@ import { createContext, useContext, useState, type MouseEvent, type ReactNode } 
 import { isOutlineSource } from '@/lib/chat/citations';
 import { cleanSnippet, cleanSourceTitle } from '@/lib/chat/source-display';
 import { cn } from '@/lib/utils';
+import { useAppLocale } from '@/i18n/navigation';
 import type { CitationAnchor, Source } from '@/types/chat';
 
 /** What a marker in the answer being rendered can say about itself. */
@@ -85,6 +86,7 @@ export function CitationLink({ index, href, anchorKey, children, className }: {
 }) {
   const { sources, anchors, lines } = useContext(CitationSources);
   const [open, setOpen] = useState(false);
+  const en = useAppLocale() === 'en';
   const source = sources[index - 1];
   const anchor = anchorKey ? anchors?.[anchorKey] : undefined;
   const line = anchorKey ? lines?.[Number(anchorKey.split(':')[0])] : undefined;
@@ -97,7 +99,7 @@ export function CitationLink({ index, href, anchorKey, children, className }: {
 
   const link = (
     <a
-      aria-label={source ? `Quelle ${index}: ${cleanSourceTitle(source.title, source.url)}` : `Quelle ${index} öffnen`}
+      aria-label={source ? `${en ? 'Source' : 'Quelle'} ${index}: ${cleanSourceTitle(source.title, source.url)}` : en ? `Open source ${index}` : `Quelle ${index} öffnen`}
       className={cn(CHIP, className)}
       href={href}
       rel="noreferrer"
@@ -111,7 +113,7 @@ export function CitationLink({ index, href, anchorKey, children, className }: {
 
   const outline = isOutlineSource(source);
   const quote = outline ? '' : anchor?.quote ?? cleanSnippet(source.snippet, 260);
-  const label = outline ? 'Seitenübersicht' : anchor?.section ? `Abschnitt: ${anchor.section}` : 'Zur Textstelle';
+  const label = outline ? (en ? 'Page overview' : 'Seitenübersicht') : anchor?.section ? `${en ? 'Section' : 'Abschnitt'}: ${anchor.section}` : en ? 'Go to the passage' : 'Zur Textstelle';
   return (
     <HoverCard.Root open={open} onOpenChange={setOpen} openDelay={120} closeDelay={150}>
       <HoverCard.Trigger asChild>{link}</HoverCard.Trigger>
@@ -138,7 +140,7 @@ export function CitationLink({ index, href, anchorKey, children, className }: {
             </p>
           ) : outline ? (
             <p className="mt-2 text-[13px] leading-[1.6] text-gray-600 dark:text-gray-300">
-              Liste aller indexierten Seiten der Wissensbasis, nach Bereichen gruppiert.
+              {en ? 'List of all indexed pages of the knowledge base, grouped by section.' : 'Liste aller indexierten Seiten der Wissensbasis, nach Bereichen gruppiert.'}
             </p>
           ) : null}
         </HoverCard.Content>

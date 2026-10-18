@@ -1,4 +1,6 @@
-import { NextResponse } from 'next/server'
+import { localeFromRequest } from '@/i18n/request-locale'
+import { tr } from '@/i18n/server-messages'
+import { NextRequest, NextResponse } from 'next/server'
 
 import { CREDIT_PACKAGES, getCreditState, recentEntries } from '@/lib/server/credits'
 import { getAuthenticatedUser } from '@/lib/supabase/server'
@@ -11,9 +13,10 @@ export const dynamic = 'force-dynamic'
  * crawl is refused — and prepaid credits are only fair if the price of the next
  * action is visible before it is taken.
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const locale = localeFromRequest(request)
   const user = await getAuthenticatedUser()
-  if (!user) return NextResponse.json({ error: 'Authentifizierung erforderlich.' }, { status: 401 })
+  if (!user) return NextResponse.json({ error: tr(locale, 'Authentifizierung erforderlich.') }, { status: 401 })
 
   try {
     const [state, entries] = await Promise.all([
@@ -28,6 +31,6 @@ export async function GET() {
     })
   } catch (error) {
     console.error('Credit lookup failed', error)
-    return NextResponse.json({ error: 'Guthaben konnte nicht geladen werden.' }, { status: 503 })
+    return NextResponse.json({ error: tr(locale, 'Guthaben konnte nicht geladen werden.') }, { status: 503 })
   }
 }

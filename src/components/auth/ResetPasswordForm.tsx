@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import Link from 'next/link'
+import { Link, useAppLocale } from "@/i18n/navigation";
+import { localizePath } from "@/i18n/paths";
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -9,7 +10,42 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { createClient } from '@/lib/supabase/client'
 import { Mail, ArrowLeft, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
 
+const copy = {
+  de: {
+    failed: 'Ein Fehler ist aufgetreten',
+    sentTitle: 'E-Mail gesendet',
+    sentSubtitle: 'Wir haben dir einen Link zum Zurücksetzen deines Passworts gesendet',
+    sentText: 'Prüfe dein E-Mail-Postfach und klicke auf den Link, um dein Passwort zurückzusetzen. Der Link ist 1 Stunde gültig.',
+    back: 'Zurück zur Anmeldung',
+    noMail: 'Keine E-Mail erhalten?',
+    again: 'Erneut senden',
+    title: 'Passwort zurücksetzen',
+    subtitle: 'Gib deine E-Mail-Adresse ein, um einen Reset-Link zu erhalten',
+    email: 'E-Mail-Adresse',
+    emailPlaceholder: 'deine@email.com',
+    sending: 'Link wird gesendet...',
+    send: 'Reset-Link senden',
+  },
+  en: {
+    failed: 'Something went wrong',
+    sentTitle: 'Email sent',
+    sentSubtitle: 'We’ve sent you a link to reset your password',
+    sentText: 'Check your inbox and click the link to reset your password. The link is valid for 1 hour.',
+    back: 'Back to sign-in',
+    noMail: 'Didn’t get an email?',
+    again: 'Send again',
+    title: 'Reset password',
+    subtitle: 'Enter your email address to receive a reset link',
+    email: 'Email address',
+    emailPlaceholder: 'you@example.com',
+    sending: 'Sending link...',
+    send: 'Send reset link',
+  },
+} as const
+
 export function ResetPasswordForm() {
+  const locale = useAppLocale()
+  const t = copy[locale]
   const [email, setEmail] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
@@ -24,7 +60,7 @@ export function ResetPasswordForm() {
     
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/confirm?next=/reset-password/new-password`
+        redirectTo: `${window.location.origin}/confirm?next=${localizePath('/reset-password/new-password', locale)}`
       })
       
       if (error) {
@@ -33,7 +69,7 @@ export function ResetPasswordForm() {
       
       setIsSuccess(true)
     } catch (error) {
-      setError(error instanceof Error ? error.message : 'Ein Fehler ist aufgetreten')
+      setError(error instanceof Error ? error.message : t.failed)
     } finally {
       setIsLoading(false)
     }
@@ -47,18 +83,17 @@ export function ResetPasswordForm() {
             <CheckCircle className="h-8 w-8 text-green-600" />
           </div>
           <CardTitle className="text-2xl font-bold text-gray-900">
-            E-Mail gesendet
+            {t.sentTitle}
           </CardTitle>
           <CardDescription className="text-gray-600">
-            Wir haben dir einen Link zum Zurücksetzen deines Passworts gesendet
+            {t.sentSubtitle}
           </CardDescription>
         </CardHeader>
         
         <CardContent className="space-y-6">
           <div className="bg-green-50 border border-green-200 rounded-lg p-4">
             <p className="text-sm text-green-700">
-              Prüfe dein E-Mail-Postfach und klicke auf den Link, um dein Passwort zurückzusetzen.
-              Der Link ist 1 Stunde gültig.
+              {t.sentText}
             </p>
           </div>
           
@@ -66,19 +101,19 @@ export function ResetPasswordForm() {
             <Link href="/login">
               <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white">
                 <ArrowLeft className="mr-2 h-4 w-4" />
-                Zurück zur Anmeldung
+                {t.back}
               </Button>
             </Link>
           </div>
           
           <div className="text-center">
             <p className="text-sm text-gray-600">
-              Keine E-Mail erhalten?{' '}
+              {t.noMail}{' '}
               <button 
                 onClick={() => setIsSuccess(false)}
                 className="text-blue-600 hover:underline"
               >
-                Erneut senden
+                {t.again}
               </button>
             </p>
           </div>
@@ -91,10 +126,10 @@ export function ResetPasswordForm() {
     <Card className="border-0 shadow-2xl bg-white/80 backdrop-blur-xl">
       <CardHeader className="text-center pb-6">
         <CardTitle className="text-2xl font-bold text-gray-900">
-          Passwort zurücksetzen
+          {t.title}
         </CardTitle>
         <CardDescription className="text-gray-600">
-          Gib deine E-Mail-Adresse ein, um einen Reset-Link zu erhalten
+          {t.subtitle}
         </CardDescription>
       </CardHeader>
       
@@ -111,14 +146,14 @@ export function ResetPasswordForm() {
           {/* Email Field */}
           <div className="space-y-2">
             <Label htmlFor="email" className="text-gray-700 font-medium">
-              E-Mail-Adresse
+              {t.email}
             </Label>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
                 id="email"
                 type="email"
-                placeholder="deine@email.com"
+                placeholder={t.emailPlaceholder}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="pl-10 h-12 border-gray-300 focus:border-blue-500 focus:ring-blue-500 text-base"
@@ -137,10 +172,10 @@ export function ResetPasswordForm() {
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Link wird gesendet...
+                {t.sending}
               </>
             ) : (
-              'Reset-Link senden'
+              t.send
             )}
           </Button>
         </form>
@@ -151,7 +186,7 @@ export function ResetPasswordForm() {
             href="/login" 
             className="text-blue-600 hover:text-blue-700 font-semibold hover:underline transition-colors"
           >
-            ← Zurück zur Anmeldung
+            ← {t.back}
           </Link>
         </div>
       </CardContent>

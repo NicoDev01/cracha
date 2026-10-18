@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, ReactNode } from 'react'
-import { useRouter } from 'next/navigation'
+import { useAppLocale, useRouter } from "@/i18n/navigation";
 import { useAuthStore } from '@/stores/auth-store'
 import { Loader2 } from 'lucide-react'
 
@@ -12,6 +12,7 @@ interface AuthGuardProps {
 
 export function AuthGuard({ children, fallback }: AuthGuardProps) {
   const router = useRouter()
+  const locale = useAppLocale()
   const { user, isAuthenticated, isLoading, isInitialized, initialize } = useAuthStore()
 
   useEffect(() => {
@@ -36,7 +37,7 @@ export function AuthGuard({ children, fallback }: AuthGuardProps) {
         <div className="text-center space-y-4">
           <Loader2 className="h-8 w-8 animate-spin mx-auto text-blue-600" />
           <p className="text-gray-600 dark:text-gray-400">
-            Überprüfe Anmeldung...
+            {locale === 'en' ? 'Checking your sign-in...' : 'Überprüfe Anmeldung...'}
           </p>
         </div>
       </div>
@@ -50,7 +51,7 @@ export function AuthGuard({ children, fallback }: AuthGuardProps) {
         <div className="text-center space-y-4">
           <Loader2 className="h-8 w-8 animate-spin mx-auto text-blue-600" />
           <p className="text-gray-600 dark:text-gray-400">
-            Weiterleitung zur Anmeldung...
+            {locale === 'en' ? 'Redirecting to sign-in...' : 'Weiterleitung zur Anmeldung...'}
           </p>
         </div>
       </div>

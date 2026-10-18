@@ -23,7 +23,8 @@ export const publicPagePaths = [
 const sessionFreePaths = new Set<string>([
   "/",
   ...publicPagePaths.map((path) => `/${path}`),
-  ...blogPosts.map((post) => `/blog/${post.slug}`),
+  // Same slugs in both languages; the middleware checks the delocalized path.
+  ...blogPosts.de.map((post) => `/blog/${post.slug}`),
   "/robots.txt",
   "/sitemap.xml",
 ]);

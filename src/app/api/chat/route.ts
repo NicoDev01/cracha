@@ -1,3 +1,5 @@
+import { localeFromRequest } from '@/i18n/request-locale'
+import { tr } from '@/i18n/server-messages'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 
@@ -79,17 +81,18 @@ function streamResponse(stream: ReadableStream<Uint8Array>): Response {
 }
 
 export async function POST(request: NextRequest) {
+  const locale = localeFromRequest(request)
   const started = Date.now()
   const user = await getAuthenticatedUser()
-  if (!user) return NextResponse.json({ error: 'Authentifizierung erforderlich.' }, { status: 401 })
+  if (!user) return NextResponse.json({ error: tr(locale, 'Authentifizierung erforderlich.') }, { status: 401 })
 
   const parsed = chatBody.safeParse(await request.json().catch(() => null))
   if (!parsed.success) {
     const questionIssue = parsed.error.issues.find((i) => i.path.includes('question'))
     if (questionIssue && questionIssue.code === 'too_big') {
-      return NextResponse.json({ error: 'Die Eingabe überschreitet das Limit von 4.000 Zeichen.' }, { status: 400 })
+      return NextResponse.json({ error: tr(locale, 'Die Eingabe überschreitet das Limit von 4.000 Zeichen.') }, { status: 400 })
     }
-    return NextResponse.json({ error: 'Frage oder Wissensbasis-ID ist ungültig.' }, { status: 400 })
+    return NextResponse.json({ error: tr(locale, 'Frage oder Wissensbasis-ID ist ungültig.') }, { status: 400 })
   }
   const { question, tenant_id: tenantId, messages, top_k } = parsed.data
   // Independent lookups, asked at once: in sequence they were three round
@@ -102,31 +105,31 @@ export async function POST(request: NextRequest) {
     admitRequest(user.id, 'chat', 12, 60),
   ])
   if (!database) {
-    return NextResponse.json({ error: 'Wissensbasis nicht gefunden.' }, { status: 404 })
+    return NextResponse.json({ error: tr(locale, 'Wissensbasis nicht gefunden.') }, { status: 404 })
   }
   if (database.status !== 'active') {
-    return NextResponse.json({ error: 'Diese Wissensbasis ist nicht aktiv oder wurde abgebrochen.' }, { status: 403 })
+    return NextResponse.json({ error: tr(locale, 'Diese Wissensbasis ist nicht aktiv oder wurde abgebrochen.') }, { status: 403 })
   }
   if (database.pages_count !== undefined && database.pages_count === 0 && (database.document_count ?? 0) === 0) {
-    return NextResponse.json({ error: 'Diese Wissensbasis enthält noch keine indexierten Seiten. Bitte starte zuerst einen Crawl.' }, { status: 400 })
+    return NextResponse.json({ error: tr(locale, 'Diese Wissensbasis enthält noch keine indexierten Seiten. Bitte starte zuerst einen Crawl.') }, { status: 400 })
   }
   // Charged before the search and the model run, not after: those are what the
   // balance exists to bound, so an account that cannot pay must not reach them.
   // The state is only read on refusal, where a few extra reads cost nothing.
-  if (unsettled) return NextResponse.json({ error: 'Diese Wissensbasis ist noch nicht freigegeben. Warte auf den Crawl-Abschluss oder starte einen abgebrochenen Crawl erneut.' }, { status: 409 })
-  if (!admitted) return NextResponse.json({ error: 'Zu viele Fragen in kurzer Zeit. Bitte warte einen Moment.' }, { status: 429, headers: { 'Retry-After': '60' } })
+  if (unsettled) return NextResponse.json({ error: tr(locale, 'Diese Wissensbasis ist noch nicht freigegeben. Warte auf den Crawl-Abschluss oder starte einen abgebrochenen Crawl erneut.') }, { status: 409 })
+  if (!admitted) return NextResponse.json({ error: tr(locale, 'Zu viele Fragen in kurzer Zeit. Bitte warte einen Moment.') }, { status: 429, headers: { 'Retry-After': '60' } })
   const reference = `${user.id}:${parsed.data.request_id ?? crypto.randomUUID()}`
   let allowed: boolean
   try { allowed = await spendChatCredits(user.id, reference) }
   catch (error) {
-    if (error instanceof DuplicateRequestError) return NextResponse.json({ error: 'Diese Anfrage wurde bereits verarbeitet. Prüfe deinen Chatverlauf.', reference }, { status: 409 })
+    if (error instanceof DuplicateRequestError) return NextResponse.json({ error: tr(locale, 'Diese Anfrage wurde bereits verarbeitet. Prüfe deinen Chatverlauf.'), reference }, { status: 409 })
     console.error(JSON.stringify({ event: 'chat_billing_unavailable' }))
-    return NextResponse.json({ error: 'Guthaben konnte nicht geprüft werden.' }, { status: 503 })
+    return NextResponse.json({ error: tr(locale, 'Guthaben konnte nicht geprüft werden.') }, { status: 503 })
   }
   if (!allowed) {
     const state = await getCreditState(user.id)
     const shortfall = new CreditError('credits', state, CREDITS.perChatMessage)
-    return NextResponse.json({ error: shortfall.message, reason: shortfall.reason, credits: state }, { status: 402 })
+    return NextResponse.json({ error: tr(locale, shortfall.message), reason: shortfall.reason, credits: state }, { status: 402 })
   }
 
   const refund = async (): Promise<boolean> => {
@@ -189,7 +192,7 @@ export async function POST(request: NextRequest) {
 
       const fail = async (message: string, partial: { text?: string; sources?: Source[] } = {}) => {
         const refunded = await refund()
-        const shown = refunded ? `${message} Credits wurden erstattet.` : `${message} Guthaben bitte mit Referenz ${reference} prüfen lassen.`
+        const shown = tr(locale, refunded ? `${message} Credits wurden erstattet.` : `${message} Guthaben bitte mit Referenz ${reference} prüfen lassen.`)
         send('error', { message: shown, refunded, reference })
         await recordAnswer({ content: partial.text ? `${partial.text}\n\n${shown}` : shown, sources: partial.sources, isError: true })
       }
@@ -230,7 +233,7 @@ export async function POST(request: NextRequest) {
           // No model ran, so the answer line names none. It used to carry the
           // search service, which is the one place the reader saw it.
           const model = ''
-          const text = 'Ich konnte in dieser Wissensbasis keine ausreichend relevanten Informationen finden.'
+          const text = tr(locale, 'Ich konnte in dieser Wissensbasis keine ausreichend relevanten Informationen finden.')
           send('meta', { sources: [], model })
           send('delta', { text })
           const finished = usage()

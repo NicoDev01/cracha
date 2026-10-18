@@ -1,4 +1,7 @@
-import { siteConfig } from "@/config/site";
+import { siteConfig, siteDescription } from "@/config/site";
+import { intlLocale } from "@/i18n/copy";
+import { localizePath } from "@/i18n/paths";
+import type { Locale } from "@/i18n/routing";
 import { CREDIT_PACKAGES } from "@/lib/credit-tariff";
 import type { FaqItem } from "@/lib/marketing/faq";
 
@@ -20,24 +23,24 @@ export const organizationJsonLd = {
   email: siteConfig.mailSupport,
 };
 
-export const softwareApplicationJsonLd = {
+export const softwareApplicationJsonLd = (locale: Locale) => ({
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
   name: siteConfig.name,
   url: siteConfig.url,
   applicationCategory: "BusinessApplication",
   operatingSystem: "Web",
-  inLanguage: "de",
-  description: siteConfig.description,
+  inLanguage: locale,
+  description: siteDescription[locale],
   publisher: { "@id": organizationId },
   offers: CREDIT_PACKAGES.map((pack) => ({
     "@type": "Offer",
-    name: `${pack.label}: ${pack.credits.toLocaleString("de-DE")} Credits`,
+    name: `${pack.label}: ${pack.credits.toLocaleString(intlLocale(locale))} Credits`,
     price: (pack.priceCents / 100).toFixed(2),
     priceCurrency: "EUR",
-    url: `${siteConfig.url}/preise`,
+    url: `${siteConfig.url}${localizePath("/preise", locale)}`,
   })),
-};
+});
 
 export function faqPageJsonLd(items: readonly FaqItem[]) {
   return {

@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import MaxWidthWrapper from "@/components/shared/max-width-wrapper";
 import { InfiniteSlider } from "@/components/landing/ui/infinite-slider";
 

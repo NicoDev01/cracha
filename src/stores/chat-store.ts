@@ -7,6 +7,7 @@ import { streamChatQuery } from '@/lib/api/chat-api'
 import { ChatHistoryRejected, deleteChat, getChat, importChat, listChats, renameChat } from '@/lib/api/chat-history-api'
 import { cleanTitle, provisionalTitle } from '@/lib/chat/history'
 import { createTextSmoother } from '@/lib/chat/smooth-text'
+import { pick } from '@/i18n/client-locale'
 
 let active: { controller: AbortController; owner: string; conversation: string } | null = null
 /** The history load in flight, shared by everyone who asks meanwhile. */
@@ -22,7 +23,7 @@ export function restoreConversations(value: unknown): Record<string, ChatConvers
       const timestamp = new Date(message.timestamp)
       return { ...message, timestamp: Number.isFinite(timestamp.getTime()) ? timestamp : new Date(0), isStreaming: false, isError: message.isError || message.isStreaming }
     })
-    restored[id] = { id, databaseId: raw.databaseId, title: typeof raw.title === 'string' ? raw.title : 'Unterhaltung', messages }
+    restored[id] = { id, databaseId: raw.databaseId, title: typeof raw.title === 'string' ? raw.title : pick('Unterhaltung', 'Conversation'), messages }
   }
   return restored
 }
@@ -145,10 +146,10 @@ export const useChatStore = create<ChatState>()(persist((set, get) => {
             conversations: without(state.conversations, id),
             ...(state.selectedConversation === id ? { selectedConversation: null, loadingConversation: null, messages: [] } : {}),
           }))
-          toast.error('Dieser Chat existiert nicht mehr.')
+          toast.error(pick('Dieser Chat existiert nicht mehr.', 'This chat no longer exists.'))
         } else {
           if (get().selectedConversation === id) set({ loadingConversation: null })
-          toast.error('Der Chat konnte nicht geladen werden. Bitte versuche es erneut.')
+          toast.error(pick('Der Chat konnte nicht geladen werden. Bitte versuche es erneut.', 'The chat could not be loaded. Please try again.'))
         }
       }
     },
@@ -183,10 +184,10 @@ export const useChatStore = create<ChatState>()(persist((set, get) => {
         if (get().ownerId !== owner) return false
         if (error instanceof ChatHistoryRejected && error.status === 404) {
           set(state => ({ history: state.history.filter(chat => chat.id !== id) }))
-          toast.error('Dieser Chat existiert nicht mehr.')
+          toast.error(pick('Dieser Chat existiert nicht mehr.', 'This chat no longer exists.'))
         } else {
           if (get().history.find(chat => chat.id === id)?.title === clean) retitle(previous.title)
-          toast.error(error instanceof Error ? error.message : 'Der Chat konnte nicht umbenannt werden.')
+          toast.error(error instanceof Error ? error.message : pick('Der Chat konnte nicht umbenannt werden.', 'The chat could not be renamed.'))
         }
         return false
       }
@@ -198,7 +199,7 @@ export const useChatStore = create<ChatState>()(persist((set, get) => {
       try {
         await deleteChat(id)
       } catch (error) {
-        if (get().ownerId === owner) toast.error(error instanceof Error ? error.message : 'Der Chat konnte nicht gelöscht werden.')
+        if (get().ownerId === owner) toast.error(error instanceof Error ? error.message : pick('Der Chat konnte nicht gelöscht werden.', 'The chat could not be deleted.'))
         return false
       }
       if (get().ownerId !== owner) return false
@@ -242,10 +243,10 @@ export const useChatStore = create<ChatState>()(persist((set, get) => {
       if (state.selectedConversation && state.loadingConversation === state.selectedConversation) return false
       const trimmed = question.trim()
       if (trimmed.length > 4_000) {
-        set({ error: `Eingabe zu lang (${trimmed.length} Zeichen). Maximal 4.000 Zeichen sind zulässig.` })
+        set({ error: pick(`Eingabe zu lang (${trimmed.length} Zeichen). Maximal 4.000 Zeichen sind zulässig.`, `Input too long (${trimmed.length} characters). At most 4,000 characters are allowed.`) })
         return false
       }
-      if (state.messages.length >= 198) { set({ error: 'Diese Unterhaltung ist lang. Bitte starte einen neuen Chat.' }); return false }
+      if (state.messages.length >= 198) { set({ error: pick('Diese Unterhaltung ist lang. Bitte starte einen neuen Chat.', 'This conversation is long. Please start a new chat.') }); return false }
       const key = state.selectedConversation ?? crypto.randomUUID()
       const assistantId = crypto.randomUUID()
       const request = { controller: new AbortController(), owner: state.ownerId, conversation: key }
@@ -297,7 +298,7 @@ export const useChatStore = create<ChatState>()(persist((set, get) => {
           onSaved({ saved, title: generated }) {
             if (get().ownerId !== request.owner) return
             if (!saved) {
-              toast.warning('Diese Antwort konnte nicht im Chatverlauf gespeichert werden.')
+              toast.warning(pick('Diese Antwort konnte nicht im Chatverlauf gespeichert werden.', 'This answer could not be saved to the chat history.'))
               return
             }
             if (generated) {
@@ -321,7 +322,7 @@ export const useChatStore = create<ChatState>()(persist((set, get) => {
         return complete
       } catch (error) {
         smoother.flush()
-        const detail = request.controller.signal.aborted ? 'Antwort gestoppt. Bereits begonnene Antworten werden berechnet; dieser Text ist unvollständig.' : error instanceof Error ? error.message : 'Die Anfrage ist fehlgeschlagen.'
+        const detail = request.controller.signal.aborted ? pick('Antwort gestoppt. Bereits begonnene Antworten werden berechnet; dieser Text ist unvollständig.', 'Answer stopped. Answers that have started are charged; this text is incomplete.') : error instanceof Error ? error.message : pick('Die Anfrage ist fehlgeschlagen.', 'The request failed.')
         update(messages => messages.some(message => message.id === assistantId)
           ? messages.map(message => message.id === assistantId ? { ...message, content: message.content ? `${message.content}\n\n${detail}` : detail, isError: true, isStreaming: false } : message)
           : [...messages, { id: assistantId, type: 'assistant', content: detail, timestamp: new Date(), isError: true }])

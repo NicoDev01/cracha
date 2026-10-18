@@ -1,6 +1,8 @@
 "use client"
 
-import Link from "next/link"
+import { Link, useAppLocale } from "@/i18n/navigation";
+import { intlLocale } from "@/i18n/copy"
+import type { Locale } from "@/i18n/routing"
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import * as Popover from "@radix-ui/react-popover"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
@@ -13,13 +15,90 @@ import { cn } from "@/lib/utils"
 import { useCrawlStore, type CrawledPage, type SkippedPage } from "@/stores/crawl-store"
 import { crawlIndexedLabel, crawlOverallPercent, crawlPageLimit, crawlStepProgress } from "./crawl-progress"
 
-const number = new Intl.NumberFormat("de-DE")
+const copy = {
+  de: {
+    steps: [
+      { label: "Vorbereiten", description: "Der Crawler wird gestartet" },
+      { label: "Seiten crawlen", description: "Seiten der Website abrufen und lesen" },
+      { label: "Indexieren", description: "In Abschnitte zerlegen, einbetten und im Suchindex speichern" },
+    ],
+    overall: "Gesamtfortschritt",
+    searchable: (ready: string, total: string) => [`${ready} von ${total}`, " Seiten durchsuchbar"],
+    chunks: (count: string) => ` · ${count} Abschnitte`,
+    processing: (total: string, one: boolean) => `${total} ${one ? "Seite wird" : "Seiten werden"} zerlegt, eingebettet und gespeichert`,
+    runningFor: (duration: string) => `läuft seit ${duration} · meist unter einer Minute`,
+    stepsLabel: "Schritte",
+    crawledPages: "Gecrawlte Seiten",
+    skipped: (count: string) => `${count} übersprungen`,
+    whichSkipped: "Welche Seiten wurden übersprungen?",
+    skippedTitle: "Übersprungene Seiten",
+    skippedText: "Diese Seiten wurden gefunden, aber nicht in die Wissensbasis aufgenommen. Sie kosten keine Credits.",
+    skippedLater: "Welche es waren, zeigen Crawls ab jetzt hier an.",
+    andMore: (count: string) => `und ${count} weitere`,
+    noCrawl: "Noch kein Crawl",
+    noCrawlHint: "Sobald du eine Website crawlst, siehst du hier jede Seite, die dazukommt.",
+    crawlWebsite: "Website crawlen",
+    started: "Gestartet",
+    found: (count: string, limit: string | null, one: boolean) => `${count} ${limit ? `von max. ${limit} ` : ""}${one ? "Seite" : "Seiten"} erfasst`,
+    searching: "Seiten werden gesucht …",
+    retryFailed: "Crawl konnte nicht neu gestartet werden.",
+    cancelledToast: "Crawl abgebrochen.",
+    cancelFailed: "Crawl konnte nicht abgebrochen werden.",
+    ready: "Bereit",
+    cancelled: "Abgebrochen",
+    failed: "Fehlgeschlagen",
+    ended: "Der Crawl wurde beendet.",
+    notFinished: "Der Crawl konnte nicht abgeschlossen werden.",
+    reconnecting: "Verbindung kurz unterbrochen, die Anzeige aktualisiert sich gleich wieder.",
+    ask: "Fragen stellen",
+    retry: "Erneut versuchen",
+    another: "Weitere Website",
+    cancel: "Abbrechen",
+    leave: "Du kannst die Seite verlassen, der Crawl läuft weiter.",
+  },
+  en: {
+    steps: [
+      { label: "Preparing", description: "Starting the crawler" },
+      { label: "Crawling pages", description: "Fetching and reading the website’s pages" },
+      { label: "Indexing", description: "Splitting into chunks, embedding and saving to the search index" },
+    ],
+    overall: "Overall progress",
+    searchable: (ready: string, total: string) => [`${ready} of ${total}`, " pages searchable"],
+    chunks: (count: string) => ` · ${count} chunks`,
+    processing: (total: string, one: boolean) => `${total} ${one ? "page is" : "pages are"} being split, embedded and saved`,
+    runningFor: (duration: string) => `running for ${duration} · usually under a minute`,
+    stepsLabel: "Steps",
+    crawledPages: "Crawled pages",
+    skipped: (count: string) => `${count} skipped`,
+    whichSkipped: "Which pages were skipped?",
+    skippedTitle: "Skipped pages",
+    skippedText: "These pages were found but not added to the knowledge base. They cost no credits.",
+    skippedLater: "From now on, crawls show which ones they were here.",
+    andMore: (count: string) => `and ${count} more`,
+    noCrawl: "No crawl yet",
+    noCrawlHint: "As soon as you crawl a website, you’ll see every page that comes in here.",
+    crawlWebsite: "Crawl a website",
+    started: "Started",
+    found: (count: string, limit: string | null, one: boolean) => `${count} ${limit ? `of max. ${limit} ` : ""}${one ? "page" : "pages"} found`,
+    searching: "Looking for pages …",
+    retryFailed: "The crawl could not be restarted.",
+    cancelledToast: "Crawl cancelled.",
+    cancelFailed: "The crawl could not be cancelled.",
+    ready: "Ready",
+    cancelled: "Cancelled",
+    failed: "Failed",
+    ended: "The crawl was stopped.",
+    notFinished: "The crawl could not be completed.",
+    reconnecting: "Connection briefly interrupted, the display will update again in a moment.",
+    ask: "Ask questions",
+    retry: "Try again",
+    another: "Another website",
+    cancel: "Cancel",
+    leave: "You can leave the page, the crawl keeps running.",
+  },
+} as const
 
-const steps = [
-  { label: "Vorbereiten", description: "Der Crawler wird gestartet" },
-  { label: "Seiten crawlen", description: "Seiten der Website abrufen und lesen" },
-  { label: "Indexieren", description: "In Abschnitte zerlegen, einbetten und im Suchindex speichern" },
-]
+const numberFor = (locale: Locale) => new Intl.NumberFormat(intlLocale(locale))
 
 function formatDuration(seconds: number) {
   if (seconds < 60) return `${seconds} s`
@@ -53,6 +132,8 @@ function useNow(running: boolean, interval = 250) {
 /** One bar for the whole run, with the current step on the left and the share done on the right. */
 function OverallBar({ percent, current }: { percent: number; current: number }) {
   const reduceMotion = useReducedMotion()
+  const t = copy[useAppLocale()]
+  const steps = t.steps
   return (
     <div>
       <div className="mb-2 flex items-baseline justify-between gap-3 text-sm">
@@ -64,7 +145,7 @@ function OverallBar({ percent, current }: { percent: number; current: number }) 
       </div>
       <div
         role="progressbar"
-        aria-label="Gesamtfortschritt"
+        aria-label={t.overall}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={percent}
@@ -97,6 +178,9 @@ function OverallBar({ percent, current }: { percent: number; current: number }) 
  */
 function IndexDetail({ total, searchable, chunks, since, now }: { total: number; searchable: number; chunks: number; since: string; now: number }) {
   const reduceMotion = useReducedMotion()
+  const locale = useAppLocale()
+  const t = copy[locale]
+  const number = numberFor(locale)
   const seconds = Math.max(0, Math.floor((now - new Date(since).getTime()) / 1000))
   const ready = Math.min(searchable, total)
   const segments = total > 0 && total <= 60
@@ -104,8 +188,8 @@ function IndexDetail({ total, searchable, chunks, since, now }: { total: number;
     <span className="block">
       <span className="block">
         {ready > 0
-          ? <><span className="font-medium tabular-nums text-gray-700 dark:text-gray-200">{number.format(ready)} von {number.format(total)}</span> Seiten durchsuchbar{chunks > 0 && ` · ${number.format(chunks)} Abschnitte`}</>
-          : `${number.format(total)} ${total === 1 ? "Seite wird" : "Seiten werden"} zerlegt, eingebettet und gespeichert`}
+          ? <><span className="font-medium tabular-nums text-gray-700 dark:text-gray-200">{t.searchable(number.format(ready), number.format(total))[0]}</span>{t.searchable(number.format(ready), number.format(total))[1]}{chunks > 0 && t.chunks(number.format(chunks))}</>
+          : t.processing(number.format(total), total === 1)}
       </span>
       {segments ? (
         <span className="mt-2.5 flex flex-wrap gap-1" aria-hidden>
@@ -142,7 +226,7 @@ function IndexDetail({ total, searchable, chunks, since, now }: { total: number;
         </span>
       ) : null}
       <span className="mt-2 block font-mono text-[11px] tabular-nums text-gray-400 dark:text-gray-500">
-        läuft seit {formatDuration(seconds)} · meist unter einer Minute
+        {t.runningFor(formatDuration(seconds))}
       </span>
     </span>
   )
@@ -155,8 +239,10 @@ function IndexDetail({ total, searchable, chunks, since, now }: { total: number;
  */
 function StepList({ progress, current, details }: { progress: [number, number, number]; current: number; details: ReactNode[] }) {
   const reduceMotion = useReducedMotion()
+  const t = copy[useAppLocale()]
+  const steps = t.steps
   return (
-    <ol aria-label="Schritte">
+    <ol aria-label={t.stepsLabel}>
       {steps.map((step, index) => {
         const done = progress[index] >= 1 || index < current
         const active = index === current && !done
@@ -222,6 +308,7 @@ function StepList({ progress, current, details }: { progress: [number, number, n
  */
 function PageLog({ pages, running, scanning }: { pages: CrawledPage[]; running: boolean; scanning: boolean }) {
   const reduceMotion = useReducedMotion()
+  const t = copy[useAppLocale()]
   const [shown, setShown] = useState(pages.length)
   const box = useRef<HTMLDivElement>(null)
 
@@ -242,7 +329,7 @@ function PageLog({ pages, running, scanning }: { pages: CrawledPage[]; running: 
       <div
         ref={box}
         className="h-52 overflow-y-auto scroll-smooth px-3 py-3 font-mono text-xs motion-reduce:scroll-auto leading-6 [mask-image:linear-gradient(to_bottom,transparent,black_28px)] [scrollbar-width:none]"
-        aria-label="Gecrawlte Seiten"
+        aria-label={t.crawledPages}
       >
         <ul>
           {visible.map((page, index) => {
@@ -287,6 +374,9 @@ function PageLog({ pages, running, scanning }: { pages: CrawledPage[]; running: 
 
 /** "· 2 übersprungen" with a small (i) that says which pages and why. */
 function SkippedInfo({ count, pages }: { count: number; pages: SkippedPage[] }) {
+  const locale = useAppLocale()
+  const t = copy[locale]
+  const number = numberFor(locale)
   const [open, setOpen] = useState(false)
   const closing = useRef<number | null>(null)
   const hold = (next: boolean) => {
@@ -297,9 +387,9 @@ function SkippedInfo({ count, pages }: { count: number; pages: SkippedPage[] }) 
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
       <span className="whitespace-nowrap">
-        {" · "}{number.format(count)} übersprungen
+        {" · "}{t.skipped(number.format(count))}
         <Popover.Trigger
-          aria-label="Welche Seiten wurden übersprungen?"
+          aria-label={t.whichSkipped}
           onMouseEnter={() => hold(true)}
           onMouseLeave={() => hold(false)}
           className="ml-1 inline-flex size-4 translate-y-[3px] items-center justify-center rounded-full text-gray-400 transition-colors hover:text-gray-700 focus-visible:outline-2 focus-visible:outline-brand-500 dark:hover:text-gray-200"
@@ -317,9 +407,9 @@ function SkippedInfo({ count, pages }: { count: number; pages: SkippedPage[] }) 
           onMouseLeave={() => hold(false)}
           className="z-50 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-gray-200 bg-white p-4 text-sm shadow-theme-lg dark:border-gray-800 dark:bg-gray-900"
         >
-          <p className="font-medium text-gray-900 dark:text-white">Übersprungene Seiten</p>
+          <p className="font-medium text-gray-900 dark:text-white">{t.skippedTitle}</p>
           <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">
-            Diese Seiten wurden gefunden, aber nicht in die Wissensbasis aufgenommen. Sie kosten keine Credits.
+            {t.skippedText}
           </p>
           {pages.length > 0 ? (
             <ul className="mt-3 max-h-56 space-y-2 overflow-y-auto">
@@ -333,10 +423,10 @@ function SkippedInfo({ count, pages }: { count: number; pages: SkippedPage[] }) 
               ))}
             </ul>
           ) : (
-            <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">Welche es waren, zeigen Crawls ab jetzt hier an.</p>
+            <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">{t.skippedLater}</p>
           )}
           {pages.length > 0 && pages.length < count && (
-            <p className="mt-2 text-xs text-gray-400">und {number.format(count - pages.length)} weitere</p>
+            <p className="mt-2 text-xs text-gray-400">{t.andMore(number.format(count - pages.length))}</p>
           )}
         </Popover.Content>
       </Popover.Portal>
@@ -346,6 +436,9 @@ function SkippedInfo({ count, pages }: { count: number; pages: SkippedPage[] }) 
 
 export function CrawlMonitor({ onNew }: { onNew?: () => void }) {
   const { currentJob, isRunning, statusError, quotaNotice, cancelCrawl, retryCrawl } = useCrawlStore()
+  const locale = useAppLocale()
+  const t = copy[locale]
+  const number = numberFor(locale)
   const now = useNow(isRunning)
   const [retrying, setRetrying] = useState(false)
   const reduceMotion = useReducedMotion()
@@ -362,11 +455,11 @@ export function CrawlMonitor({ onNew }: { onNew?: () => void }) {
         <div className="flex size-11 items-center justify-center rounded-2xl bg-gray-100 text-gray-400 dark:bg-gray-800">
           <Globe className="size-5" />
         </div>
-        <h2 className="mt-4 text-sm font-semibold text-gray-900 dark:text-white">Noch kein Crawl</h2>
-        <p className="mt-1 max-w-60 text-xs leading-5 text-gray-500 dark:text-gray-400">Sobald du eine Website crawlst, siehst du hier jede Seite, die dazukommt.</p>
+        <h2 className="mt-4 text-sm font-semibold text-gray-900 dark:text-white">{t.noCrawl}</h2>
+        <p className="mt-1 max-w-60 text-xs leading-5 text-gray-500 dark:text-gray-400">{t.noCrawlHint}</p>
         {onNew && (
           <Button type="button" size="sm" onClick={onNew} className="mt-5 gap-2 rounded-full bg-brand-500 px-4 !text-white hover:bg-brand-600">
-            <Plus className="size-4" />Website crawlen
+            <Plus className="size-4" />{t.crawlWebsite}
           </Button>
         )}
       </div>
@@ -386,12 +479,12 @@ export function CrawlMonitor({ onNew }: { onNew?: () => void }) {
   // so the fetched count comes from the job itself.
   const crawled = currentStep > 1 ? currentJob.progress?.total || currentJob.pages_crawled : found
   const stepDetails: ReactNode[] = [
-    currentStep > 0 ? "Gestartet" : null,
+    currentStep > 0 ? t.started : null,
     currentStep === 1
       ? found > 0
-        ? `${number.format(found)} ${limit ? `von max. ${number.format(limit)} ` : ""}${found === 1 ? "Seite" : "Seiten"} erfasst`
-        : "Seiten werden gesucht …"
-      : currentStep > 1 ? `${number.format(crawled)} ${crawled === 1 ? "Seite" : "Seiten"} erfasst` : null,
+        ? t.found(number.format(found), limit ? number.format(limit) : null, found === 1)
+        : t.searching
+      : currentStep > 1 ? t.found(number.format(crawled), null, crawled === 1) : null,
     currentStep === 2 ? (
       <IndexDetail
         total={crawled}
@@ -412,7 +505,7 @@ export function CrawlMonitor({ onNew }: { onNew?: () => void }) {
     try {
       await retryCrawl()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Crawl konnte nicht neu gestartet werden.")
+      toast.error(error instanceof Error ? error.message : t.retryFailed)
     } finally {
       setRetrying(false)
     }
@@ -421,9 +514,9 @@ export function CrawlMonitor({ onNew }: { onNew?: () => void }) {
   const handleCancel = async () => {
     try {
       await cancelCrawl()
-      toast.success("Crawl abgebrochen.")
+      toast.success(t.cancelledToast)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Crawl konnte nicht abgebrochen werden.")
+      toast.error(error instanceof Error ? error.message : t.cancelFailed)
     }
   }
 
@@ -485,17 +578,17 @@ export function CrawlMonitor({ onNew }: { onNew?: () => void }) {
             </motion.div>
             <div className="min-w-0 pt-0.5">
               <h3 className="font-urban text-2xl font-semibold tracking-tight text-gray-900 dark:text-white">
-                {successful ? "Bereit" : currentJob.status === "cancelled" ? "Abgebrochen" : "Fehlgeschlagen"}
+                {successful ? t.ready : currentJob.status === "cancelled" ? t.cancelled : t.failed}
               </h3>
               <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                 {successful ? (
                   <>
-                    {crawlIndexedLabel(currentJob)}
+                    {crawlIndexedLabel(currentJob, locale)}
                     {currentJob.pages_skipped > 0 && <SkippedInfo count={currentJob.pages_skipped} pages={currentJob.skipped_pages ?? []} />}
                   </>
                 ) : currentJob.status === "cancelled"
-                  ? "Der Crawl wurde beendet."
-                  : currentJob.error || "Der Crawl konnte nicht abgeschlossen werden."}
+                  ? t.ended
+                  : currentJob.error || t.notFinished}
               </p>
             </div>
           </motion.div>
@@ -506,32 +599,32 @@ export function CrawlMonitor({ onNew }: { onNew?: () => void }) {
         <p className="rounded-xl bg-warning-50 px-3 py-2 text-xs leading-5 text-warning-700 dark:bg-warning-500/10 dark:text-warning-300">{quotaNotice}</p>
       )}
       {statusError && isRunning && (
-        <p className="text-xs text-gray-400">Verbindung kurz unterbrochen, die Anzeige aktualisiert sich gleich wieder.</p>
+        <p className="text-xs text-gray-400">{t.reconnecting}</p>
       )}
 
       <footer className="flex flex-wrap items-center gap-2">
         {successful && (
           <Button asChild className="h-10 gap-2 rounded-full bg-brand-500 px-5 !text-white hover:bg-brand-600">
-            <Link href={chatHref(currentJob.tenant_id)}><MessagesSquare className="size-4" />Fragen stellen<ArrowRight className="size-4" /></Link>
+            <Link href={chatHref(currentJob.tenant_id)}><MessagesSquare className="size-4" />{t.ask}<ArrowRight className="size-4" /></Link>
           </Button>
         )}
         {canRetry && (
           <Button type="button" onClick={handleRetry} disabled={retrying} className="h-10 gap-2 rounded-full bg-brand-500 px-5 !text-white hover:bg-brand-600">
             {retrying ? <Loader2 className="size-4 animate-spin" /> : <RotateCcw className="size-4" />}
-            Erneut versuchen
+            {t.retry}
           </Button>
         )}
         {terminal && onNew && (
           <Button type="button" variant="ghost" onClick={onNew} className="h-10 gap-2 rounded-full px-4 text-gray-600 dark:text-gray-300">
-            <Plus className="size-4" />Weitere Website
+            <Plus className="size-4" />{t.another}
           </Button>
         )}
         {isRunning && (
           <>
             <Button type="button" variant="ghost" size="sm" onClick={handleCancel} className="h-9 rounded-full px-3 text-gray-500 hover:text-error-600">
-              Abbrechen
+              {t.cancel}
             </Button>
-            <span className="text-xs text-gray-400">Du kannst die Seite verlassen, der Crawl läuft weiter.</span>
+            <span className="text-xs text-gray-400">{t.leave}</span>
           </>
         )}
       </footer>

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuthStore } from '@/stores/auth-store'
+import { pick } from '@/i18n/client-locale'
 
 export interface CreditState {
   blocked?: boolean
@@ -27,7 +28,7 @@ function loadCredits(owner: string): Promise<CreditData> {
   const promise = fetch('/api/credits', { cache: 'no-store', signal: AbortSignal.timeout(15_000) })
     .then(async (response) => {
       const result = await response.json() as CreditData & { error?: string }
-      if (!response.ok || !result.credits) throw new Error(result.error || 'Guthaben konnte nicht geladen werden.')
+      if (!response.ok || !result.credits) throw new Error(result.error || pick('Guthaben konnte nicht geladen werden.', 'Balance could not be loaded.'))
       return result
     })
     .finally(() => { if (inflight?.promise === promise) inflight = null })
@@ -72,7 +73,7 @@ export function useCredits() {
         setData({ owner, value: result }); setError(null)
       }
     } catch (cause) {
-      if (ownerRef.current === owner && request.current === sequence) setError(cause instanceof Error ? cause.message : 'Guthaben konnte nicht geladen werden.')
+      if (ownerRef.current === owner && request.current === sequence) setError(cause instanceof Error ? cause.message : pick('Guthaben konnte nicht geladen werden.', 'Balance could not be loaded.'))
     } finally {
       if (ownerRef.current === owner && request.current === sequence) setLoading(false)
     }
@@ -91,7 +92,7 @@ export function useCredits() {
       })
       .catch((cause) => {
         if (active && ownerRef.current === owner && request.current === sequence) {
-          setError(cause instanceof Error ? cause.message : 'Guthaben konnte nicht geladen werden.')
+          setError(cause instanceof Error ? cause.message : pick('Guthaben konnte nicht geladen werden.', 'Balance could not be loaded.'))
         }
       })
       .finally(() => {

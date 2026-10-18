@@ -6,8 +6,9 @@ import { faqPageJsonLd, serializeJsonLd, softwareApplicationJsonLd } from '@/lib
 
 describe('structured data', () => {
   it('offers exactly the credit packs of the tariff', () => {
-    expect(softwareApplicationJsonLd.offers).toHaveLength(CREDIT_PACKAGES.length)
-    expect(softwareApplicationJsonLd.offers.map((offer) => [offer.price, offer.priceCurrency])).toEqual([
+    expect(softwareApplicationJsonLd('de').offers).toHaveLength(CREDIT_PACKAGES.length)
+    expect(softwareApplicationJsonLd('en').offers[0].url).toBe('https://cracha-app.com/en/pricing')
+    expect(softwareApplicationJsonLd('de').offers.map((offer) => [offer.price, offer.priceCurrency])).toEqual([
       ['10.00', 'EUR'],
       ['25.00', 'EUR'],
       ['50.00', 'EUR'],
@@ -15,20 +16,23 @@ describe('structured data', () => {
   })
 
   it('builds the FAQPage from the same items the page renders', () => {
-    const faq = faqPageJsonLd(landingFaq)
-    expect(faq.mainEntity).toHaveLength(landingFaq.length)
+    const faq = faqPageJsonLd(landingFaq.de)
+    expect(faq.mainEntity).toHaveLength(landingFaq.de.length)
     expect(faq.mainEntity[0]).toEqual({
       '@type': 'Question',
-      name: landingFaq[0].question,
-      acceptedAnswer: { '@type': 'Answer', text: landingFaq[0].answer },
+      name: landingFaq.de[0].question,
+      acceptedAnswer: { '@type': 'Answer', text: landingFaq.de[0].answer },
     })
   })
 
   it('states the price in one FAQ answer', () => {
-    const cost = landingFaq.filter((item) => item.answer.includes('kein Abo'))
+    const cost = landingFaq.de.filter((item) => item.answer.includes('kein Abo'))
     expect(cost).toHaveLength(1)
     expect(cost[0].answer).toContain('100 Start-Credits gratis')
     expect(cost[0].answer).toMatch(/ab 10\s€/)
+    const costEn = landingFaq.en.filter((item) => item.answer.includes('no subscription'))
+    expect(costEn).toHaveLength(1)
+    expect(costEn[0].answer).toContain('from €10')
   })
 
   it('cannot close the script tag it is embedded in', () => {

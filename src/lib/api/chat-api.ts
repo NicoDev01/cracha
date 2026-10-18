@@ -2,6 +2,7 @@
 
 import type { ChatResponse, CitationAnchor, FallbackReason, QueryRequest, RetrievalProgress, Source } from '@/types/chat'
 import { apiFetch } from '@/lib/api/request'
+import { pick } from '@/i18n/client-locale'
 
 interface RawSource {
   id?: string
@@ -113,14 +114,14 @@ class ChatAPIClient {
       }
       if (!response.ok) {
         const errorMsg = dataBody.refunded
-          ? `${dataBody.error ?? `RAG-Anfrage fehlgeschlagen (${response.status}).`} Credits wurden erstattet. Referenz: ${dataBody.reference}`
-          : (dataBody.error ?? `RAG-Anfrage fehlgeschlagen (${response.status}).`)
+          ? `${dataBody.error ?? pick(`Anfrage fehlgeschlagen (${response.status}).`, `Request failed (${response.status}).`)} ${pick('Credits wurden erstattet. Referenz:', 'Credits were refunded. Reference:')} ${dataBody.reference}`
+          : (dataBody.error ?? pick(`Anfrage fehlgeschlagen (${response.status}).`, `Request failed (${response.status}).`))
         throw new Error(errorMsg)
       }
 
       const model = dataBody.model ?? headerModel
       handlers.onStart({ sources: mapSources(dataBody.sources), model, fallback: dataBody.fallback === true || headerFallback })
-      handlers.onDelta(dataBody.answer ?? 'Keine Antwort erhalten.')
+      handlers.onDelta(dataBody.answer ?? pick('Keine Antwort erhalten.', 'No answer received.'))
       handlers.onDone({
         query_time: dataBody.usage?.latency_ms ?? 0,
         retrieval_time: dataBody.usage?.retrieval_ms,
@@ -133,7 +134,7 @@ class ChatAPIClient {
       return
     }
 
-    if (!response.body) throw new Error('Der Antwortstream konnte nicht geöffnet werden.')
+    if (!response.body) throw new Error(pick('Der Antwortstream konnte nicht geöffnet werden.', 'The answer stream could not be opened.'))
 
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
@@ -193,7 +194,7 @@ class ChatAPIClient {
           handlers.onSaved?.({ saved: data.saved, title: typeof data.title === 'string' && data.title.trim() ? data.title : undefined })
         }
       } else if (event === 'error') {
-        throw new Error(data.message ?? 'Die Antwort konnte nicht erzeugt werden.')
+        throw new Error(data.message ?? pick('Die Antwort konnte nicht erzeugt werden.', 'The answer could not be generated.'))
       }
     }
 
@@ -208,7 +209,7 @@ class ChatAPIClient {
       }
       buffer += decoder.decode()
       if (buffer.trim()) processFrame(buffer)
-      if (!finished) throw new Error('Der Antwortstream wurde vorzeitig beendet.')
+      if (!finished) throw new Error(pick('Der Antwortstream wurde vorzeitig beendet.', 'The answer stream ended early.'))
     } finally {
       reader.releaseLock()
     }

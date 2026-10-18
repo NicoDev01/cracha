@@ -16,21 +16,45 @@ import { CREDITS } from "../credit-tariff";
 const starterPages = 20;
 const starterQuestions = Math.floor((CREDITS.welcome - starterPages * CREDITS.perPage) / CREDITS.perChatMessage);
 
-const crawlUrl = `${siteConfig.url}/dashboard/crawl`;
-const guideUrl = `${siteConfig.url}/website-mit-ki-durchsuchen`;
-const privacyUrl = `${siteConfig.url}/datenschutz`;
 const logoUrl = `${siteConfig.url}/images/logo/logo-email.png?v=2`;
 
-const subject = `Deine ${CREDITS.welcome} Start-Credits warten noch`;
-const heading = "Deine erste Website wartet";
-const body = `Deine ${CREDITS.welcome} Start-Credits sind noch da. Starte mit etwa ${starterPages} Seiten, dann bleiben dir ${starterQuestions} Fragen.`;
-const button = "Erste Website crawlen";
-const guide = "Anleitung mit Beispielfragen";
+/** The reminder's words and links in both languages; the account's language picks one. */
+const copy = {
+  de: {
+    lang: "de",
+    crawlUrl: `${siteConfig.url}/dashboard/crawl`,
+    guideUrl: `${siteConfig.url}/website-mit-ki-durchsuchen`,
+    privacyUrl: `${siteConfig.url}/datenschutz`,
+    subject: `Deine ${CREDITS.welcome} Start-Credits warten noch`,
+    heading: "Deine erste Website wartet",
+    body: `Deine ${CREDITS.welcome} Start-Credits sind noch da. Starte mit etwa ${starterPages} Seiten, dann bleiben dir ${starterQuestions} Fragen.`,
+    button: "Erste Website crawlen",
+    guide: "Anleitung mit Beispielfragen",
+    privacy: "Datenschutz",
+    footer: [
+      "Diese Erinnerung kommt nur einmal. Keine Hinweise mehr? Antworte kurz auf diese E-Mail.",
+      "CraCha · Nicolas Guerrero Tello · Meyerstraße 216 · 28201 Bremen",
+    ],
+  },
+  en: {
+    lang: "en",
+    crawlUrl: `${siteConfig.url}/en/dashboard/crawl`,
+    guideUrl: `${siteConfig.url}/en/search-a-website-with-ai`,
+    privacyUrl: `${siteConfig.url}/en/privacy`,
+    subject: `Your ${CREDITS.welcome} free credits are still waiting`,
+    heading: "Your first website is waiting",
+    body: `Your ${CREDITS.welcome} free credits are still there. Start with about ${starterPages} pages and you’ll have ${starterQuestions} questions left.`,
+    button: "Crawl your first website",
+    guide: "Guide with sample questions",
+    privacy: "Privacy",
+    footer: [
+      "This reminder is sent only once. Don’t want any more tips? Just reply to this email.",
+      "CraCha · Nicolas Guerrero Tello · Meyerstraße 216 · 28201 Bremen, Germany",
+    ],
+  },
+} as const;
 
-const footer = [
-  "Diese Erinnerung kommt nur einmal. Keine Hinweise mehr? Antworte kurz auf diese E-Mail.",
-  "CraCha · Nicolas Guerrero Tello · Meyerstraße 216 · 28201 Bremen",
-];
+type ReminderLocale = keyof typeof copy;
 
 export interface ReminderEmail {
   subject: string;
@@ -38,8 +62,10 @@ export interface ReminderEmail {
   text: string;
 }
 
-const html = `<!doctype html>
-<html lang="de">
+function render(locale: ReminderLocale): ReminderEmail {
+  const { lang, crawlUrl, guideUrl, privacyUrl, subject, heading, body, button, guide, privacy, footer } = copy[locale];
+  const html = `<!doctype html>
+<html lang="${lang}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -79,7 +105,7 @@ const html = `<!doctype html>
           <td align="center" style="padding:24px 0 0 0;color:#98a2b3;font-size:12px;line-height:1.6;">
             ${footer[1]}<br>
             <a href="${siteConfig.url}" style="color:#98a2b3;text-decoration:underline;">cracha-app.com</a> ·
-            <a href="${privacyUrl}" style="color:#98a2b3;text-decoration:underline;">Datenschutz</a>
+            <a href="${privacyUrl}" style="color:#98a2b3;text-decoration:underline;">${privacy}</a>
           </td>
         </tr>
       </table>
@@ -89,20 +115,24 @@ const html = `<!doctype html>
 </body>
 </html>`;
 
-const text = [
-  heading,
-  "",
-  body,
-  "",
-  `${button}: ${crawlUrl}`,
-  `${guide}: ${guideUrl}`,
-  "",
-  "--",
-  footer[0],
-  footer[1],
-  `Datenschutz: ${privacyUrl}`,
-].join("\n");
+  const text = [
+    heading,
+    "",
+    body,
+    "",
+    `${button}: ${crawlUrl}`,
+    `${guide}: ${guideUrl}`,
+    "",
+    "--",
+    footer[0],
+    footer[1],
+    `${privacy}: ${privacyUrl}`,
+  ].join("\n");
 
-export function activationReminderEmail(): ReminderEmail {
   return { subject, html, text };
+}
+
+/** `locale` is the account's language from its user metadata; anything else is German. */
+export function activationReminderEmail(locale?: string): ReminderEmail {
+  return render(locale === "en" ? "en" : "de");
 }

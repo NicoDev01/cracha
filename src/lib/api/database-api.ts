@@ -1,6 +1,7 @@
 'use client'
 
 import { apiFetch } from '@/lib/api/request'
+import { pick } from '@/i18n/client-locale'
 
 // Types for database API
 export interface Database {
@@ -62,7 +63,7 @@ class DatabaseAPIClient {
             })
 
             if (!response.ok) {
-                throw new Error(response.status === 401 ? 'Deine Sitzung ist abgelaufen.' : `Failed to fetch databases: ${response.status}`)
+                throw new Error(response.status === 401 ? pick('Deine Sitzung ist abgelaufen.', 'Your session has expired.') : `Failed to fetch databases: ${response.status}`)
             }
 
             const data = await response.json() as DatabaseResponse
@@ -176,7 +177,7 @@ class DatabaseAPIClient {
             const data = await response.json().catch(() => ({})) as DatabaseResponse
 
             if (!response.ok) {
-                throw new Error(data.error || `Datenbank konnte nicht gelöscht werden (${response.status}).`)
+                throw new Error(data.error || pick(`Wissensbasis konnte nicht gelöscht werden (${response.status}).`, `Knowledge base could not be deleted (${response.status}).`))
             }
 
             if (!data.success) {

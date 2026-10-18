@@ -1,7 +1,48 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useAppLocale, useRouter, useInternalPathname } from "@/i18n/navigation";
+
+const copy = {
+  de: {
+    gone: "Wissensbasis nicht mehr vorhanden",
+    newChat: "Neuer Chat",
+    loading: "Chats werden geladen …",
+    loadFailed: "Chats nicht geladen – erneut versuchen",
+    empty: "Deine Chats erscheinen hier, sortiert nach Wissensbasis.",
+    chatsFor: (name: string) => `Chats zu ${name}`,
+    newChatWith: (name: string) => `Neuer Chat mit ${name}`,
+    rename: "Neuer Name des Chats",
+    options: (title: string) => `Optionen für „${title}“`,
+    renameItem: "Umbenennen",
+    delete: "Löschen",
+    less: "Weniger anzeigen",
+    all: (count: number) => `Alle ${count} anzeigen`,
+    deleteTitle: "Chat löschen?",
+    deleteText: (title: string) => `„${title}“ wird mit allen Nachrichten endgültig gelöscht. Das lässt sich nicht rückgängig machen.`,
+    cancel: "Abbrechen",
+    deleting: "Wird gelöscht …",
+  },
+  en: {
+    gone: "Knowledge base no longer exists",
+    newChat: "New chat",
+    loading: "Loading chats …",
+    loadFailed: "Chats not loaded – try again",
+    empty: "Your chats appear here, sorted by knowledge base.",
+    chatsFor: (name: string) => `Chats about ${name}`,
+    newChatWith: (name: string) => `New chat with ${name}`,
+    rename: "New chat name",
+    options: (title: string) => `Options for “${title}”`,
+    renameItem: "Rename",
+    delete: "Delete",
+    less: "Show less",
+    all: (count: number) => `Show all ${count}`,
+    deleteTitle: "Delete chat?",
+    deleteText: (title: string) => `“${title}” will be deleted permanently with all messages. This can’t be undone.`,
+    cancel: "Cancel",
+    deleting: "Deleting …",
+  },
+} as const;
 import { ChevronRight, EllipsisVertical, Library, Loader2, Pencil, Plus, RotateCw, Trash2 } from "lucide-react";
 import {
   AlertDialog,
@@ -39,7 +80,8 @@ const REFRESH_AFTER_MS = 30_000;
  */
 export function ChatHistoryNav({ onHold, onNavigate }: { onHold: (hold: boolean) => void; onNavigate: () => void }) {
   const router = useRouter();
-  const pathname = usePathname();
+  const pathname = useInternalPathname();
+  const t = copy[useAppLocale()];
   const {
     ready,
     history,
@@ -133,7 +175,7 @@ export function ChatHistoryNav({ onHold, onNavigate }: { onHold: (hold: boolean)
   };
 
   const label = (databaseId: string) => names[databaseId]
-    ?? (checked.has(databaseId) ? "Wissensbasis nicht mehr vorhanden" : databaseName({ id: databaseId, name: "" }));
+    ?? (checked.has(databaseId) ? t.gone : databaseName({ id: databaseId, name: "" }));
 
   return (
     <div className="mt-1 ml-5 border-l border-gray-200 pl-2 dark:border-gray-800">
@@ -143,13 +185,13 @@ export function ChatHistoryNav({ onHold, onNavigate }: { onHold: (hold: boolean)
         className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-theme-sm font-medium ${onChatPage && !selectedConversation ? "bg-brand-50 text-brand-500 dark:bg-brand-500/[0.12] dark:text-brand-400" : "text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5"}`}
       >
         <Plus className="size-4 shrink-0" aria-hidden="true" />
-        Neuer Chat
+        {t.newChat}
       </button>
 
       {historyStatus === "loading" && history.length === 0 && (
         <p className="flex items-center gap-2 px-2 py-1.5 text-xs text-gray-400" role="status">
           <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
-          Chats werden geladen …
+          {t.loading}
         </p>
       )}
       {historyStatus === "error" && (
@@ -159,11 +201,11 @@ export function ChatHistoryNav({ onHold, onNavigate }: { onHold: (hold: boolean)
           className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-error-600 hover:bg-error-50 dark:text-error-400 dark:hover:bg-error-500/10"
         >
           <RotateCw className="size-3.5 shrink-0" aria-hidden="true" />
-          Chats nicht geladen – erneut versuchen
+          {t.loadFailed}
         </button>
       )}
       {historyStatus === "ready" && history.length === 0 && (
-        <p className="px-2 py-1.5 text-xs leading-5 text-gray-400">Deine Chats erscheinen hier, sortiert nach Wissensbasis.</p>
+        <p className="px-2 py-1.5 text-xs leading-5 text-gray-400">{t.empty}</p>
       )}
 
       {groups.map((group) => {
@@ -172,7 +214,7 @@ export function ChatHistoryNav({ onHold, onNavigate }: { onHold: (hold: boolean)
         const visible = showAll ? group.chats : group.chats.slice(0, VISIBLE_PER_GROUP);
         const name = label(group.databaseId);
         return (
-          <section key={group.databaseId} className="mt-2" aria-label={`Chats zu ${name}`}>
+          <section key={group.databaseId} className="mt-2" aria-label={t.chatsFor(name)}>
             <div className="group/db flex items-center">
               <button
                 type="button"
@@ -190,8 +232,8 @@ export function ChatHistoryNav({ onHold, onNavigate }: { onHold: (hold: boolean)
                 type="button"
                 onClick={() => startNew(group.databaseId)}
                 className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 focus-visible:opacity-100 dark:hover:bg-white/5 dark:hover:text-gray-200 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/db:opacity-100"
-                aria-label={`Neuer Chat mit ${name}`}
-                title={`Neuer Chat mit ${name}`}
+                aria-label={t.newChatWith(name)}
+                title={t.newChatWith(name)}
               >
                 <Plus className="size-3.5" aria-hidden="true" />
               </button>
@@ -224,7 +266,7 @@ export function ChatHistoryNav({ onHold, onNavigate }: { onHold: (hold: boolean)
                               setEditing(null);
                             }
                           }}
-                          aria-label="Neuer Name des Chats"
+                          aria-label={t.rename}
                           className="m-0.5 min-w-0 flex-1 rounded-md border border-brand-300 bg-white px-2 py-1 text-theme-sm text-gray-900 outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-brand-700 dark:bg-gray-900 dark:text-white"
                         />
                       ) : (
@@ -245,7 +287,7 @@ export function ChatHistoryNav({ onHold, onNavigate }: { onHold: (hold: boolean)
                             <button
                               type="button"
                               className={`absolute right-1 rounded-md p-1 text-gray-400 hover:bg-gray-200/70 hover:text-gray-700 data-[state=open]:bg-gray-200/70 data-[state=open]:text-gray-700 dark:hover:bg-white/10 dark:hover:text-gray-200 dark:data-[state=open]:bg-white/10 ${isActive ? "" : "[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/chat:opacity-100 [@media(hover:hover)]:group-focus-within/chat:opacity-100 [@media(hover:hover)]:data-[state=open]:opacity-100"}`}
-                              aria-label={`Optionen für „${chat.title}“`}
+                              aria-label={t.options(chat.title)}
                             >
                               <EllipsisVertical className="size-4" aria-hidden="true" />
                             </button>
@@ -269,14 +311,14 @@ export function ChatHistoryNav({ onHold, onNavigate }: { onHold: (hold: boolean)
                               className="gap-2 text-gray-700 dark:text-gray-200"
                             >
                               <Pencil className="size-4" aria-hidden="true" />
-                              Umbenennen
+                              {t.renameItem}
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onSelect={() => setDeleting(chat)}
                               className="gap-2 text-error-600 focus:bg-error-50 focus:text-error-700 dark:text-error-400 dark:focus:bg-error-500/10"
                             >
                               <Trash2 className="size-4" aria-hidden="true" />
-                              Löschen
+                              {t.delete}
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -291,7 +333,7 @@ export function ChatHistoryNav({ onHold, onNavigate }: { onHold: (hold: boolean)
                       onClick={() => setExpanded((current) => ({ ...current, [group.databaseId]: !showAll }))}
                       className="w-full rounded-lg px-2 py-1 text-left text-xs text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-white/5 dark:hover:text-gray-300"
                     >
-                      {showAll ? "Weniger anzeigen" : `Alle ${group.chats.length} anzeigen`}
+                      {showAll ? t.less : t.all(group.chats.length)}
                     </button>
                   </li>
                 )}
@@ -304,13 +346,13 @@ export function ChatHistoryNav({ onHold, onNavigate }: { onHold: (hold: boolean)
       <AlertDialog open={deleting !== null} onOpenChange={(value) => { if (!value && !isDeleting) setDeleting(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Chat löschen?</AlertDialogTitle>
+            <AlertDialogTitle>{t.deleteTitle}</AlertDialogTitle>
             <AlertDialogDescription>
-              {`„${deleting?.title ?? ""}“ wird mit allen Nachrichten endgültig gelöscht. Das lässt sich nicht rückgängig machen.`}
+              {t.deleteText(deleting?.title ?? "")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-full" disabled={isDeleting}>Abbrechen</AlertDialogCancel>
+            <AlertDialogCancel className="rounded-full" disabled={isDeleting}>{t.cancel}</AlertDialogCancel>
             <AlertDialogAction
               onClick={(event) => {
                 event.preventDefault();
@@ -319,7 +361,7 @@ export function ChatHistoryNav({ onHold, onNavigate }: { onHold: (hold: boolean)
               disabled={isDeleting}
               className="rounded-full bg-error-600 text-white hover:bg-error-700"
             >
-              {isDeleting ? "Wird gelöscht …" : "Löschen"}
+              {isDeleting ? t.deleting : t.delete}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

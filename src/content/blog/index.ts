@@ -1,5 +1,6 @@
 import { crachaVsChatgptPerplexity } from "./cracha-vs-chatgpt-perplexity";
 import { crachaVsNotebooklm } from "./cracha-vs-notebooklm";
+import type { Locale } from "@/i18n/routing";
 
 /**
  * The blog. A post is one file in this folder: metadata plus a Markdown body.
@@ -22,10 +23,15 @@ export interface BlogPost {
 
 export const blogAuthor = "Nicolas Guerrero Tello";
 
-export const blogPosts: readonly BlogPost[] = [crachaVsNotebooklm, crachaVsChatgptPerplexity].sort((a, b) =>
-  (b.updated ?? b.published).localeCompare(a.updated ?? a.published),
-);
+const byDate = (posts: BlogPost[]) =>
+  posts.sort((a, b) => (b.updated ?? b.published).localeCompare(a.updated ?? a.published));
 
-export function findPost(slug: string): BlogPost | undefined {
-  return blogPosts.find((post) => post.slug === slug);
+/** Every post exists in both languages under the same slug. */
+export const blogPosts: Record<Locale, readonly BlogPost[]> = {
+  de: byDate([crachaVsNotebooklm.de, crachaVsChatgptPerplexity.de]),
+  en: byDate([crachaVsNotebooklm.en, crachaVsChatgptPerplexity.en]),
+};
+
+export function findPost(slug: string, locale: Locale): BlogPost | undefined {
+  return blogPosts[locale].find((post) => post.slug === slug);
 }

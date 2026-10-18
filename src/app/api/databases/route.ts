@@ -1,3 +1,5 @@
+import { localeFromRequest } from '@/i18n/request-locale'
+import { tr } from '@/i18n/server-messages'
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getAuthenticatedUser } from '@/lib/supabase/server'
@@ -16,9 +18,10 @@ function validPublicUrl(value: unknown): string | null {
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const locale = localeFromRequest(request)
   const user = await getAuthenticatedUser()
-  if (!user) return NextResponse.json({ success: false, error: 'Authentifizierung erforderlich.' }, { status: 401 })
+  if (!user) return NextResponse.json({ success: false, error: tr(locale, 'Authentifizierung erforderlich.') }, { status: 401 })
 
   try {
     const ids = await listOwnedDatabaseIds(user.id)
@@ -33,19 +36,20 @@ export async function GET() {
     return NextResponse.json({ success: true, databases, count: databases.length, user_id: user.id })
   } catch (error) {
     console.error('Database listing failed', error)
-    return NextResponse.json({ success: false, error: 'Wissensbasen konnten nicht geladen werden.' }, { status: 503 })
+    return NextResponse.json({ success: false, error: tr(locale, 'Wissensbasen konnten nicht geladen werden.') }, { status: 503 })
   }
 }
 
 export async function POST(request: NextRequest) {
+  const locale = localeFromRequest(request)
   const user = await getAuthenticatedUser()
-  if (!user) return NextResponse.json({ success: false, error: 'Authentifizierung erforderlich.' }, { status: 401 })
+  if (!user) return NextResponse.json({ success: false, error: tr(locale, 'Authentifizierung erforderlich.') }, { status: 401 })
 
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null
   const name = typeof body?.name === 'string' ? body.name.trim().slice(0, 120) : ''
   const sourceUrl = validPublicUrl(body?.url)
   if (!name || !sourceUrl) {
-    return NextResponse.json({ success: false, error: 'Name und öffentliche HTTP(S)-URL sind erforderlich.' }, { status: 400 })
+    return NextResponse.json({ success: false, error: tr(locale, 'Name und öffentliche HTTP(S)-URL sind erforderlich.') }, { status: 400 })
   }
 
   try {
@@ -54,9 +58,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, database }, { status: 201 })
   } catch (error) {
     if (error instanceof CreditError) {
-      return NextResponse.json({ success: false, error: error.message, reason: error.reason, credits: error.state }, { status: 402 })
+      return NextResponse.json({ success: false, error: tr(locale, error.message), reason: error.reason, credits: error.state }, { status: 402 })
     }
     console.error('Database creation failed', error)
-    return NextResponse.json({ success: false, error: 'Wissensbasis konnte nicht erstellt werden.' }, { status: 503 })
+    return NextResponse.json({ success: false, error: tr(locale, 'Wissensbasis konnte nicht erstellt werden.') }, { status: 503 })
   }
 }

@@ -1,6 +1,8 @@
 import type { CrawlJob } from '@/stores/crawl-store'
+import { intlLocale } from '@/i18n/copy'
+import type { Locale } from '@/i18n/routing'
 
-const number = new Intl.NumberFormat('de-DE')
+const numberFor = (locale: Locale) => new Intl.NumberFormat(intlLocale(locale))
 
 /**
  * The most pages this crawl may fetch. Jobs started before the limit was
@@ -18,8 +20,22 @@ export function crawlPageLimit(job: Pick<CrawlJob, 'page_limit' | 'progress'>): 
  * are fetched the total is only a ceiling -- a site may have fewer pages than
  * the limit -- so it reads "von max.", and there is no percentage or ETA.
  */
-export function crawlProgressLabel(job: Pick<CrawlJob, 'phase' | 'page_limit' | 'progress' | 'pages_crawled'>): string {
+export function crawlProgressLabel(job: Pick<CrawlJob, 'phase' | 'page_limit' | 'progress' | 'pages_crawled'>, locale: Locale = 'de'): string {
+  const number = numberFor(locale)
   const current = job.progress?.current ?? 0
+  if (locale === 'en') {
+    if (job.phase === 'queued') return 'Starting'
+    if (job.phase === 'indexing') {
+      return current === 0
+        ? 'Processing pages'
+        : `${number.format(current)} of ${number.format(job.progress?.total ?? job.pages_crawled)} pages ready`
+    }
+    const limit = crawlPageLimit(job)
+    if (current === 0) return limit ? `Looking for pages (max. ${number.format(limit)})` : 'Looking for pages'
+    return limit
+      ? `${number.format(current)} of max. ${number.format(limit)} pages found`
+      : `${number.format(current)} pages found`
+  }
   if (job.phase === 'queued') return 'Wird gestartet'
   if (job.phase === 'indexing') {
     return current === 0
@@ -39,14 +55,17 @@ export function crawlProgressLabel(job: Pick<CrawlJob, 'phase' | 'page_limit' | 
  * from a job recorded before the indexed count was fixed; it falls back to the
  * pages that were handed to the index.
  */
-export function crawlIndexedLabel(job: Pick<CrawlJob, 'indexed_pages' | 'pages_crawled'>): string {
+export function crawlIndexedLabel(job: Pick<CrawlJob, 'indexed_pages' | 'pages_crawled'>, locale: Locale = 'de'): string {
   const pages = job.indexed_pages || job.pages_crawled
-  return `${number.format(pages)} ${pages === 1 ? 'Seite' : 'Seiten'} in der Wissensbasis`
+  const formatted = numberFor(locale).format(pages)
+  if (locale === 'en') return `${formatted} ${pages === 1 ? 'page' : 'pages'} in the knowledge base`
+  return `${formatted} ${pages === 1 ? 'Seite' : 'Seiten'} in der Wissensbasis`
 }
 
-export function crawlResultLabel(job: Pick<CrawlJob, 'indexed_pages' | 'pages_crawled' | 'pages_skipped'>): string {
-  const label = crawlIndexedLabel(job)
-  return job.pages_skipped > 0 ? `${label} · ${number.format(job.pages_skipped)} übersprungen` : label
+export function crawlResultLabel(job: Pick<CrawlJob, 'indexed_pages' | 'pages_crawled' | 'pages_skipped'>, locale: Locale = 'de'): string {
+  const label = crawlIndexedLabel(job, locale)
+  if (job.pages_skipped <= 0) return label
+  return `${label} · ${numberFor(locale).format(job.pages_skipped)} ${locale === 'en' ? 'skipped' : 'übersprungen'}`
 }
 
 /** Typical length of each phase with no progress figure of its own, in seconds. */

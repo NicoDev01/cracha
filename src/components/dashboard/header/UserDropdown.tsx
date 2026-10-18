@@ -2,7 +2,7 @@
 import Image from "next/image";
 import { siteConfig } from "@/config/site";
 import React, { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useAppLocale, useRouter } from "@/i18n/navigation";
 import { ChevronDown, Coins, LifeBuoy, LogOut, UserRound } from "lucide-react";
 import { Dropdown } from "../ui/dropdown/Dropdown";
 import { DropdownItem } from "../ui/dropdown/DropdownItem";
@@ -12,6 +12,9 @@ export default function UserDropdown() {
   const [isOpen, setIsOpen] = useState(false);
   const { user, logout } = useAuthStore();
   const router = useRouter();
+  const t = useAppLocale() === "en"
+    ? { open: "Open account menu", account: "My account", balance: "Balance & transactions", signOut: "Sign out" }
+    : { open: "Kontomenü öffnen", account: "Mein Konto", balance: "Guthaben & Buchungen", signOut: "Abmelden" };
 
 function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
   e.stopPropagation();
@@ -25,8 +28,8 @@ function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
     <div className="relative">
       <button
         onClick={toggleDropdown}
-        aria-label="Kontomenü öffnen"
-        title="Kontomenü öffnen"
+        aria-label={t.open}
+        title={t.open}
         aria-expanded={isOpen}
         className="flex items-center text-gray-700 dark:text-gray-400 dropdown-toggle"
       >
@@ -84,7 +87,7 @@ function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
               className="flex items-center gap-3 px-3 py-2 font-medium text-gray-700 rounded-lg group text-theme-sm hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
             >
               <UserRound className="size-5 text-gray-500 group-hover:text-gray-700 dark:text-gray-400 dark:group-hover:text-gray-300" aria-hidden="true" />
-              Mein Konto
+              {t.account}
             </DropdownItem>
           </li>
           <li>
@@ -95,7 +98,7 @@ function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
               className="flex items-center gap-3 px-3 py-2 font-medium text-gray-700 rounded-lg group text-theme-sm hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
             >
               <Coins className="size-5 text-gray-500 group-hover:text-gray-700 dark:text-gray-400 dark:group-hover:text-gray-300" aria-hidden="true" />
-              Guthaben & Buchungen
+              {t.balance}
             </DropdownItem>
           </li>
           <li>
@@ -123,7 +126,7 @@ function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
           className="flex items-center gap-3 px-3 py-2 mt-3 font-medium text-gray-700 rounded-lg group text-theme-sm hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300 w-full text-left"
         >
           <LogOut className="size-5 text-gray-500 group-hover:text-gray-700 dark:text-gray-400 dark:group-hover:text-gray-300" aria-hidden="true" />
-          Abmelden
+          {t.signOut}
         </button>
       </Dropdown>
     </div>

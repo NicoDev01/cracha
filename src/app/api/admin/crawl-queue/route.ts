@@ -1,3 +1,5 @@
+import { localeFromRequest } from '@/i18n/request-locale'
+import { tr } from '@/i18n/server-messages'
 import { NextRequest, NextResponse } from 'next/server'
 
 import { CrawlRateLimitError, enqueueCrawl, type CrawlInput } from '@/lib/server/crawler-api'
@@ -14,12 +16,13 @@ function stringList(value: unknown): string[] {
 }
 
 export async function POST(request: NextRequest) {
+  const locale = localeFromRequest(request)
   const user = await getAuthenticatedUser()
-  if (!user) return NextResponse.json({ success: false, error: 'Authentifizierung erforderlich.' }, { status: 401 })
+  if (!user) return NextResponse.json({ success: false, error: tr(locale, 'Authentifizierung erforderlich.') }, { status: 401 })
 
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null
   if (!body || typeof body.url !== 'string') {
-    return NextResponse.json({ success: false, error: 'url ist erforderlich.' }, { status: 400 })
+    return NextResponse.json({ success: false, error: tr(locale, 'url ist erforderlich.') }, { status: 400 })
   }
 
   try {
@@ -54,12 +57,12 @@ export async function POST(request: NextRequest) {
     // bury the real ones. 402 tells the interface to offer a top-up instead of
     // suggesting a retry.
     if (error instanceof CrawlRateLimitError) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 429, headers: { 'Retry-After': String(error.retryAfter) } })
+      return NextResponse.json({ success: false, error: tr(locale, error.message) }, { status: 429, headers: { 'Retry-After': String(error.retryAfter) } })
     }
     if (error instanceof CreditError) {
-      return NextResponse.json({ success: false, error: error.message, reason: error.reason, credits: error.state }, { status: 402 })
+      return NextResponse.json({ success: false, error: tr(locale, error.message), reason: error.reason, credits: error.state }, { status: 402 })
     }
     console.error('Crawl enqueue failed', error)
-    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : 'Crawl konnte nicht gestartet werden.' }, { status: 502 })
+    return NextResponse.json({ success: false, error: tr(locale, error instanceof Error ? error.message : 'Crawl konnte nicht gestartet werden.') }, { status: 502 })
   }
 }

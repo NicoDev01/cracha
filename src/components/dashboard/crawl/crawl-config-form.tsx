@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
@@ -8,7 +8,9 @@ import { ArrowRight, ChevronDown, File, Globe2, ListTree, Loader2, Search, Setti
 import { motion } from "motion/react"
 import { toast } from "sonner"
 
-import Link from "next/link"
+import { Link, useAppLocale } from "@/i18n/navigation";
+import { intlLocale } from "@/i18n/copy"
+import type { Locale } from "@/i18n/routing"
 import { CREDITS, affordablePages, crawlCost } from "@/lib/credit-tariff"
 import { useCredits } from "@/hooks/use-credits"
 
@@ -24,12 +26,93 @@ import { cn } from "@/lib/utils"
 import { useAuthStore } from "@/stores/auth-store"
 import { useCrawlStore, type CrawlConfig } from "@/stores/crawl-store"
 
-const crawlConfigSchema = z.object({
-  url: z.string().url("Bitte gib eine gültige URL ein.").refine(
+const copy = {
+  de: {
+    invalidUrl: "Bitte gib eine gültige URL ein.",
+    httpOnly: "Nur HTTP- und HTTPS-URLs sind erlaubt.",
+    nameRequired: "Bitte vergib einen Namen.",
+    nameTooLong: "Maximal 80 Zeichen.",
+    modes: { single: ["Einzelne Seite", "Einzelseite"], recursive: ["Unterseiten", "Unterseiten"], sitemap: ["Sitemap", "Sitemap"] },
+    urlFirst: "Bitte gib zuerst eine gültige URL ein.",
+    analyzeFailed: "Die Website konnte nicht analysiert werden.",
+    signInAgain: "Bitte melde dich erneut an.",
+    started: "Crawl gestartet. Er läuft im Hintergrund weiter.",
+    startFailed: "Crawl konnte nicht gestartet werden.",
+    urlPlaceholder: "https://deine-website.de",
+    analyzeLabel: "Website analysieren",
+    analyze: "Analysieren",
+    noSitemap: "Keine Sitemap gefunden. Seiten und Tiefe legst du unten fest.",
+    inSitemap: (one: boolean, more: boolean) => `${one ? " Seite" : " Seiten"} in der Sitemap${more ? " und mehr" : ""}`,
+    perRun: (count: number) => ` · ${count} pro Durchgang`,
+    readAll: "Alle einlesen",
+    readAllLabel: "Alle Seiten der Sitemap einlesen",
+    name: "Name",
+    namePlaceholder: "z. B. Produktdokumentation",
+    scope: "Umfang",
+    pages: "Seiten",
+    pagesLabel: "Seitenanzahl",
+    depth: "Tiefe",
+    depthLabel: "Link-Tiefe",
+    advanced: "Erweitert",
+    onlyUrls: "Nur URLs mit",
+    excludeDomains: "Domains ausschließen",
+    robots: "robots.txt beachten",
+    maxCost: (credits: number) => `max. ${credits} Credits`,
+    available: (credits: number) => ` · ${credits} verfügbar`,
+    enoughFor: (allowed: number, requested: number) => `Reicht für ${allowed} von ${requested} Seiten.`,
+    topUp: "Aufladen",
+    noneLeft: "Danach bleibt kein Guthaben für Fragen.",
+    reload: "Erneut laden",
+    running: "Crawl läuft",
+    start: "Crawl starten",
+  },
+  en: {
+    invalidUrl: "Please enter a valid URL.",
+    httpOnly: "Only HTTP and HTTPS URLs are allowed.",
+    nameRequired: "Please give it a name.",
+    nameTooLong: "At most 80 characters.",
+    modes: { single: ["Single page", "Single"], recursive: ["Subpages", "Subpages"], sitemap: ["Sitemap", "Sitemap"] },
+    urlFirst: "Please enter a valid URL first.",
+    analyzeFailed: "The website could not be analyzed.",
+    signInAgain: "Please sign in again.",
+    started: "Crawl started. It keeps running in the background.",
+    startFailed: "The crawl could not be started.",
+    urlPlaceholder: "https://your-website.com",
+    analyzeLabel: "Analyze website",
+    analyze: "Analyze",
+    noSitemap: "No sitemap found. Set pages and depth below.",
+    inSitemap: (one: boolean, more: boolean) => `${one ? " page" : " pages"} in the sitemap${more ? " and more" : ""}`,
+    perRun: (count: number) => ` · ${count} per run`,
+    readAll: "Read all",
+    readAllLabel: "Read all pages of the sitemap",
+    name: "Name",
+    namePlaceholder: "e.g. product documentation",
+    scope: "Scope",
+    pages: "Pages",
+    pagesLabel: "Number of pages",
+    depth: "Depth",
+    depthLabel: "Link depth",
+    advanced: "Advanced",
+    onlyUrls: "Only URLs containing",
+    excludeDomains: "Exclude domains",
+    robots: "Respect robots.txt",
+    maxCost: (credits: number) => `max. ${credits} credits`,
+    available: (credits: number) => ` · ${credits} available`,
+    enoughFor: (allowed: number, requested: number) => `Enough for ${allowed} of ${requested} pages.`,
+    topUp: "Top up",
+    noneLeft: "No balance will be left for questions afterwards.",
+    reload: "Reload",
+    running: "Crawl running",
+    start: "Start crawl",
+  },
+} as const
+
+const makeCrawlConfigSchema = (locale: Locale) => z.object({
+  url: z.string().url(copy[locale].invalidUrl).refine(
     (value) => ["http:", "https:"].includes(new URL(value).protocol),
-    "Nur HTTP- und HTTPS-URLs sind erlaubt.",
+    copy[locale].httpOnly,
   ),
-  name: z.string().trim().min(2, "Bitte vergib einen Namen.").max(80, "Maximal 80 Zeichen."),
+  name: z.string().trim().min(2, copy[locale].nameRequired).max(80, copy[locale].nameTooLong),
   type: z.enum(["single", "recursive", "sitemap"]),
   max_depth: z.number().int().min(1).max(5),
   limit: z.number().int().min(1).max(500),
@@ -39,7 +122,7 @@ const crawlConfigSchema = z.object({
   crawl_all: z.boolean(),
 })
 
-type CrawlFormValues = z.infer<typeof crawlConfigSchema>
+type CrawlFormValues = z.infer<ReturnType<typeof makeCrawlConfigSchema>>
 
 /** Mirrors the crawler's own ceiling (`CrawlRequest.limit`, le=500). */
 const MAX_PAGES_PER_CRAWL = 500
@@ -59,9 +142,9 @@ function isCrawlableUrl(value: string) {
 }
 
 const modes = [
-  { value: "single" as const, label: "Einzelne Seite", short: "Einzelseite", icon: File },
-  { value: "recursive" as const, label: "Unterseiten", short: "Unterseiten", icon: Globe2 },
-  { value: "sitemap" as const, label: "Sitemap", short: "Sitemap", icon: ListTree },
+  { value: "single" as const, icon: File },
+  { value: "recursive" as const, icon: Globe2 },
+  { value: "sitemap" as const, icon: ListTree },
 ]
 
 export function CrawlConfigForm({
@@ -71,6 +154,9 @@ export function CrawlConfigForm({
   onStarted?: () => void
   initialValues?: Partial<CrawlFormValues>
 }) {
+  const locale = useAppLocale()
+  const t = copy[locale]
+  const crawlConfigSchema = useMemo(() => makeCrawlConfigSchema(locale), [locale])
   const { credits, error: creditError, refresh } = useCredits()
   const analysisRequest = useRef(0)
   const [showAdvanced, setShowAdvanced] = useState(false)
@@ -134,7 +220,7 @@ export function CrawlConfigForm({
 
   const handleAnalyze = async () => {
     if (!isCrawlableUrl(url)) {
-      form.setError("url", { message: "Bitte gib zuerst eine gültige URL ein." })
+      form.setError("url", { message: t.urlFirst })
       return
     }
     const sequence = ++analysisRequest.current
@@ -152,7 +238,7 @@ export function CrawlConfigForm({
         error?: string
       }
       if (!response.ok || !result.success || !result.analysis) {
-        throw new Error(result.error ?? "Die Website konnte nicht analysiert werden.")
+        throw new Error(result.error ?? t.analyzeFailed)
       }
       if (analysisRequest.current !== sequence) return
       setAnalysis({
@@ -165,14 +251,14 @@ export function CrawlConfigForm({
       if (analysisRequest.current !== sequence) return
       setAnalysis({
         status: "error",
-        message: error instanceof Error ? error.message : "Die Website konnte nicht analysiert werden.",
+        message: error instanceof Error ? error.message : t.analyzeFailed,
       })
     }
   }
 
   const onSubmit = async (values: CrawlFormValues) => {
     if (!user?.id) {
-      toast.error("Bitte melde dich erneut an.")
+      toast.error(t.signInAgain)
       return
     }
 
@@ -196,9 +282,9 @@ export function CrawlConfigForm({
       await startCrawl(config)
       window.dispatchEvent(new Event("cracha:credits-changed"))
       onStarted?.()
-      toast.success("Crawl gestartet. Er läuft im Hintergrund weiter.")
+      toast.success(t.started)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Crawl konnte nicht gestartet werden.")
+      toast.error(error instanceof Error ? error.message : t.startFailed)
     }
   }
 
@@ -217,7 +303,7 @@ export function CrawlConfigForm({
                   <Input
                     {...field}
                     type="url"
-                    placeholder="https://deine-website.de"
+                    placeholder={t.urlPlaceholder}
                     autoComplete="url"
                     disabled={isRunning}
                     className={cn("h-14 rounded-2xl pl-12 text-base shadow-theme-xs", crawlType !== "single" && "pr-14 sm:pr-36")}
@@ -225,13 +311,13 @@ export function CrawlConfigForm({
                   {crawlType !== "single" && (
                     <button
                       type="button"
-                      aria-label="Website analysieren"
+                      aria-label={t.analyzeLabel}
                       onClick={handleAnalyze}
                       disabled={isRunning || analysis.status === "loading" || !isCrawlableUrl(url)}
                       className="absolute right-2 top-1/2 inline-flex h-10 -translate-y-1/2 items-center gap-1.5 rounded-xl px-3 text-sm font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 disabled:pointer-events-none disabled:opacity-40 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
                     >
                       {analysis.status === "loading" ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" />}
-                      <span className="hidden sm:inline">Analysieren</span>
+                      <span className="hidden sm:inline">{t.analyze}</span>
                     </button>
                   )}
                 </div>
@@ -245,7 +331,7 @@ export function CrawlConfigForm({
           <p className="-mt-4 text-sm text-error-600 dark:text-error-400">{analysis.message}</p>
         )}
         {crawlType !== "single" && analysis.status === "done" && discovered === null && (
-          <p className="-mt-4 text-sm text-gray-500 dark:text-gray-400">Keine Sitemap gefunden. Seiten und Tiefe legst du unten fest.</p>
+          <p className="-mt-4 text-sm text-gray-500 dark:text-gray-400">{t.noSitemap}</p>
         )}
         {crawlType !== "single" && analysis.status === "done" && discovered !== null && (
           <FormField
@@ -255,18 +341,18 @@ export function CrawlConfigForm({
               <FormItem className="-mt-3 flex items-center justify-between gap-4 rounded-xl bg-brand-50 px-4 py-3 dark:bg-brand-500/10">
                 <FormLabel className="text-sm font-normal text-gray-700 dark:text-gray-200">
                   <span>
-                    <span className="font-semibold tabular-nums text-brand-600 dark:text-brand-300">{new Intl.NumberFormat("de-DE").format(discovered)}</span>
-                    {discovered === 1 ? " Seite" : " Seiten"} in der Sitemap{analysis.truncated && " und mehr"}
-                    {discovered > MAX_PAGES_PER_CRAWL && ` · ${MAX_PAGES_PER_CRAWL} pro Durchgang`}
+                    <span className="font-semibold tabular-nums text-brand-600 dark:text-brand-300">{new Intl.NumberFormat(intlLocale(locale)).format(discovered)}</span>
+                    {t.inSitemap(discovered === 1, analysis.truncated)}
+                    {discovered > MAX_PAGES_PER_CRAWL && t.perRun(MAX_PAGES_PER_CRAWL)}
                   </span>
                 </FormLabel>
                 <div className="flex shrink-0 items-center gap-2">
-                  <span className="text-xs text-gray-500 dark:text-gray-400">Alle einlesen</span>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">{t.readAll}</span>
                   <FormControl>
                     <Switch
                       checked={field.value}
                       disabled={isRunning}
-                      aria-label="Alle Seiten der Sitemap einlesen"
+                      aria-label={t.readAllLabel}
                       onCheckedChange={(checked) => {
                         field.onChange(checked)
                         if (checked) form.setValue("limit", cappedTotal)
@@ -284,9 +370,9 @@ export function CrawlConfigForm({
           name="name"
           render={({ field }) => (
             <FormItem>
-              <FormLabel className="text-sm font-medium text-gray-700 dark:text-gray-300">Name</FormLabel>
+              <FormLabel className="text-sm font-medium text-gray-700 dark:text-gray-300">{t.name}</FormLabel>
               <FormControl>
-                <Input {...field} placeholder="z. B. Produktdokumentation" autoComplete="off" disabled={isRunning} className="h-11 rounded-xl" />
+                <Input {...field} placeholder={t.namePlaceholder} autoComplete="off" disabled={isRunning} className="h-11 rounded-xl" />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -298,9 +384,9 @@ export function CrawlConfigForm({
           name="type"
           render={({ field }) => (
             <FormItem>
-              <FormLabel className="text-sm font-medium text-gray-700 dark:text-gray-300">Umfang</FormLabel>
+              <FormLabel className="text-sm font-medium text-gray-700 dark:text-gray-300">{t.scope}</FormLabel>
               <FormControl>
-                <div className="grid grid-cols-3 gap-1 rounded-xl bg-gray-100 p-1 dark:bg-gray-800/70" role="radiogroup" aria-label="Umfang">
+                <div className="grid grid-cols-3 gap-1 rounded-xl bg-gray-100 p-1 dark:bg-gray-800/70" role="radiogroup" aria-label={t.scope}>
                   {modes.map((mode) => {
                     const Icon = mode.icon
                     const selected = field.value === mode.value
@@ -325,8 +411,8 @@ export function CrawlConfigForm({
                           />
                         )}
                         <Icon className="relative hidden size-4 shrink-0 sm:block" />
-                        <span className="relative truncate sm:hidden">{mode.short}</span>
-                        <span className="relative hidden truncate sm:inline">{mode.label}</span>
+                        <span className="relative truncate sm:hidden">{t.modes[mode.value][1]}</span>
+                        <span className="relative hidden truncate sm:inline">{t.modes[mode.value][0]}</span>
                       </button>
                     )
                   })}
@@ -346,11 +432,11 @@ export function CrawlConfigForm({
               render={({ field }) => (
                 <FormItem>
                   <div className="flex items-baseline justify-between gap-3">
-                    <FormLabel className="text-sm font-medium text-gray-700 dark:text-gray-300">Seiten</FormLabel>
+                    <FormLabel className="text-sm font-medium text-gray-700 dark:text-gray-300">{t.pages}</FormLabel>
                     <span className="text-sm font-semibold tabular-nums text-gray-900 dark:text-white">{field.value}</span>
                   </div>
                   <FormControl>
-                    <Slider min={1} max={500} step={1} value={[field.value]} disabled={isRunning} onValueChange={(value) => field.onChange(value[0])} aria-label="Seitenanzahl" className="py-2" />
+                    <Slider min={1} max={500} step={1} value={[field.value]} disabled={isRunning} onValueChange={(value) => field.onChange(value[0])} aria-label={t.pagesLabel} className="py-2" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -364,11 +450,11 @@ export function CrawlConfigForm({
                 render={({ field }) => (
                   <FormItem>
                     <div className="flex items-baseline justify-between gap-3">
-                      <FormLabel className="text-sm font-medium text-gray-700 dark:text-gray-300">Tiefe</FormLabel>
+                      <FormLabel className="text-sm font-medium text-gray-700 dark:text-gray-300">{t.depth}</FormLabel>
                       <span className="text-sm font-semibold tabular-nums text-gray-900 dark:text-white">{field.value}</span>
                     </div>
                     <FormControl>
-                      <Slider min={1} max={5} step={1} value={[field.value]} disabled={isRunning} onValueChange={(value) => field.onChange(value[0])} aria-label="Link-Tiefe" className="py-2" />
+                      <Slider min={1} max={5} step={1} value={[field.value]} disabled={isRunning} onValueChange={(value) => field.onChange(value[0])} aria-label={t.depthLabel} className="py-2" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -382,7 +468,7 @@ export function CrawlConfigForm({
           <CollapsibleTrigger asChild>
             <button type="button" disabled={isRunning} className="inline-flex items-center gap-1.5 text-sm text-gray-500 transition-colors hover:text-gray-900 disabled:opacity-50 dark:text-gray-400 dark:hover:text-white">
               <Settings2 className="size-4" />
-              Erweitert
+              {t.advanced}
               <ChevronDown className={cn("size-4 transition-transform", showAdvanced && "rotate-180")} />
             </button>
           </CollapsibleTrigger>
@@ -393,7 +479,7 @@ export function CrawlConfigForm({
                 name="include_patterns"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-sm font-medium text-gray-700 dark:text-gray-300">Nur URLs mit</FormLabel>
+                    <FormLabel className="text-sm font-medium text-gray-700 dark:text-gray-300">{t.onlyUrls}</FormLabel>
                     <FormControl><Textarea {...field} placeholder={"*docs*\n*guide*"} className="min-h-20 rounded-xl font-mono text-xs" /></FormControl>
                   </FormItem>
                 )}
@@ -403,7 +489,7 @@ export function CrawlConfigForm({
                 name="exclude_domains"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-sm font-medium text-gray-700 dark:text-gray-300">Domains ausschließen</FormLabel>
+                    <FormLabel className="text-sm font-medium text-gray-700 dark:text-gray-300">{t.excludeDomains}</FormLabel>
                     <FormControl><Textarea {...field} placeholder={"ads.example.com"} className="min-h-20 rounded-xl font-mono text-xs" /></FormControl>
                   </FormItem>
                 )}
@@ -414,7 +500,7 @@ export function CrawlConfigForm({
               name="respect_robots_txt"
               render={({ field }) => (
                 <FormItem className="flex items-center justify-between gap-4">
-                  <FormLabel className="text-sm font-medium text-gray-700 dark:text-gray-300">robots.txt beachten</FormLabel>
+                  <FormLabel className="text-sm font-medium text-gray-700 dark:text-gray-300">{t.robots}</FormLabel>
                   <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
                 </FormItem>
               )}
@@ -427,20 +513,20 @@ export function CrawlConfigForm({
         <div className="flex flex-col-reverse gap-3 border-t border-gray-100 pt-6 sm:flex-row sm:items-center sm:justify-between dark:border-gray-800">
           <div role="status" className="text-sm text-gray-500 dark:text-gray-400">
             <p>
-              <span className="font-medium tabular-nums text-gray-900 dark:text-white">max. {maximumCost} Credits</span>
-              {credits && <span className="tabular-nums"> · {credits.balance} verfügbar</span>}
+              <span className="font-medium tabular-nums text-gray-900 dark:text-white">{t.maxCost(maximumCost)}</span>
+              {credits && <span className="tabular-nums">{t.available(credits.balance)}</span>}
             </p>
             {credits && allowedPages < requestedPages && (
-              <p className="mt-1 text-xs text-warning-600 dark:text-warning-400">Reicht für {allowedPages} von {requestedPages} Seiten. <Link className="underline" href="/dashboard#guthaben">Aufladen</Link></p>
+              <p className="mt-1 text-xs text-warning-600 dark:text-warning-400">{t.enoughFor(allowedPages, requestedPages)} <Link className="underline" href="/dashboard#guthaben">{t.topUp}</Link></p>
             )}
             {credits && allowedPages >= requestedPages && remainingQuestions === 0 && allowedPages > 0 && (
-              <p className="mt-1 text-xs text-warning-600 dark:text-warning-400">Danach bleibt kein Guthaben für Fragen.</p>
+              <p className="mt-1 text-xs text-warning-600 dark:text-warning-400">{t.noneLeft}</p>
             )}
-            {creditError && <p className="mt-1 text-xs">{creditError} <button type="button" className="underline" onClick={() => void refresh()}>Erneut laden</button></p>}
+            {creditError && <p className="mt-1 text-xs">{creditError} <button type="button" className="underline" onClick={() => void refresh()}>{t.reload}</button></p>}
           </div>
           <Button type="submit" disabled={isRunning || (credits !== null && allowedPages === 0)} className="h-11 gap-2 rounded-full bg-brand-500 px-6 !text-white shadow-theme-xs hover:bg-brand-600">
             {isRunning && <Loader2 className="size-4 animate-spin" />}
-            {isRunning ? "Crawl läuft" : "Crawl starten"}
+            {isRunning ? t.running : t.start}
             {!isRunning && <ArrowRight className="size-4" />}
           </Button>
         </div>

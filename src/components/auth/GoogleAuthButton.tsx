@@ -3,6 +3,12 @@
 import { Button } from '@/components/ui/button'
 import { useAuthStore } from '@/stores/auth-store'
 import { Loader2 } from 'lucide-react'
+import { useAppLocale } from '@/i18n/navigation'
+
+const copy = {
+  de: { register: 'Mit Google registrieren', login: 'Mit Google anmelden' },
+  en: { register: 'Sign up with Google', login: 'Sign in with Google' },
+} as const
 
 interface GoogleAuthButtonProps {
   isRegister?: boolean
@@ -10,6 +16,7 @@ interface GoogleAuthButtonProps {
 
 export function GoogleAuthButton({ isRegister = false }: GoogleAuthButtonProps) {
   const { loginWithGoogle, isLoading } = useAuthStore()
+  const t = copy[useAppLocale()]
 
   const handleGoogleAuth = async () => {
     try {
@@ -49,7 +56,7 @@ export function GoogleAuthButton({ isRegister = false }: GoogleAuthButtonProps) 
           />
         </svg>
       )}
-      {isRegister ? 'Mit Google registrieren' : 'Mit Google anmelden'}
+      {isRegister ? t.register : t.login}
     </Button>
   )
 }

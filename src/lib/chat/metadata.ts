@@ -1,10 +1,12 @@
 import type { ChatResponse, FallbackReason } from '@/types/chat'
+import { intlLocale } from '@/i18n/copy'
+import type { Locale } from '@/i18n/routing'
 
 type Metadata = ChatResponse['metadata']
 
-export function formatDuration(ms: number): string {
+export function formatDuration(ms: number, locale: Locale = 'de'): string {
   return ms >= 1_000
-    ? `${new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 }).format(ms / 1_000)} s`
+    ? `${new Intl.NumberFormat(intlLocale(locale), { maximumFractionDigits: 1 }).format(ms / 1_000)} s`
     : `${Math.round(ms)} ms`
 }
 
@@ -49,23 +51,25 @@ export function formatModel(model: string): string {
  * searched. Empty while a request is still in flight, since a half-measured
  * duration would be worse than none.
  */
-export function answerMetaParts(metadata: Metadata | undefined, sourceCount: number, citedCount?: number): string[] {
+export function answerMetaParts(metadata: Metadata | undefined, sourceCount: number, citedCount?: number, locale: Locale = 'de'): string[] {
   if (!metadata || metadata.query_time <= 0) return []
-  const total = formatDuration(metadata.query_time)
+  const total = formatDuration(metadata.query_time, locale)
   // A cached search returns in milliseconds. Reporting that as search time would
   // suggest the retrieval got faster, when it simply did not run, so only the
   // total is shown.
   const timing = metadata.retrieval_cached
     ? total
     : metadata.retrieval_time
-      ? `${total} (davon ${formatDuration(metadata.retrieval_time)} Suche)`
+      ? (locale === 'en'
+        ? `${total} (${formatDuration(metadata.retrieval_time, locale)} of it searching)`
+        : `${total} (davon ${formatDuration(metadata.retrieval_time, locale)} Suche)`)
       : total
   return [
     // Empty when no model ran, which is the case for a question that found
     // nothing to answer from. A blank part would render as a stray separator.
     formatModel(metadata.model_used),
     timing,
-    sourceCountLabel(sourceCount, citedCount),
+    sourceCountLabel(sourceCount, citedCount, locale),
   ].filter((part): part is string => Boolean(part))
 }
 
@@ -74,8 +78,15 @@ export function answerMetaParts(metadata: Metadata | undefined, sourceCount: num
  * while the list above it said "Verwendete Quellen 1". Searched and cited are
  * different claims, so the line names both when they differ.
  */
-function sourceCountLabel(sourceCount: number, citedCount?: number): string | null {
+function sourceCountLabel(sourceCount: number, citedCount?: number, locale: Locale = 'de'): string | null {
   if (sourceCount <= 0) return null
+  if (locale === 'en') {
+    const noun = (count: number) => (count === 1 ? 'source' : 'sources')
+    if (citedCount === undefined) return `${sourceCount} ${noun(sourceCount)}`
+    if (citedCount === 0) return `${sourceCount} ${noun(sourceCount)} searched, none cited`
+    if (citedCount >= sourceCount) return `${sourceCount} ${noun(sourceCount)} cited`
+    return `${citedCount} of ${sourceCount} sources cited`
+  }
   const noun = (count: number) => (count === 1 ? 'Quelle' : 'Quellen')
   if (citedCount === undefined) return `${sourceCount} ${noun(sourceCount)}`
   if (citedCount === 0) return `${sourceCount} ${noun(sourceCount)} durchsucht, keine zitiert`
@@ -89,7 +100,8 @@ function sourceCountLabel(sourceCount: number, citedCount?: number): string | nu
  * answer and did not, and it says why, because each cause asks for something
  * different: a new key, another model name, or waiting for the quota.
  */
-const FALLBACK_NOTICES: Record<FallbackReason, string> = {
+const FALLBACK_NOTICES: Record<Locale, Record<FallbackReason, string>> = {
+  de: {
   byok_rejected: 'Dein API-Key wurde abgelehnt – das Standardmodell hat geantwortet',
   byok_model: 'Das gewählte Gemini-Modell gibt es nicht – das Standardmodell hat geantwortet',
   byok_quota: 'Das Kontingent deines API-Keys ist erschöpft – das Standardmodell hat geantwortet',
@@ -97,10 +109,21 @@ const FALLBACK_NOTICES: Record<FallbackReason, string> = {
   byok_request: 'Google hat die Anfrage abgelehnt – das Standardmodell hat geantwortet',
   byok_unavailable: 'Gemini war nicht erreichbar – das Standardmodell hat geantwortet',
   primary_unavailable: 'Ersatzmodell – das primäre Modell war nicht erreichbar',
+  },
+  en: {
+    byok_rejected: 'Your API key was rejected – the default model answered',
+    byok_model: 'The chosen Gemini model doesn’t exist – the default model answered',
+    byok_quota: 'Your API key’s quota is used up – the default model answered',
+    byok_region: 'Google doesn’t allow your key here (region or billing) – the default model answered',
+    byok_request: 'Google rejected the request – the default model answered',
+    byok_unavailable: 'Gemini was unreachable – the default model answered',
+    primary_unavailable: 'Backup model – the primary model was unreachable',
+  },
 }
 
-export function fallbackNotice(reason: FallbackReason | undefined): string {
-  return FALLBACK_NOTICES[reason ?? 'byok_unavailable'] ?? FALLBACK_NOTICES.byok_unavailable
+export function fallbackNotice(reason: FallbackReason | undefined, locale: Locale = 'de'): string {
+  const notices = FALLBACK_NOTICES[locale]
+  return notices[reason ?? 'byok_unavailable'] ?? notices.byok_unavailable
 }
 
 /**
@@ -108,17 +131,24 @@ export function fallbackNotice(reason: FallbackReason | undefined): string {
  * answered. Not a fallback to our model, but the reader picked a model and
  * should know it was not the one that wrote this.
  */
-const SUBSTITUTE_CAUSES: Partial<Record<FallbackReason, string>> = {
-  byok_quota: 'hat kein Kontingent mehr',
-  byok_model: 'ist für deinen Key nicht verfügbar',
+const SUBSTITUTE_CAUSES: Record<Locale, Partial<Record<FallbackReason, string>>> = {
+  de: {
+    byok_quota: 'hat kein Kontingent mehr',
+    byok_model: 'ist für deinen Key nicht verfügbar',
+  },
+  en: {
+    byok_quota: 'has no quota left',
+    byok_model: 'isn’t available for your key',
+  },
 }
 
-export function substituteNotice(metadata: Metadata | undefined): string | null {
+export function substituteNotice(metadata: Metadata | undefined, locale: Locale = 'de'): string | null {
   if (!metadata?.requested_model || metadata.fallback) return null
   const requested = formatModel(metadata.requested_model)
   const used = formatModel(metadata.model_used)
-  const cause = SUBSTITUTE_CAUSES[metadata.substitute_reason ?? 'byok_unavailable'] ?? 'war ausgelastet'
+  const cause = SUBSTITUTE_CAUSES[locale][metadata.substitute_reason ?? 'byok_unavailable'] ?? (locale === 'en' ? 'was overloaded' : 'war ausgelastet')
   // Those two causes persist, so the answering model is used from now on.
   const kept = metadata.substitute_reason === 'byok_quota' || metadata.substitute_reason === 'byok_model'
+  if (locale === 'en') return `${requested} ${cause} – ${used} answered${kept ? ' and will be used from now on' : ''}`
   return `${requested} ${cause} – ${used} hat geantwortet${kept ? ' und wird ab jetzt verwendet' : ''}`
 }

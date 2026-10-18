@@ -1,7 +1,8 @@
-import { cheapestPackage, maxDatabases, pagesCost, starterPages, starterQuestions, welcomeCredits } from "./facts";
+import { cheapestPackage, cheapestPackageEn, maxDatabases, pagesCost, starterPages, starterQuestions, welcomeCredits } from "./facts";
+import { bilingual } from "@/i18n/copy";
 import type { BlogPost } from "./index";
 
-export const crachaVsNotebooklm: BlogPost = {
+const de: BlogPost = {
   slug: "cracha-vs-notebooklm",
   title: "CraCha vs. NotebookLM (Gemini Notebook): Welches Tool für ganze Websites?",
   description:
@@ -79,3 +80,84 @@ Die beiden Werkzeuge lösen unterschiedliche Aufgaben. Gemini Notebook ist ein N
 - [Google: Discover sources in NotebookLM](https://blog.google/innovation-and-ai/models-and-research/google-labs/notebooklm-discover-sources/)
 `,
 };
+
+const en: BlogPost = {
+  slug: "cracha-vs-notebooklm",
+  title: "CraCha vs. NotebookLM (Gemini Notebook): which tool for entire websites?",
+  description:
+    "NotebookLM is now called Gemini Notebook. How well does it handle a website with many subpages, and when is CraCha the better choice?",
+  published: "2026-09-24",
+  keywords: ["CraCha vs NotebookLM", "NotebookLM alternative", "Gemini Notebook website", "NotebookLM add website", "NotebookLM source limit"],
+  body: `
+*As of September 24, 2026. Other providers’ features and limits change. The details below come from their help pages, linked at the end.*
+
+## In short
+
+- **Gemini Notebook** (NotebookLM until July 2026) is strong when you work with **your own documents**: PDFs, Google Docs, YouTube videos, audio files, single web pages.
+- **CraCha** is built to read an **entire website**: you enter a start address and CraCha finds the subpages itself.
+- For documentation, a help center or a company website with dozens or hundreds of pages, CraCha saves you from adding every single address.
+
+## First of all: NotebookLM is now Gemini Notebook
+
+Google renamed NotebookLM to **Gemini Notebook** on July 16, 2026. It remains a standalone product; existing notebooks and links keep working. This article uses the new name. It’s the same tool.
+
+## The key difference: one page or the whole website
+
+In Gemini Notebook every source is a single item: a file, a video, pasted text or a web address. According to Google’s help, a web source imports **only the text of the given page**. Images, embedded videos and **linked subpages are not imported**. Pages behind a paywall don’t work.
+
+For a single page that’s exactly right. But if you want to question documentation with 150 pages, you have to add 150 addresses one by one. The free version allows at most 50 sources per notebook; more are only available in the paid Google AI plans.
+
+CraCha takes the opposite route. You enter **one** start address. CraCha uses the website’s sitemap or follows the internal links up to five levels deep and reads up to 500 pages per run. The result is a knowledge base in your account that you then ask questions.
+
+## Comparison at a glance
+
+| Criterion | Gemini Notebook | CraCha |
+|---|---|---|
+| How does content get in? | Add sources one by one: files, text, videos, single web pages | Enter a start address, subpages are found automatically |
+| Website with many subpages | Every page is its own source | Up to 500 pages per run |
+| How many sources? | 50 per notebook in the free version, more in paid plans | Up to ${maxDatabases} knowledge bases per account, each with up to 500 pages per run |
+| PDFs, your own files, YouTube | Yes | No, only publicly accessible HTML pages |
+| Sources in the answer | References to passages in your sources | Links to the website’s original pages |
+| Cost | Free to use, higher limits with a Google AI subscription | ${welcomeCredits} free credits, then packs from ${cheapestPackageEn}, no subscription |
+
+## A practical example
+
+Say you’re getting into a tool’s documentation – 200 pages between getting started, API reference and migration notes.
+
+**With Gemini Notebook** you pick out the relevant pages and add each address one by one. In the free version you stop at 50 pages, so you have to choose in advance. If you miss the page with the answer, the notebook can’t find it either.
+
+**With CraCha** you enter the documentation’s start address, for example \`https://docs.example.com/\`, and limit reading to \`/docs/\` with a pattern if needed. 200 pages read cost ${pagesCost(200)} credits. Then you ask, for example: *“Which breaking changes does the migration guide list for version 3?”* The answer links the pages it is based on.
+
+## When Gemini Notebook is the better choice
+
+- Your sources are **your own files**: PDFs, presentations, Google Docs, spreadsheets.
+- You want to **mix formats**, such as a YouTube video, a paper and a few articles.
+- **A few single web pages** are enough for you.
+- You need features like audio overviews or already work in the Google ecosystem.
+- You want to find new sources on a topic. Gemini Notebook can suggest up to ten matching web pages with “Discover sources”. That’s a search for individual results, not a full read of a website.
+
+## When CraCha is the better choice
+
+- The answers are on **one specific website** with many subpages, such as product documentation, a help center or a client’s website.
+- You **don’t want to hunt down every page individually** but question the website as a whole.
+- Every answer should link directly to the **original page** so you can check it.
+- You ask **questions repeatedly** about the same website. The knowledge base stays in your account; if the website changes, you read it again.
+- You want to **check your own text against the website**, such as a draft, a price list or a proposal. The Content Check in the chat shows contradictions and outdated details with sources.
+
+## What CraCha can’t do
+
+To keep the comparison fair: CraCha only reads publicly accessible HTML pages. PDFs, login areas and uploading your own files are not supported. How many pages CraCha reaches depends on the website’s links, sitemap and technical blocks. And as with any AI tool, answers can be incomplete or wrong. That’s why every answer comes with source links.
+
+## Conclusion
+
+The two tools solve different tasks. Gemini Notebook is a notebook for sources you put together yourself. CraCha turns an entire website into a knowledge base. If you mainly want to question websites with many subpages, try CraCha with a manageable section: with the ${welcomeCredits} free credits you can, for example, read ${starterPages} pages and then ask ${starterQuestions} questions.
+
+## Sources
+
+- [Google: NotebookLM is now Gemini Notebook](https://blog.google/innovation-and-ai/products/gemini-notebook/notebooklm-gemini-notebook/) (July 16, 2026)
+- [Google Help: Add sources to Gemini Notebook and limits](https://support.google.com/notebooklm/answer/16215270)
+- [Google: Discover sources in NotebookLM](https://blog.google/innovation-and-ai/models-and-research/google-labs/notebooklm-discover-sources/)
+`,
+};
+
+export const crachaVsNotebooklm = bilingual(de, en);

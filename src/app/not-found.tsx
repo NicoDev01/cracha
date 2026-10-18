@@ -1,41 +1,22 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 
-import { SiteShell } from "@/components/landing/layout/site-shell";
-import { Button } from "@/components/ui/button";
+import "./globals.css";
 
-// Next adds noindex to 404 responses itself.
-export const metadata: Metadata = {
-  title: "Seite nicht gefunden",
-};
-
-const suggestions = [
-  { href: "/website-mit-ki-durchsuchen", label: "Anleitung: Website mit KI durchsuchen" },
-  { href: "/beispiele", label: "Beispiele" },
-  { href: "/preise", label: "Preise" },
-  { href: "/blog", label: "Blog" },
-];
-
-export default function NotFound() {
+/**
+ * Only reached by requests the middleware does not route into a language —
+ * normally none. Every page lives under app/[locale], which has its own,
+ * localized 404 inside the site layout.
+ */
+export default function RootNotFound() {
   return (
-    <SiteShell>
-      <div className="mx-auto flex max-w-xl flex-col items-center px-5 py-24 text-center">
-        <p className="text-sm font-medium text-muted-foreground">Fehler 404</p>
-        <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">Diese Seite gibt es nicht</h1>
-        <p className="mt-4 leading-7 text-muted-foreground">
-          Vielleicht wurde sie verschoben, oder der Link enthält einen Tippfehler.
-        </p>
-        <Button asChild rounded="full" className="mt-8">
-          <Link href="/">Zur Startseite</Link>
-        </Button>
-        <ul className="mt-10 space-y-2 text-sm">
-          {suggestions.map((item) => (
-            <li key={item.href}>
-              <Link href={item.href} className="underline underline-offset-4">{item.label}</Link>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </SiteShell>
+    <html lang="de">
+      <body className="flex min-h-screen items-center justify-center bg-black text-white">
+        <div className="text-center">
+          <h1 className="text-3xl font-bold">404</h1>
+          <p className="mt-3">Diese Seite gibt es nicht. · This page doesn&apos;t exist.</p>
+          <Link href="/" className="mt-6 inline-block underline underline-offset-4">CraCha</Link>
+        </div>
+      </body>
+    </html>
   );
 }

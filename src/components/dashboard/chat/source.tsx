@@ -6,6 +6,7 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
+import { useAppLocale } from '@/i18n/navigation';
 import { BookOpenIcon, ChevronDownIcon, ExternalLinkIcon } from 'lucide-react';
 import type { ComponentProps } from 'react';
 
@@ -30,7 +31,9 @@ export const SourcesTrigger = ({
   hosts,
   children,
   ...props
-}: SourcesTriggerProps) => (
+}: SourcesTriggerProps) => {
+  const en = useAppLocale() === 'en';
+  return (
   <CollapsibleTrigger
     className={cn(
       'group/source flex w-full min-w-0 items-center gap-2 rounded-lg px-1 py-1.5 text-left font-medium text-gray-600 transition-colors hover:text-brand-600 dark:text-gray-300 dark:hover:text-brand-400',
@@ -41,7 +44,7 @@ export const SourcesTrigger = ({
     {children ?? (
       <>
         <BookOpenIcon className="size-4 shrink-0 text-gray-400" />
-        <span className="shrink-0">{count > 0 ? 'Verwendete Quellen' : 'Durchsuchte Quellen'}</span>
+        <span className="shrink-0">{count > 0 ? (en ? 'Sources used' : 'Verwendete Quellen') : (en ? 'Sources searched' : 'Durchsuchte Quellen')}</span>
         {count > 0 && (
           <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400">{count}</span>
         )}
@@ -54,7 +57,8 @@ export const SourcesTrigger = ({
       </>
     )}
   </CollapsibleTrigger>
-);
+  );
+};
 
 export type SourcesContentProps = ComponentProps<typeof CollapsibleContent>;
 

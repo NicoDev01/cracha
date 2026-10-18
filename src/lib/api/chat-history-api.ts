@@ -2,6 +2,7 @@
 
 import { apiFetch } from '@/lib/api/request'
 import type { ChatConversation, ChatSummary, StoredChatMessage } from '@/types/chat'
+import { pick } from '@/i18n/client-locale'
 
 /** The server said no for good (not found, invalid); retrying will not help. */
 export class ChatHistoryRejected extends Error {
@@ -15,7 +16,7 @@ async function call<T>(input: string, init?: RequestInit): Promise<T> {
   const response = await apiFetch(input, init)
   const body = (await response.json().catch(() => ({}))) as { success?: boolean; error?: string } & T
   if (!response.ok || body.success === false) {
-    const message = body.error ?? `Chatverlauf nicht erreichbar (${response.status}).`
+    const message = body.error ?? pick(`Chatverlauf nicht erreichbar (${response.status}).`, `Chat history unavailable (${response.status}).`)
     if (response.status >= 400 && response.status < 500 && response.status !== 401 && response.status !== 429) {
       throw new ChatHistoryRejected(message, response.status)
     }

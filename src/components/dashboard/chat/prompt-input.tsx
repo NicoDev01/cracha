@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
+import { useAppLocale } from '@/i18n/navigation';
 import type { ChatStatus } from '@/types/ai';
 import { ArrowUpIcon, Loader2Icon, SquareIcon, XIcon } from 'lucide-react';
 import type {
@@ -198,7 +199,9 @@ export const PromptInputSubmit = ({
 export type PromptInputStopProps = ComponentProps<typeof Button>;
 
 /** Takes the place of the send button while an answer is on its way. */
-export const PromptInputStop = ({ className, ...props }: PromptInputStopProps) => (
+export const PromptInputStop = ({ className, ...props }: PromptInputStopProps) => {
+  const label = useAppLocale() === 'en' ? 'Stop answer' : 'Antwort stoppen'
+  return (
   <Button
     type="button"
     size="icon"
@@ -208,13 +211,14 @@ export const PromptInputStop = ({ className, ...props }: PromptInputStopProps) =
       'dark:bg-white/10 dark:text-white dark:hover:bg-white/15 dark:hover:text-white',
       className
     )}
-    aria-label="Antwort stoppen"
-    title="Antwort stoppen"
+    aria-label={label}
+    title={label}
     {...props}
   >
     <SquareIcon className="size-3 fill-current" />
   </Button>
-);
+  );
+};
 
 export type PromptInputModelSelectProps = ComponentProps<typeof Select>;
 

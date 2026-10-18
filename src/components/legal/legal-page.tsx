@@ -1,15 +1,19 @@
 import type { ReactNode } from "react";
 
+import type { Locale } from "@/i18n/routing";
+
 /** Shared frame so the three legal pages read as one document set. */
 export function LegalPage({
   title,
   updated,
   intro,
+  locale = "de",
   children,
 }: {
   title: string;
   updated: string;
   intro?: ReactNode;
+  locale?: Locale;
   children: ReactNode;
 }) {
   return (
@@ -17,7 +21,13 @@ export function LegalPage({
       <h1 className="font-urban text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
         {title}
       </h1>
-      <p className="mt-3 text-sm text-muted-foreground">Stand: {updated}</p>
+      <p className="mt-3 text-sm text-muted-foreground">{locale === "en" ? "Last updated" : "Stand"}: {updated}</p>
+      {locale === "en" ? (
+        <p className="mt-6 rounded-xl border border-border bg-muted/30 p-4 text-sm leading-relaxed text-muted-foreground">
+          This English version is a translation provided for your convenience. Only the German version is legally
+          binding; switch to DE at the top of the page to read it.
+        </p>
+      ) : null}
       {intro ? <div className="mt-6 text-base leading-relaxed text-muted-foreground">{intro}</div> : null}
       <div className="mt-10 space-y-10">{children}</div>
     </div>

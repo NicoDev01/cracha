@@ -3,9 +3,9 @@ import type { ChatSummary } from '@/types/chat'
 export const MAX_TITLE_LENGTH = 100
 
 /** The first line of the question, cut at a word, until a title is generated. */
-export function provisionalTitle(question: string): string {
+export function provisionalTitle(question: string, emptyTitle = 'Neuer Chat'): string {
   const line = question.trim().split('\n')[0].replace(/\s+/g, ' ').trim()
-  if (line.length <= 70) return line || 'Neuer Chat'
+  if (line.length <= 70) return line || emptyTitle
   const cut = line.slice(0, 70)
   const space = cut.lastIndexOf(' ')
   return `${(space > 40 ? cut.slice(0, space) : cut).trimEnd()} …`

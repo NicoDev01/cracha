@@ -1,3 +1,5 @@
+import { localeFromRequest } from '@/i18n/request-locale'
+import { tr } from '@/i18n/server-messages'
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getAuthenticatedUser } from '@/lib/supabase/server'
@@ -9,29 +11,31 @@ export const dynamic = 'force-dynamic'
 type Context = { params: Promise<{ id: string }> }
 
 export async function GET(_request: NextRequest, { params }: Context) {
+  const locale = localeFromRequest(_request)
   const user = await getAuthenticatedUser()
-  if (!user) return NextResponse.json({ success: false, error: 'Authentifizierung erforderlich.' }, { status: 401 })
+  if (!user) return NextResponse.json({ success: false, error: tr(locale, 'Authentifizierung erforderlich.') }, { status: 401 })
   const { id } = await params
   const database = await getOwnedDatabase(id, user.id)
-  if (!database) return NextResponse.json({ success: false, error: 'Wissensbasis nicht gefunden.' }, { status: 404 })
+  if (!database) return NextResponse.json({ success: false, error: tr(locale, 'Wissensbasis nicht gefunden.') }, { status: 404 })
   return NextResponse.json({ success: true, database })
 }
 
 export async function PUT(request: NextRequest, { params }: Context) {
+  const locale = localeFromRequest(request)
   const user = await getAuthenticatedUser()
-  if (!user) return NextResponse.json({ success: false, error: 'Authentifizierung erforderlich.' }, { status: 401 })
+  if (!user) return NextResponse.json({ success: false, error: tr(locale, 'Authentifizierung erforderlich.') }, { status: 401 })
   const { id } = await params
   const database = await getOwnedDatabase(id, user.id)
-  if (!database) return NextResponse.json({ success: false, error: 'Wissensbasis nicht gefunden.' }, { status: 404 })
+  if (!database) return NextResponse.json({ success: false, error: tr(locale, 'Wissensbasis nicht gefunden.') }, { status: 404 })
   if (database.status === 'deleting') {
-    return NextResponse.json({ success: false, error: 'Wissensbasis wird derzeit gelöscht.' }, { status: 409 })
+    return NextResponse.json({ success: false, error: tr(locale, 'Wissensbasis wird derzeit gelöscht.') }, { status: 409 })
   }
 
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null
   const current = await getOwnedDatabase(id, user.id)
-  if (!current) return NextResponse.json({ success: false, error: 'Wissensbasis nicht gefunden.' }, { status: 404 })
+  if (!current) return NextResponse.json({ success: false, error: tr(locale, 'Wissensbasis nicht gefunden.') }, { status: 404 })
   if (current.status === 'deleting') {
-    return NextResponse.json({ success: false, error: 'Wissensbasis wird derzeit gelöscht.' }, { status: 409 })
+    return NextResponse.json({ success: false, error: tr(locale, 'Wissensbasis wird derzeit gelöscht.') }, { status: 409 })
   }
 
   const result = await coordinatorCommand<{ database: typeof current }>(id, 'update-metadata', {
@@ -41,10 +45,11 @@ export async function PUT(request: NextRequest, { params }: Context) {
 }
 
 export async function DELETE(_request: NextRequest, { params }: Context) {
+  const locale = localeFromRequest(_request)
   const user = await getAuthenticatedUser()
-  if (!user) return NextResponse.json({ success: false, error: 'Authentifizierung erforderlich.' }, { status: 401 })
+  if (!user) return NextResponse.json({ success: false, error: tr(locale, 'Authentifizierung erforderlich.') }, { status: 401 })
   const { id } = await params
   const result = await deleteOwnedDatabase(user.id, id)
-  if (!result.ok) return NextResponse.json({ success: false, error: result.error }, { status: result.status })
+  if (!result.ok) return NextResponse.json({ success: false, error: tr(locale, result.error) }, { status: result.status })
   return NextResponse.json({ success: true })
 }

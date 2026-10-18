@@ -1,3 +1,5 @@
+import { localeFromRequest } from '@/i18n/request-locale'
+import { tr } from '@/i18n/server-messages'
 import { NextRequest, NextResponse } from 'next/server'
 
 import { CrawlRateLimitError, enqueueCrawl } from '@/lib/server/crawler-api'
@@ -6,11 +8,12 @@ import { CreditError } from '@/lib/server/credits'
 import { getAuthenticatedUser } from '@/lib/supabase/server'
 
 export async function POST(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const locale = localeFromRequest(_request)
   const user = await getAuthenticatedUser()
-  if (!user) return NextResponse.json({ success: false, error: 'Authentifizierung erforderlich.' }, { status: 401 })
+  if (!user) return NextResponse.json({ success: false, error: tr(locale, 'Authentifizierung erforderlich.') }, { status: 401 })
   const { id } = await params
   const database = await getOwnedDatabase(id, user.id)
-  if (!database) return NextResponse.json({ success: false, error: 'Wissensbasis nicht gefunden.' }, { status: 404 })
+  if (!database) return NextResponse.json({ success: false, error: tr(locale, 'Wissensbasis nicht gefunden.') }, { status: 404 })
 
   try {
     // No settings on purpose: enqueueCrawl reuses what the knowledge base was
@@ -29,11 +32,11 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
     }, { status: 202 })
   } catch (error) {
     if (error instanceof CrawlRateLimitError) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 429, headers: { 'Retry-After': String(error.retryAfter) } })
+      return NextResponse.json({ success: false, error: tr(locale, error.message) }, { status: 429, headers: { 'Retry-After': String(error.retryAfter) } })
     }
     if (error instanceof CreditError) {
-      return NextResponse.json({ success: false, error: error.message, reason: error.reason, credits: error.state }, { status: 402 })
+      return NextResponse.json({ success: false, error: tr(locale, error.message), reason: error.reason, credits: error.state }, { status: 402 })
     }
-    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : 'Re-Crawl fehlgeschlagen.' }, { status: 502 })
+    return NextResponse.json({ success: false, error: tr(locale, error instanceof Error ? error.message : 'Re-Crawl fehlgeschlagen.') }, { status: 502 })
   }
 }

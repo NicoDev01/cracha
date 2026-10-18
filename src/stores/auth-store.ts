@@ -5,6 +5,43 @@ import { persist } from 'zustand/middleware'
 import { createClient } from '@/lib/supabase/client'
 import type { Session, User } from '@supabase/supabase-js'
 import { clearAuthCookies } from '@/lib/auth/clear-auth-cookies'
+import { currentLocale } from '@/i18n/client-locale'
+import { localizePath } from '@/i18n/paths'
+
+const messages = {
+  de: {
+    timeout: 'Die Anmeldung hat das Zeitlimit überschritten.',
+    wrongCredentials: 'E-Mail oder Passwort ist falsch. Bitte überprüfe deine Eingaben.',
+    notConfirmed: 'Deine E-Mail-Adresse wurde noch nicht bestätigt. Bitte prüfe dein Postfach.',
+    tooMany: 'Zu viele Anmeldeversuche. Bitte warte einen Moment und versuche es erneut.',
+    loginFailed: 'Anmeldung fehlgeschlagen.',
+    exists: 'Ein Account mit dieser E-Mail-Adresse existiert bereits.',
+    invalidEmail: 'Bitte gib eine gültige E-Mail-Adresse ein.',
+    weakPassword: 'Das Passwort ist zu schwach. Mindestens 6 Zeichen erforderlich.',
+    registered: 'Registrierung erfolgreich! Du kannst dich jetzt anmelden.',
+    almostDone: (email: string) => `Fast geschafft! Wir haben dir eine E-Mail an ${email} geschickt. Bestätige den Link darin, dann kannst du dich anmelden.`,
+    registerFailed: 'Registrierung fehlgeschlagen',
+    googleFailed: 'Anmeldung mit Google fehlgeschlagen',
+    logoutFailed: 'Abmelden fehlgeschlagen',
+  },
+  en: {
+    timeout: 'Signing in timed out.',
+    wrongCredentials: 'Email or password is incorrect. Please check what you entered.',
+    notConfirmed: 'Your email address hasn’t been confirmed yet. Please check your inbox.',
+    tooMany: 'Too many sign-in attempts. Please wait a moment and try again.',
+    loginFailed: 'Sign-in failed.',
+    exists: 'An account with this email address already exists.',
+    invalidEmail: 'Please enter a valid email address.',
+    weakPassword: 'The password is too weak. At least 6 characters required.',
+    registered: 'Sign-up successful! You can sign in now.',
+    almostDone: (email: string) => `Almost done! We’ve sent an email to ${email}. Confirm the link in it, then you can sign in.`,
+    registerFailed: 'Sign-up failed',
+    googleFailed: 'Google sign-in failed',
+    logoutFailed: 'Sign-out failed',
+  },
+} as const
+
+const msg = () => messages[currentLocale()]
 
 export interface AuthUser {
   id: string
@@ -50,7 +87,7 @@ const supabase = createClient()
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   return new Promise((resolve, reject) => {
     const timeout = window.setTimeout(
-      () => reject(new Error('Authentifizierung hat das Zeitlimit überschritten.')),
+      () => reject(new Error(msg().timeout)),
       timeoutMs
     )
 
@@ -186,11 +223,11 @@ export const useAuthStore = create<AuthState>()(
             // Better error messages
             let errorMessage = error.message
             if (error.message.includes('Invalid login credentials')) {
-              errorMessage = 'E-Mail oder Passwort ist falsch. Bitte überprüfe deine Eingaben.'
+              errorMessage = msg().wrongCredentials
             } else if (error.message.includes('Email not confirmed')) {
-              errorMessage = 'Deine E-Mail-Adresse wurde noch nicht bestätigt. Bitte prüfe dein Postfach.'
+              errorMessage = msg().notConfirmed
             } else if (error.message.includes('Too many requests')) {
-              errorMessage = 'Zu viele Anmeldeversuche. Bitte warte einen Moment und versuche es erneut.'
+              errorMessage = msg().tooMany
             }
             throw new Error(errorMessage)
           }
@@ -202,7 +239,7 @@ export const useAuthStore = create<AuthState>()(
           // bounced back to /login — the reason a correct password sometimes
           // had to be entered twice.
           const session = data.session
-          if (!session?.user) throw new Error('Anmeldung fehlgeschlagen.')
+          if (!session?.user) throw new Error(msg().loginFailed)
 
           set({
             user: authUserFromSession(session.user),
@@ -214,7 +251,7 @@ export const useAuthStore = create<AuthState>()(
           })
 
         } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : 'Anmeldung fehlgeschlagen'
+          const errorMessage = error instanceof Error ? error.message : msg().loginFailed
           set({ 
             error: errorMessage,
             isLoading: false 
@@ -232,13 +269,15 @@ export const useAuthStore = create<AuthState>()(
             password,
             options: {
               data: {
-                name: name
+                name: name,
+                // Which language the reminder mail and other messages use.
+                locale: currentLocale(),
               },
               // Was undefined, which does not disable anything — it makes
               // Supabase fall back to the project's Site URL. That is how a
               // confirmation link sent from cracha-app.com ended up pointing at
               // localhost. The link now comes back to the site the user is on.
-              emailRedirectTo: `${window.location.origin}/confirm?next=/dashboard`,
+              emailRedirectTo: `${window.location.origin}/confirm?next=${localizePath('/dashboard', currentLocale())}`,
             }
           })
           
@@ -246,11 +285,11 @@ export const useAuthStore = create<AuthState>()(
             // Better error messages
             let errorMessage = error.message
             if (error.message.includes('already registered')) {
-              errorMessage = 'Ein Account mit dieser E-Mail-Adresse existiert bereits.'
+              errorMessage = msg().exists
             } else if (error.message.includes('invalid email')) {
-              errorMessage = 'Bitte gib eine gültige E-Mail-Adresse ein.'
+              errorMessage = msg().invalidEmail
             } else if (error.message.includes('password')) {
-              errorMessage = 'Das Passwort ist zu schwach. Mindestens 6 Zeichen erforderlich.'
+              errorMessage = msg().weakPassword
             }
             throw new Error(errorMessage)
           }
@@ -259,7 +298,7 @@ export const useAuthStore = create<AuthState>()(
           // with no identities rather than an error, so that case has to be
           // read off the response instead of caught.
           if (data.user && data.user.identities?.length === 0) {
-            throw new Error('Ein Account mit dieser E-Mail-Adresse existiert bereits.')
+            throw new Error(msg().exists)
           }
 
           // Which of the two messages is true depends on whether the project
@@ -267,15 +306,15 @@ export const useAuthStore = create<AuthState>()(
           // back only when it does not.
           set({
             error: data.session
-              ? 'Registrierung erfolgreich! Du kannst dich jetzt anmelden.'
-              : `Fast geschafft! Wir haben dir eine E-Mail an ${email} geschickt. Bestätige den Link darin, dann kannst du dich anmelden.`,
+              ? msg().registered
+              : msg().almostDone(email),
             isLoading: false
           })
 
           // Don't throw error for successful registration
 
         } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : 'Registrierung fehlgeschlagen'
+          const errorMessage = error instanceof Error ? error.message : msg().registerFailed
           set({ 
             error: errorMessage,
             isLoading: false 
@@ -291,7 +330,7 @@ export const useAuthStore = create<AuthState>()(
           const { error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: {
-              redirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
+              redirectTo: `${window.location.origin}/auth/callback?next=${localizePath('/dashboard', currentLocale())}`,
             }
           })
 
@@ -303,7 +342,7 @@ export const useAuthStore = create<AuthState>()(
           
         } catch (error) {
           set({ 
-            error: error instanceof Error ? error.message : 'Google login failed',
+            error: error instanceof Error ? error.message : msg().googleFailed,
             isLoading: false 
           })
           throw error
@@ -332,7 +371,7 @@ export const useAuthStore = create<AuthState>()(
           // Even if logout fails, clear local state
           clearAuthCookies()
           set({
-            error: error instanceof Error ? error.message : 'Logout failed',
+            error: error instanceof Error ? error.message : msg().logoutFailed,
             user: null,
             session: null,
             isAuthenticated: false,

@@ -47,12 +47,12 @@ describe('/api/databases', () => {
 
   it('rejects GET when unauthenticated', async () => {
     mocks.auth.mockResolvedValue(null)
-    const res = await GET()
+    const res = await GET(new NextRequest('https://cracha-app.com/api/databases'))
     expect(res.status).toBe(401)
   })
 
   it('returns owned databases on GET', async () => {
-    const res = await GET()
+    const res = await GET(new NextRequest('https://cracha-app.com/api/databases'))
     expect(res.status).toBe(200)
     const body = (await res.json()) as { success: boolean; databases: Array<{ id: string }> }
     expect(body.success).toBe(true)

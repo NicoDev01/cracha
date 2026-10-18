@@ -1,4 +1,7 @@
+'use client'
+
 import { cn } from '@/lib/utils'
+import { useAppLocale } from '@/i18n/navigation'
 import { STATUS_LABELS, type DatabaseStatus } from '@/lib/databases'
 
 const TONE: Record<DatabaseStatus, { pill: string; dot: string }> = {
@@ -35,7 +38,7 @@ export function StatusBadge({ status, className }: { status: DatabaseStatus; cla
       )}
     >
       <span className={cn('size-1.5 rounded-full', tone.dot)} />
-      {STATUS_LABELS[status]}
+      {STATUS_LABELS[useAppLocale()][status]}
     </span>
   )
 }

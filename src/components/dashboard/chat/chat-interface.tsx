@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Bot,
@@ -47,7 +47,7 @@ import {
 } from '@/lib/chat/citations';
 import { answerMetaParts, fallbackNotice, substituteNotice } from '@/lib/chat/metadata';
 import { cleanSnippet, cleanSourceTitle, passageLink, sourceHosts, sourceLocation } from '@/lib/chat/source-display';
-import { checkGeminiKey, PREFERRED_GEMINI_MODELS, type GeminiModelOption } from '@/lib/chat/gemini-models';
+import { checkGeminiKey, PREFERRED_GEMINI_MODELS, preferredGeminiModels, type GeminiModelOption } from '@/lib/chat/gemini-models';
 import { streamingMarkdown } from '@/lib/chat/streaming-markdown';
 import { databaseFromChatQuery } from '@/lib/databases';
 import type { Message as ChatMessage, Source as ChatSource } from '@/types/chat';
@@ -66,9 +66,125 @@ import {
 import { Response } from './response';
 import { SearchProgress } from './search-progress';
 import { Source, Sources, SourcesContent, SourcesTrigger } from './source';
+import { intlLocale } from '@/i18n/copy';
+import { useAppLocale } from '@/i18n/navigation';
+import type { Locale } from '@/i18n/routing';
+
+const copy = {
+  de: {
+    uncited: (count: number) => `${count} weitere durchsucht, nicht zitiert`,
+    byokTitle: 'Eigenen API-Key nutzen (BYOK)',
+    byokText: 'Ohne eigenen Key antwortet das Standardmodell (DeepSeek V4.1 Flash). Mit deinem Google-AI-Studio-Key antwortet Gemini. Der Key bleibt nur in diesem Tab im Arbeitsspeicher und wird nie gespeichert. Die Prüfung läuft direkt zwischen deinem Browser und Google.',
+    keyLabel: 'Google AI Studio API-Key',
+    check: 'Prüfen',
+    keyValid: (count: number) => `Key gültig – ${count} ${count === 1 ? 'Modell' : 'Modelle'} verfügbar`,
+    createAt: 'Kostenlos erstellbar auf',
+    model: 'Modell',
+    customModel: 'Anderes Modell eingeben…',
+    customPlaceholder: 'z. B. gemini-3.6-flash',
+    overloaded: 'Ist das Modell überlastet, antwortet ein anderes Gemini-Modell deines Keys.',
+    removeKey: 'Key entfernen',
+    cancel: 'Abbrechen',
+    save: 'Speichern',
+    searching: 'Die Wissensbasis wird durchsucht.',
+    writing: 'Die Antwort wird erstellt.',
+    done: (cited: number, total: number) => `Antwort fertig, ${cited} von ${total} Quellen zitiert.`,
+    tooLong: (length: number) => `Eingabe zu lang (${length} Zeichen). Maximal 4.000 Zeichen sind zulässig.`,
+    sourcesHeading: 'Quellen',
+    exportName: 'cracha-antwort',
+    checkOn: 'Content-Check aktiv (Klicken für Standard-Chat)',
+    checkOff: 'Content-Check / Widerspruchsprüfung aktivieren',
+    byokButton: 'Eigenen Google AI Studio API-Key verwenden (BYOK)',
+    newChat: 'Neuer Chat',
+    deleteChat: 'Chat löschen',
+    deleteTitle: 'Chat löschen?',
+    deleteText: (title: string | undefined, count: number) => `${title ? `„${title}“ wird` : 'Dieser Chat wird'} mit allen ${count} Nachrichten endgültig gelöscht. Das lässt sich nicht rückgängig machen.`,
+    delete: 'Löschen',
+    loadingChat: 'Chat wird geladen …',
+    you: 'Du',
+    composingFrom: (count: number) => `Formuliere Antwort aus ${count} ${count === 1 ? 'Quelle' : 'Quellen'} …`,
+    composing: 'Formuliere Antwort …',
+    copyAnswer: 'Antwort kopieren',
+    copied: 'Kopiert',
+    copy: 'Kopieren',
+    copyWithSources: 'Antwort mit Quellen kopieren',
+    copyWithSourcesTitle: 'Antwort inklusive nummerierter Quellenliste als Markdown kopieren',
+    copiedWithSources: 'Mit Quellen kopiert',
+    withSources: 'Mit Quellen',
+    exportLabel: 'Als Markdown exportieren',
+    exportTitle: 'Antwort als Markdown-Datei (.md) herunterladen',
+    exportButton: 'Exportieren',
+    checkActive: 'Content-Check aktiv:',
+    checkHint: 'Füge Entwürfe, Preise oder Behauptungen ein, um sie gegen deine Quellen auf Widersprüche und Aktualität zu prüfen.',
+    end: 'Beenden',
+    pickFirst: 'Erst eine Wissensbasis wählen',
+    checkPlaceholder: 'Text, Entwurf oder Preismodell zur Prüfung gegen die Wissensbasis einfügen …',
+    askPlaceholder: 'Frage etwas zu deiner Wissensbasis …',
+    checkInput: 'Zu prüfender Text',
+    message: 'Nachricht',
+    searchingShort: 'Wissensbasis wird durchsucht …',
+    writingShort: 'Antwort wird geschrieben …',
+    send: 'Nachricht senden',
+  },
+  en: {
+    uncited: (count: number) => `${count} more searched, not cited`,
+    byokTitle: 'Use your own API key (BYOK)',
+    byokText: 'Without your own key, the default model (DeepSeek V4.1 Flash) answers. With your Google AI Studio key, Gemini answers. The key stays only in this tab’s memory and is never stored. The check runs directly between your browser and Google.',
+    keyLabel: 'Google AI Studio API key',
+    check: 'Check',
+    keyValid: (count: number) => `Key valid – ${count} ${count === 1 ? 'model' : 'models'} available`,
+    createAt: 'Create one for free at',
+    model: 'Model',
+    customModel: 'Enter another model…',
+    customPlaceholder: 'e.g. gemini-3.6-flash',
+    overloaded: 'If the model is overloaded, another Gemini model of your key answers.',
+    removeKey: 'Remove key',
+    cancel: 'Cancel',
+    save: 'Save',
+    searching: 'Searching the knowledge base.',
+    writing: 'Writing the answer.',
+    done: (cited: number, total: number) => `Answer ready, ${cited} of ${total} sources cited.`,
+    tooLong: (length: number) => `Input too long (${length} characters). At most 4,000 characters are allowed.`,
+    sourcesHeading: 'Sources',
+    exportName: 'cracha-answer',
+    checkOn: 'Content Check on (click for the regular chat)',
+    checkOff: 'Turn on Content Check / contradiction check',
+    byokButton: 'Use your own Google AI Studio API key (BYOK)',
+    newChat: 'New chat',
+    deleteChat: 'Delete chat',
+    deleteTitle: 'Delete chat?',
+    deleteText: (title: string | undefined, count: number) => `${title ? `“${title}”` : 'This chat'} will be deleted permanently with all ${count} messages. This can’t be undone.`,
+    delete: 'Delete',
+    loadingChat: 'Loading chat …',
+    you: 'You',
+    composingFrom: (count: number) => `Writing the answer from ${count} ${count === 1 ? 'source' : 'sources'} …`,
+    composing: 'Writing the answer …',
+    copyAnswer: 'Copy answer',
+    copied: 'Copied',
+    copy: 'Copy',
+    copyWithSources: 'Copy answer with sources',
+    copyWithSourcesTitle: 'Copy the answer with a numbered source list as Markdown',
+    copiedWithSources: 'Copied with sources',
+    withSources: 'With sources',
+    exportLabel: 'Export as Markdown',
+    exportTitle: 'Download the answer as a Markdown file (.md)',
+    exportButton: 'Export',
+    checkActive: 'Content Check on:',
+    checkHint: 'Paste drafts, prices or claims to check them against your sources for contradictions and outdated details.',
+    end: 'End',
+    pickFirst: 'Choose a knowledge base first',
+    checkPlaceholder: 'Paste text, a draft or a pricing model to check against the knowledge base …',
+    askPlaceholder: 'Ask something about your knowledge base …',
+    checkInput: 'Text to check',
+    message: 'Message',
+    searchingShort: 'Searching the knowledge base …',
+    writingShort: 'Writing the answer …',
+    send: 'Send message',
+  },
+} as const
 
 // Answers are written in the language of the question, so the starter questions
-// decide which language a new user lands in. The chrome stays German.
+// follow the page language: a German page offers German questions.
 const exampleQuestions = {
   de: [
     'Fasse die wichtigsten Inhalte zusammen.',
@@ -82,16 +198,7 @@ const exampleQuestions = {
   ],
 };
 
-// The browser language cannot change while the page is open, so there is
-// nothing to subscribe to — but the snapshots must stay referentially stable,
-// or the store would report a change on every render.
-const subscribeToNothing = () => () => {};
-const readServerStarters = () => exampleQuestions.de;
-const readBrowserStarters = () => (navigator.language.toLowerCase().startsWith('de')
-  ? exampleQuestions.de
-  : exampleQuestions.en);
-
-const formatTime = (date: Date) => new Intl.DateTimeFormat('de-DE', {
+const formatTime = (date: Date, locale: Locale) => new Intl.DateTimeFormat(intlLocale(locale), {
   hour: '2-digit',
   minute: '2-digit',
 }).format(date);
@@ -136,7 +243,9 @@ const SourceRow = ({ index, source, muted = false }: IndexedSource & { muted?: b
   );
 };
 
-const SourceList = ({ cited, uncited }: { cited: IndexedSource[]; uncited: IndexedSource[] }) => (
+const SourceList = ({ cited, uncited }: { cited: IndexedSource[]; uncited: IndexedSource[] }) => {
+  const t = copy[useAppLocale()];
+  return (
   <>
     {cited.length > 0 && (
       <div className="grid gap-0.5">
@@ -150,7 +259,7 @@ const SourceList = ({ cited, uncited }: { cited: IndexedSource[]; uncited: Index
     {uncited.length > 0 && (
       <details className="group/uncited">
         <summary className="cursor-pointer list-none px-2 pb-1 pt-2 text-[11px] font-medium text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300">
-          {uncited.length} weitere durchsucht, nicht zitiert
+          {t.uncited(uncited.length)}
           <span className="ml-1 inline-block transition-transform group-open/uncited:rotate-90" aria-hidden="true">›</span>
         </summary>
         <div className="grid gap-0.5">
@@ -161,7 +270,8 @@ const SourceList = ({ cited, uncited }: { cited: IndexedSource[]; uncited: Index
       </details>
     )}
   </>
-);
+  );
+};
 
 type KeyStatus =
   | { state: 'idle' }
@@ -182,8 +292,10 @@ function ByokDialogContent({
   onRemove: () => void;
   onCancel: () => void;
 }) {
+  const locale = useAppLocale();
+  const t = copy[locale];
   const [tempApiKey, setTempApiKey] = useState(byokApiKey ?? '');
-  const [models, setModels] = useState<GeminiModelOption[]>(PREFERRED_GEMINI_MODELS);
+  const [models, setModels] = useState<GeminiModelOption[]>(() => preferredGeminiModels(locale));
   const initialModel = byokModel || PREFERRED_GEMINI_MODELS[0].id;
   const [tempModel, setTempModel] = useState(initialModel);
   const [customModel, setCustomModel] = useState('');
@@ -199,7 +311,7 @@ function ByokDialogContent({
   // passing through our server, and the list shows what this key can reach.
   const check = async (key: string): Promise<boolean> => {
     setStatus({ state: 'checking' });
-    const result = await checkGeminiKey(key);
+    const result = await checkGeminiKey(key, undefined, locale);
     checkedKey.current = key;
     if (!result.ok) {
       setStatus({ state: 'invalid', message: result.message, keyRejected: result.keyRejected });
@@ -225,17 +337,17 @@ function ByokDialogContent({
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
           <Key className="size-5 text-brand-500" />
-          Eigenen API-Key nutzen (BYOK)
+          {t.byokTitle}
         </DialogTitle>
         <DialogDescription className="text-xs text-gray-500 dark:text-gray-400">
-          Ohne eigenen Key antwortet das Standardmodell (DeepSeek V4.1 Flash). Mit deinem Google-AI-Studio-Key antwortet Gemini. Der Key bleibt nur in diesem Tab im Arbeitsspeicher und wird nie gespeichert. Die Prüfung läuft direkt zwischen deinem Browser und Google.
+          {t.byokText}
         </DialogDescription>
       </DialogHeader>
 
       <div className="space-y-4 py-2">
         <div className="space-y-1.5">
           <label htmlFor="byok-key" className="text-xs font-medium text-gray-700 dark:text-gray-300">
-            Google AI Studio API-Key
+            {t.keyLabel}
           </label>
           <div className="flex gap-2">
             <input
@@ -259,13 +371,13 @@ function ByokDialogContent({
               onClick={() => void check(tempApiKey.trim())}
               className="h-auto rounded-full px-4 text-xs"
             >
-              {status.state === 'checking' ? <Loader className="size-3.5" /> : 'Prüfen'}
+              {status.state === 'checking' ? <Loader className="size-3.5" /> : t.check}
             </Button>
           </div>
           {status.state === 'valid' && (
             <p className="flex items-center gap-1.5 text-[11px] font-medium text-success-600 dark:text-success-500" role="status">
               <Check className="size-3.5" aria-hidden="true" />
-              Key gültig – {status.count} {status.count === 1 ? 'Modell' : 'Modelle'} verfügbar
+              {t.keyValid(status.count)}
             </p>
           )}
           {status.state === 'invalid' && (
@@ -276,7 +388,7 @@ function ByokDialogContent({
           )}
           {status.state === 'idle' && (
             <p className="text-[11px] text-gray-400">
-              Kostenlos erstellbar auf{' '}
+              {t.createAt}{' '}
               <a
                 href="https://aistudio.google.com/apikey"
                 target="_blank"
@@ -291,7 +403,7 @@ function ByokDialogContent({
 
         <div className="space-y-1.5">
           <label htmlFor="byok-model" className="text-xs font-medium text-gray-700 dark:text-gray-300">
-            Modell
+            {t.model}
           </label>
           <select
             id="byok-model"
@@ -305,19 +417,19 @@ function ByokDialogContent({
             {options.map((model) => (
               <option key={model.id} value={model.id}>{model.label}</option>
             ))}
-            <option value="custom">Anderes Modell eingeben…</option>
+            <option value="custom">{t.customModel}</option>
           </select>
           {isCustom && (
             <input
               type="text"
               value={customModel}
               onChange={(e) => setCustomModel(e.target.value)}
-              placeholder="z. B. gemini-3.6-flash"
+              placeholder={t.customPlaceholder}
               className="mt-2 w-full rounded-full border border-gray-200 bg-white px-4 py-2 text-sm focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
             />
           )}
           <p className="text-[11px] text-gray-400">
-            Ist das Modell überlastet, antwortet ein anderes Gemini-Modell deines Keys.
+            {t.overloaded}
           </p>
         </div>
       </div>
@@ -331,7 +443,7 @@ function ByokDialogContent({
             onClick={onRemove}
             className="rounded-full text-xs text-error-600 hover:bg-error-50 hover:text-error-700"
           >
-            Key entfernen
+            {t.removeKey}
           </Button>
         ) : <div />}
         <div className="flex gap-2">
@@ -342,7 +454,7 @@ function ByokDialogContent({
             onClick={onCancel}
             className="rounded-full text-xs"
           >
-            Abbrechen
+            {t.cancel}
           </Button>
           <Button
             type="button"
@@ -351,7 +463,7 @@ function ByokDialogContent({
             onClick={() => void save()}
             className="rounded-full bg-brand-500 text-xs text-white hover:bg-brand-600"
           >
-            Speichern
+            {t.save}
           </Button>
         </div>
       </DialogFooter>
@@ -386,6 +498,8 @@ export function ChatInterface() {
     selectDatabase,
     ready,
   } = useHydratedChatStore();
+  const locale = useAppLocale();
+  const t = copy[locale];
   const [input, setInput] = useState('');
   const [byokOpen, setByokOpen] = useState(false);
   const prevOwnerRef = useRef(ownerId);
@@ -399,14 +513,7 @@ export function ChatInterface() {
 
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [copiedWithSourcesId, setCopiedWithSourcesId] = useState<string | null>(null);
-  // `navigator` is a browser API, not React state. Reading it through an effect
-  // meant a second render on every mount; reading it during render would desync
-  // the server markup. useSyncExternalStore is the one that does neither.
-  const starters = useSyncExternalStore(
-    subscribeToNothing,
-    readBrowserStarters,
-    readServerStarters,
-  );
+  const starters = exampleQuestions[locale];
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -442,11 +549,11 @@ export function ChatInterface() {
   // state transitions are spoken. The answer itself is read on demand.
   const lastMessage = messages[messages.length - 1];
   const liveStatus = isLoading
-    ? 'Die Wissensbasis wird durchsucht.'
+    ? t.searching
     : isStreaming
-      ? 'Die Antwort wird erstellt.'
+      ? t.writing
       : lastMessage?.type === 'assistant' && !lastMessage.isStreaming
-        ? `Antwort fertig, ${getCitedSources(lastMessage.content, lastMessage.sources ?? []).length} von ${lastMessage.sources?.length ?? 0} Quellen zitiert.`
+        ? t.done(getCitedSources(lastMessage.content, lastMessage.sources ?? []).length, lastMessage.sources?.length ?? 0)
         : '';
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -454,7 +561,7 @@ export function ChatInterface() {
     const question = input.trim();
     if (!question || !selectedDatabase || isLoading || isStreaming || isOpening) return;
     if (question.length > 4_000) {
-      setError(`Eingabe zu lang (${question.length} Zeichen). Maximal 4.000 Zeichen sind zulässig.`);
+      setError(t.tooLong(question.length));
       return;
     }
 
@@ -506,7 +613,7 @@ export function ChatInterface() {
       .map((item) => `[${item.index}] [${item.source.title}](${item.source.url})`)
       .join('\n');
 
-    return `${collapseRepeatedCitations(content.trim())}\n\n### Quellen\n${sourcesList}`;
+    return `${collapseRepeatedCitations(content.trim())}\n\n### ${t.sourcesHeading}\n${sourcesList}`;
   };
 
   const handleCopyWithSources = async (message: ChatMessage) => {
@@ -524,7 +631,7 @@ export function ChatInterface() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `cracha-antwort-${message.id.slice(0, 8)}.md`;
+    link.download = `${t.exportName}-${message.id.slice(0, 8)}.md`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -560,11 +667,11 @@ export function ChatInterface() {
                 ? 'border-brand-500 bg-brand-50 text-brand-700 hover:bg-brand-100 dark:border-brand-400 dark:bg-brand-950/40 dark:text-brand-300 shadow-theme-xs'
                 : 'border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300'
             }`}
-            title={chatMode === 'verification' ? 'Content-Check aktiv (Klicken für Standard-Chat)' : 'Content-Check / Widerspruchsprüfung aktivieren'}
+            title={chatMode === 'verification' ? t.checkOn : t.checkOff}
             aria-pressed={chatMode === 'verification'}
           >
             <FileCheck className="size-3.5" />
-            <span className="hidden sm:inline">Content-Check</span>
+            <span className="hidden sm:inline">{locale === 'en' ? 'Content Check' : 'Content-Check'}</span>
             {chatMode === 'verification' && <span className="size-1.5 rounded-full bg-brand-500 animate-pulse" />}
           </Button>
           <Dialog open={byokOpen} onOpenChange={setByokOpen}>
@@ -578,10 +685,10 @@ export function ChatInterface() {
                     ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'
                     : 'border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300'
                 }`}
-                title="Eigenen Google AI Studio API-Key verwenden (BYOK)"
+                title={t.byokButton}
               >
                 <Key className="size-3.5" />
-                <span className="hidden md:inline">{byokApiKey ? (byokModel || 'Gemini BYOK') : 'API-Key'}</span>
+                <span className="hidden md:inline">{byokApiKey ? (byokModel || 'Gemini BYOK') : (locale === 'en' ? 'API key' : 'API-Key')}</span>
                 {byokApiKey && <span className="size-1.5 rounded-full bg-emerald-500" />}
               </Button>
             </DialogTrigger>
@@ -611,8 +718,8 @@ export function ChatInterface() {
               onClick={() => newConversation()}
               // Not on a phone: the header has no room left there, and the sidebar starts a new chat.
               className="hidden rounded-full text-gray-500 sm:inline-flex hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.06] dark:hover:text-gray-100"
-              aria-label="Neuer Chat"
-              title="Neuer Chat"
+              aria-label={t.newChat}
+              title={t.newChat}
             >
               <SquarePen className="size-4" />
             </Button>
@@ -625,26 +732,26 @@ export function ChatInterface() {
                   variant="ghost"
                   size="icon"
                   className="rounded-full text-gray-500 hover:bg-error-50 hover:text-error-600 dark:text-gray-400 dark:hover:bg-error-500/10"
-                  aria-label="Chat löschen"
-                  title="Chat löschen"
+                  aria-label={t.deleteChat}
+                  title={t.deleteChat}
                 >
                   <Trash2 className="size-4" />
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Chat löschen?</AlertDialogTitle>
+                  <AlertDialogTitle>{t.deleteTitle}</AlertDialogTitle>
                   <AlertDialogDescription>
-                    {`${conversationTitle ? `„${conversationTitle}“ wird` : 'Dieser Chat wird'} mit allen ${messages.length} Nachrichten endgültig gelöscht. Das lässt sich nicht rückgängig machen.`}
+                    {t.deleteText(conversationTitle, messages.length)}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel className="rounded-full">Abbrechen</AlertDialogCancel>
+                  <AlertDialogCancel className="rounded-full">{t.cancel}</AlertDialogCancel>
                   <AlertDialogAction
                     onClick={() => void clearChat()}
                     className="rounded-full bg-error-600 text-white hover:bg-error-700"
                   >
-                    Löschen
+                    {t.delete}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
@@ -663,7 +770,7 @@ export function ChatInterface() {
             {isOpening && messages.length === 0 ? (
               <div className="m-auto flex items-center gap-2 py-8 text-sm text-gray-500 dark:text-gray-400" role="status">
                 <Loader className="text-brand-500" />
-                Chat wird geladen …
+                {t.loadingChat}
               </div>
             ) : messages.length === 0 ? (
               selectedDatabase ? (
@@ -710,7 +817,7 @@ export function ChatInterface() {
                     ? message.content
                     : linkifyCitations(answerLines, messageSources, message.isStreaming ? undefined : message.metadata?.citation_anchors);
                   const metadata = !isUser && !message.isStreaming ? message.metadata : undefined;
-                  const metaParts = answerMetaParts(metadata, messageSources.length, citedSources.length);
+                  const metaParts = answerMetaParts(metadata, messageSources.length, citedSources.length, locale);
                   return (
                     <Message
                       key={message.id}
@@ -734,9 +841,9 @@ export function ChatInterface() {
                         */}
                         {isUser && (
                           <div className="mb-1.5 flex flex-wrap items-center justify-end gap-2 text-xs text-gray-400">
-                            <span className="font-medium text-gray-600 dark:text-gray-300">Du</span>
+                            <span className="font-medium text-gray-600 dark:text-gray-300">{t.you}</span>
                             <span aria-hidden="true">·</span>
-                            <time dateTime={message.timestamp.toISOString()}>{formatTime(message.timestamp)}</time>
+                            <time dateTime={message.timestamp.toISOString()}>{formatTime(message.timestamp, locale)}</time>
                           </div>
                         )}
                         <MessageContent className={message.isError ? 'rounded-2xl border border-error-200 bg-error-50 p-4 text-error-700 dark:border-error-800 dark:bg-error-500/10 dark:text-error-300' : undefined}>
@@ -746,8 +853,8 @@ export function ChatInterface() {
                             <span className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
                               <Loader className="text-brand-500" />
                               {messageSources.length > 0
-                                ? `Formuliere Antwort aus ${messageSources.length} ${messageSources.length === 1 ? 'Quelle' : 'Quellen'} …`
-                                : 'Formuliere Antwort …'}
+                                ? t.composingFrom(messageSources.length)
+                                : t.composing}
                             </span>
                           ) : (
                             <CitationSources.Provider value={{ sources: messageSources, anchors: message.isStreaming ? undefined : message.metadata?.citation_anchors, lines: answerLines.split('\n') }}>
@@ -775,10 +882,10 @@ export function ChatInterface() {
                               size="sm"
                               onClick={() => handleCopy(message)}
                               className="h-8 rounded-full px-3 text-xs text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
-                              aria-label="Antwort kopieren"
+                              aria-label={t.copyAnswer}
                             >
                               {copiedId === message.id ? <Check className="mr-1 size-3.5 text-success-600" /> : <Copy className="mr-1 size-3.5" />}
-                              {copiedId === message.id ? 'Kopiert' : 'Kopieren'}
+                              {copiedId === message.id ? t.copied : t.copy}
                             </Button>
                             {messageSources.length > 0 && (
                               <Button
@@ -787,11 +894,11 @@ export function ChatInterface() {
                                 size="sm"
                                 onClick={() => handleCopyWithSources(message)}
                                 className="h-8 rounded-full px-3 text-xs text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
-                                aria-label="Antwort mit Quellen kopieren"
-                                title="Antwort inklusive nummerierter Quellenliste als Markdown kopieren"
+                                aria-label={t.copyWithSources}
+                                title={t.copyWithSourcesTitle}
                               >
                                 {copiedWithSourcesId === message.id ? <Check className="mr-1 size-3.5 text-success-600" /> : <FileText className="mr-1 size-3.5" />}
-                                {copiedWithSourcesId === message.id ? 'Mit Quellen kopiert' : 'Mit Quellen'}
+                                {copiedWithSourcesId === message.id ? t.copiedWithSources : t.withSources}
                               </Button>
                             )}
                             <Button
@@ -800,34 +907,34 @@ export function ChatInterface() {
                               size="sm"
                               onClick={() => handleExportMarkdown(message)}
                               className="h-8 rounded-full px-3 text-xs text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
-                              aria-label="Als Markdown exportieren"
-                              title="Antwort als Markdown-Datei (.md) herunterladen"
+                              aria-label={t.exportLabel}
+                              title={t.exportTitle}
                             >
                               <Download className="mr-1 size-3.5" />
-                              Exportieren
+                              {t.exportButton}
                             </Button>
                             {metadata?.fallback && (
                               <span className="inline-flex items-center gap-1 rounded-md bg-warning-50 px-1.5 py-0.5 text-[11px] font-medium text-warning-700 dark:bg-warning-500/15 dark:text-warning-400">
                                 <AlertTriangle className="size-3" aria-hidden="true" />
-                                {fallbackNotice(metadata.fallback_reason)}
+                                {fallbackNotice(metadata.fallback_reason, locale)}
                                 {metadata.fallback_detail && (
                                   <span className="font-normal opacity-80">· Google: {metadata.fallback_detail}</span>
                                 )}
                               </span>
                             )}
-                            {substituteNotice(metadata) && (
+                            {substituteNotice(metadata, locale) && (
                               <span
                                 className="inline-flex items-center gap-1 rounded-md bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300"
                                 title={metadata?.substitute_detail ? `Google: ${metadata.substitute_detail}` : undefined}
                               >
-                                {substituteNotice(metadata)}
+                                {substituteNotice(metadata, locale)}
                               </span>
                             )}
                             <span
                               className="text-[11px] leading-5 text-gray-400 dark:text-gray-500"
                               title={metadata?.model_used}
                             >
-                              <time dateTime={message.timestamp.toISOString()}>{formatTime(message.timestamp)}</time>
+                              <time dateTime={message.timestamp.toISOString()}>{formatTime(message.timestamp, locale)}</time>
                               {metaParts.map((part) => ` · ${part}`).join('')}
                             </span>
                           </div>
@@ -862,7 +969,7 @@ export function ChatInterface() {
                 <div className="flex items-center gap-2">
                   <FileCheck className="size-4 shrink-0 text-brand-600 dark:text-brand-400" />
                   <span>
-                    <strong>Content-Check aktiv:</strong> Füge Entwürfe, Preise oder Behauptungen ein, um sie gegen deine Quellen auf Widersprüche und Aktualität zu prüfen.
+                    <strong>{t.checkActive}</strong> {t.checkHint}
                   </span>
                 </div>
                 <button
@@ -870,7 +977,7 @@ export function ChatInterface() {
                   onClick={() => setChatMode('default')}
                   className="shrink-0 text-[11px] font-medium text-brand-700 underline hover:text-brand-900 dark:text-brand-300 dark:hover:text-brand-100"
                 >
-                  Beenden
+                  {t.end}
                 </button>
               </div>
             )}
@@ -887,25 +994,25 @@ export function ChatInterface() {
                 onChange={(event) => setInput(event.target.value)}
                 placeholder={
                   !selectedDatabase
-                    ? 'Erst eine Wissensbasis wählen'
+                    ? t.pickFirst
                     : chatMode === 'verification'
-                      ? 'Text, Entwurf oder Preismodell zur Prüfung gegen die Wissensbasis einfügen …'
-                      : 'Frage etwas zu deiner Wissensbasis …'
+                      ? t.checkPlaceholder
+                      : t.askPlaceholder
                 }
                 disabled={!selectedDatabase}
-                aria-label={chatMode === 'verification' ? 'Zu prüfender Text' : 'Nachricht'}
+                aria-label={chatMode === 'verification' ? t.checkInput : t.message}
               />
               <div className="flex min-h-8 items-center justify-between gap-2">
                 <span className="min-w-0 truncate pl-2 text-xs text-gray-400 dark:text-gray-500" aria-hidden="true">
-                  {isLoading ? 'Wissensbasis wird durchsucht …' : isStreaming ? 'Antwort wird geschrieben …' : ''}
+                  {isLoading ? t.searchingShort : isStreaming ? t.writingShort : ''}
                 </span>
                 {isLoading || isStreaming ? (
                   <PromptInputStop onClick={stop} />
                 ) : (
                   <PromptInputSubmit
                     disabled={!input.trim() || !selectedDatabase || isOpening}
-                    aria-label="Nachricht senden"
-                    title="Nachricht senden"
+                    aria-label={t.send}
+                    title={t.send}
                   />
                 )}
               </div>

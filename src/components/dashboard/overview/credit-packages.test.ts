@@ -55,7 +55,7 @@ describe('requestCheckout', () => {
     vi.stubGlobal('fetch', fetch)
     await expect(requestCheckout('M')).resolves.toBe('https://checkout.stripe.com/x')
     expect(fetch).toHaveBeenCalledWith('/api/stripe/checkout', expect.objectContaining({ method: 'POST' }))
-    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ package: 'M', acceptTerms: true })
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ package: 'M', acceptTerms: true, locale: 'de' })
   })
 
   it('surfaces the server error instead of redirecting', async () => {

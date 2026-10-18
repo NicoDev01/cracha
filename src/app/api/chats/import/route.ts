@@ -1,3 +1,5 @@
+import { localeFromRequest } from '@/i18n/request-locale'
+import { tr } from '@/i18n/server-messages'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 
@@ -41,20 +43,21 @@ const legacyConversation = z.object({
  * knowledge base the caller still owns; importing it twice changes nothing.
  */
 export async function POST(request: NextRequest) {
+  const locale = localeFromRequest(request)
   const user = await getAuthenticatedUser()
-  if (!user) return NextResponse.json({ success: false, error: 'Authentifizierung erforderlich.' }, { status: 401 })
+  if (!user) return NextResponse.json({ success: false, error: tr(locale, 'Authentifizierung erforderlich.') }, { status: 401 })
 
   const text = await request.text().catch(() => '')
-  if (text.length > MAX_BODY) return NextResponse.json({ success: false, error: 'Chat ist zu groß.' }, { status: 413 })
+  if (text.length > MAX_BODY) return NextResponse.json({ success: false, error: tr(locale, 'Chat ist zu groß.') }, { status: 413 })
   let json: unknown = null
   try { json = JSON.parse(text) } catch { /* Refused below. */ }
   const parsed = legacyConversation.safeParse(json)
-  if (!parsed.success) return NextResponse.json({ success: false, error: 'Chat ist ungültig.' }, { status: 400 })
+  if (!parsed.success) return NextResponse.json({ success: false, error: tr(locale, 'Chat ist ungültig.') }, { status: 400 })
   const chat = parsed.data
 
   try {
     if (!(await admitRequest(user.id, 'chat_import', 120, 3600))) {
-      return NextResponse.json({ success: false, error: 'Zu viele Anfragen.' }, { status: 429, headers: { 'Retry-After': '3600' } })
+      return NextResponse.json({ success: false, error: tr(locale, 'Zu viele Anfragen.') }, { status: 429, headers: { 'Retry-After': '3600' } })
     }
     // A conversation about a knowledge base that is gone has nothing to be filed under.
     if (!(await getOwnedDatabase(chat.databaseId, user.id))) return NextResponse.json({ success: true, imported: false })
@@ -80,10 +83,10 @@ export async function POST(request: NextRequest) {
     const title = cleanTitle(chat.title) || provisionalTitle(firstQuestion)
 
     const result = await importConversation({ userId: user.id, conversationId: chat.id, databaseId: chat.databaseId, title, messages })
-    if (!result.ok) return NextResponse.json({ success: false, error: 'Chat nicht gefunden.' }, { status: 404 })
+    if (!result.ok) return NextResponse.json({ success: false, error: tr(locale, 'Chat nicht gefunden.') }, { status: 404 })
     return NextResponse.json({ success: true, imported: result.imported })
   } catch (error) {
     console.error(JSON.stringify({ event: 'chat_history_import_failed', reason: String(error) }))
-    return NextResponse.json({ success: false, error: 'Der Chatverlauf ist gerade nicht erreichbar.' }, { status: 503 })
+    return NextResponse.json({ success: false, error: tr(locale, 'Der Chatverlauf ist gerade nicht erreichbar.') }, { status: 503 })
   }
 }

@@ -6,11 +6,13 @@ async function check() {
   const response = await fetch(new URL('/api/version', origin), { cache: 'no-store', signal: AbortSignal.timeout(15000) });
   const version = await response.json();
   if (!response.ok || !version.release || (expected && version.release !== expected)) throw new Error('Wrong release is serving the public domain');
-  for (const path of ['/', '/beispiele', '/register', '/widerrufsbelehrung', '/nutzungsbedingungen']) {
+  for (const path of ['/', '/beispiele', '/register', '/widerrufsbelehrung', '/nutzungsbedingungen', '/en', '/en/pricing']) {
     const response = await fetch(new URL(path, origin), { cache: 'no-store', signal: AbortSignal.timeout(15000) });
     const html = await response.text();
     if (!response.ok || !html.includes('<title>')) throw new Error(`Page unavailable: ${path}`);
     if (path === '/' && (!html.includes('Frag nicht das Internet') || !html.includes('kein Abo'))) throw new Error('Landing page does not show the current headline and pricing FAQ');
+    if (path === '/en' && (!html.includes('<html lang="en"') || !html.includes('Ask ') || !html.includes('no subscription'))) throw new Error('English landing page is missing or not in English');
+    if (path === '/' && !/hreflang="en"/i.test(html)) throw new Error('Landing page does not link its English version (hreflang)');
   }
   // A router prefetch asks for one segment. Answered with the whole page
   // payload instead, the router rejects it and asks again, forever — which is

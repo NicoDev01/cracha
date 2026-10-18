@@ -1,7 +1,51 @@
-import Link from "next/link";
+"use client";
+
 import Image from "next/image";
 
+import { bilingual } from "@/i18n/copy";
+import { Link, useAppLocale } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
+
+const copy = bilingual(
+  {
+    home: "Startseite",
+    product: [
+      { title: "Nutzung", href: "/#how-to-use" },
+      { title: "Beispiele", href: "/beispiele" },
+      { title: "Warum CraCha?", href: "/#why-cracha" },
+      { title: "Preise", href: "/preise" },
+      { title: "Häufige Fragen", href: "/#fragen" },
+      { title: "Anleitung", href: "/website-mit-ki-durchsuchen" },
+      { title: "Blog", href: "/blog" },
+    ],
+    legal: "Rechtliches",
+    legalLinks: [
+      { title: "Impressum", href: "/impressum" },
+      { title: "Datenschutz", href: "/datenschutz" },
+      { title: "Nutzungsbedingungen", href: "/nutzungsbedingungen" },
+      { title: "Widerrufsbelehrung", href: "/widerrufsbelehrung" },
+    ],
+  },
+  {
+    home: "Home",
+    product: [
+      { title: "How it works", href: "/#how-to-use" },
+      { title: "Examples", href: "/beispiele" },
+      { title: "Why CraCha?", href: "/#why-cracha" },
+      { title: "Pricing", href: "/preise" },
+      { title: "FAQ", href: "/#fragen" },
+      { title: "Guide", href: "/website-mit-ki-durchsuchen" },
+      { title: "Blog", href: "/blog" },
+    ],
+    legal: "Legal",
+    legalLinks: [
+      { title: "Legal notice", href: "/impressum" },
+      { title: "Privacy policy", href: "/datenschutz" },
+      { title: "Terms of use", href: "/nutzungsbedingungen" },
+      { title: "Right of withdrawal", href: "/widerrufsbelehrung" },
+    ],
+  },
+);
 
 /**
  * The section links are written as "/#features" rather than "#features". This
@@ -21,6 +65,7 @@ import { cn } from "@/lib/utils";
  * here.
  */
 export function SiteFooter({ className }: React.HTMLAttributes<HTMLElement>) {
+  const t = copy[useAppLocale()];
   return (
     <footer className={cn("border-t bg-background", className)}>
       <div className="mx-auto grid w-full max-w-6xl grid-cols-2 gap-6 px-4 py-14 sm:px-6 md:grid-cols-4 lg:px-8">
@@ -43,68 +88,27 @@ export function SiteFooter({ className }: React.HTMLAttributes<HTMLElement>) {
           </Link>
         </div>
         <div>
-          <Link href="/" className="text-sm font-medium text-foreground transition-colors hover:text-foreground">Startseite</Link>
+          <Link href="/" className="text-sm font-medium text-foreground transition-colors hover:text-foreground">{t.home}</Link>
           <ul className="mt-4 list-none space-y-3">
-            <li>
-              <Link href="/#how-to-use" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-                Nutzung
-              </Link>
-            </li>
-            <li>
-              <Link href="/beispiele" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-                Beispiele
-              </Link>
-            </li>
-            <li>
-              <Link href="/#why-cracha" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-                Warum CraCha?
-              </Link>
-            </li>
-            <li>
-              <Link href="/preise" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-                Preise
-              </Link>
-            </li>
-            <li>
-              <Link href="/#fragen" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-                Häufige Fragen
-              </Link>
-            </li>
-            <li>
-              <Link href="/website-mit-ki-durchsuchen" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-                Anleitung
-              </Link>
-            </li>
-            <li>
-              <Link href="/blog" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-                Blog
-              </Link>
-            </li>
+            {t.product.map((item) => (
+              <li key={item.href}>
+                <Link href={item.href} className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+                  {item.title}
+                </Link>
+              </li>
+            ))}
           </ul>
         </div>
         <div>
-          <span className="text-sm font-medium text-foreground">Rechtliches</span>
+          <span className="text-sm font-medium text-foreground">{t.legal}</span>
           <ul className="mt-4 list-none space-y-3">
-            <li>
-              <Link href="/impressum" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-                Impressum
-              </Link>
-            </li>
-            <li>
-              <Link href="/datenschutz" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-                Datenschutz
-              </Link>
-            </li>
-            <li>
-              <Link href="/nutzungsbedingungen" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-                Nutzungsbedingungen
-              </Link>
-            </li>
-            <li>
-              <Link href="/widerrufsbelehrung" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-                Widerrufsbelehrung
-              </Link>
-            </li>
+            {t.legalLinks.map((item) => (
+              <li key={item.href}>
+                <Link href={item.href} className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+                  {item.title}
+                </Link>
+              </li>
+            ))}
           </ul>
         </div>
       </div>

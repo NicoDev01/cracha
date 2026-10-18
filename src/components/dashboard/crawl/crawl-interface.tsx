@@ -6,6 +6,7 @@ import { Activity, Globe, History, Plus } from "lucide-react"
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useCrawlStore } from "@/stores/crawl-store"
+import { useAppLocale } from "@/i18n/navigation"
 import { CrawlConfigForm } from "./crawl-config-form"
 import { CrawlJobsList } from "./crawl-jobs-list"
 import { CrawlMonitor } from "./crawl-monitor"
@@ -32,6 +33,7 @@ function CrawlConfigWithParams({ onStarted }: { onStarted: () => void }) {
 }
 
 export function CrawlInterface() {
+  const en = useAppLocale() === "en"
   const { isRunning, resumeCurrentCrawl } = useCrawlStore()
   // Coming back while a crawl runs means coming back to watch it, not to a
   // form that is locked until it ends.
@@ -64,18 +66,18 @@ export function CrawlInterface() {
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="h-9 rounded-xl bg-gray-100 p-1 dark:bg-gray-800">
-            <TabsTrigger value="new" className="rounded-lg px-3" aria-label="Neuer Crawl">
+            <TabsTrigger value="new" className="rounded-lg px-3" aria-label={en ? 'New crawl' : 'Neuer Crawl'}>
               <Plus className="size-4" />
-              <span className="hidden sm:inline">Neu</span>
+              <span className="hidden sm:inline">{en ? 'New' : 'Neu'}</span>
             </TabsTrigger>
             <TabsTrigger value="status" className="relative rounded-lg px-3" aria-label="Status">
               <Activity className="size-4" />
               <span className="hidden sm:inline">Status</span>
               {isRunning && <span className="absolute right-1 top-1 size-1.5 animate-pulse rounded-full bg-brand-500" />}
             </TabsTrigger>
-            <TabsTrigger value="history" className="rounded-lg px-3" aria-label="Verlauf">
+            <TabsTrigger value="history" className="rounded-lg px-3" aria-label={en ? 'History' : 'Verlauf'}>
               <History className="size-4" />
-              <span className="hidden sm:inline">Verlauf</span>
+              <span className="hidden sm:inline">{en ? 'History' : 'Verlauf'}</span>
             </TabsTrigger>
           </TabsList>
         </Tabs>

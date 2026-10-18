@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { useInternalPathname } from "@/i18n/navigation";
 import { NavBar } from "@/components/landing/layout/navbar";
 import { SiteFooter } from "@/components/landing/layout/site-footer";
 import { NavMobile } from "@/components/landing/layout/mobile-nav";
@@ -10,7 +10,7 @@ interface ConditionalLayoutProps {
 }
 
 export function ConditionalLayout({ children }: ConditionalLayoutProps) {
-  const pathname = usePathname();
+  const pathname = useInternalPathname();
   const isDashboard = pathname?.startsWith("/dashboard");
   const isHome = pathname === "/";
 

@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import Link from 'next/link'
+import { useSearchParams } from "next/navigation";
+import { Link, useAppLocale, useRouter } from "@/i18n/navigation";
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -10,7 +10,57 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { createClient } from '@/lib/supabase/client'
 import { Eye, EyeOff, Lock, CheckCircle, AlertCircle, Loader2, Shield } from 'lucide-react' // Shield available for future use
 
+const copy = {
+  de: {
+    tooShort: 'Das Passwort muss mindestens 6 Zeichen lang sein.',
+    mismatch: 'Die Passwörter stimmen nicht überein.',
+    failed: 'Fehler beim Aktualisieren des Passworts',
+    preparing: 'Bereite Passwort-Reset vor...',
+    moment: 'Einen Moment bitte',
+    reload: 'Seite neu laden',
+    doneTitle: 'Passwort erfolgreich geändert',
+    doneSubtitle: 'Dein Passwort wurde erfolgreich aktualisiert',
+    redirecting: 'Du wirst automatisch zur Anmeldung weitergeleitet...',
+    signIn: 'Jetzt anmelden',
+    title: 'Neues Passwort festlegen',
+    subtitle: 'Wähle ein sicheres neues Passwort für deinen Account',
+    newPassword: 'Neues Passwort',
+    newPlaceholder: 'Mindestens 6 Zeichen',
+    confirm: 'Passwort bestätigen',
+    confirmPlaceholder: 'Passwort wiederholen',
+    hidePassword: 'Passwort verbergen',
+    showPassword: 'Passwort anzeigen',
+    updating: 'Passwort wird aktualisiert...',
+    update: 'Passwort aktualisieren',
+    back: '← Zurück zur Anmeldung',
+  },
+  en: {
+    tooShort: 'The password must be at least 6 characters long.',
+    mismatch: 'The passwords do not match.',
+    failed: 'Could not update the password',
+    preparing: 'Preparing password reset...',
+    moment: 'One moment please',
+    reload: 'Reload page',
+    doneTitle: 'Password changed',
+    doneSubtitle: 'Your password has been updated',
+    redirecting: 'You’ll be taken to the sign-in page automatically...',
+    signIn: 'Sign in now',
+    title: 'Set a new password',
+    subtitle: 'Choose a secure new password for your account',
+    newPassword: 'New password',
+    newPlaceholder: 'At least 6 characters',
+    confirm: 'Confirm password',
+    confirmPlaceholder: 'Repeat password',
+    hidePassword: 'Hide password',
+    showPassword: 'Show password',
+    updating: 'Updating password...',
+    update: 'Update password',
+    back: '← Back to sign-in',
+  },
+} as const
+
 export function NewPasswordForm() {
+  const t = copy[useAppLocale()]
   const router = useRouter()
   const searchParams = useSearchParams()
   const _searchParamsValue = searchParams // Available for future parameter handling
@@ -113,12 +163,12 @@ export function NewPasswordForm() {
 
     // Validation
     if (password.length < 6) {
-      setError('Das Passwort muss mindestens 6 Zeichen lang sein.')
+      setError(t.tooShort)
       return
     }
 
     if (password !== confirmPassword) {
-      setError('Die Passwörter stimmen nicht überein.')
+      setError(t.mismatch)
       return
     }
 
@@ -144,7 +194,7 @@ export function NewPasswordForm() {
 
     } catch (error) {
       console.error('Password update error:', error)
-      setError(error instanceof Error ? error.message : 'Fehler beim Aktualisieren des Passworts')
+      setError(error instanceof Error ? error.message : t.failed)
     } finally {
       setIsLoading(false)
     }
@@ -157,14 +207,14 @@ export function NewPasswordForm() {
         <CardContent className="flex items-center justify-center py-12">
           <div className="text-center">
             <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-blue-600" />
-            <p className="text-gray-600 mb-4">Bereite Passwort-Reset vor...</p>
-            <p className="text-sm text-gray-500 mb-6">Einen Moment bitte</p>
+            <p className="text-gray-600 mb-4">{t.preparing}</p>
+            <p className="text-sm text-gray-500 mb-6">{t.moment}</p>
             <Button 
               onClick={() => window.location.reload()}
               variant="outline"
               className="text-sm"
             >
-              Seite neu laden
+              {t.reload}
             </Button>
           </div>
         </CardContent>
@@ -181,23 +231,23 @@ export function NewPasswordForm() {
             <CheckCircle className="h-8 w-8 text-green-600" />
           </div>
           <CardTitle className="text-2xl font-bold text-gray-900">
-            Passwort erfolgreich geändert
+            {t.doneTitle}
           </CardTitle>
           <CardDescription className="text-gray-600">
-            Dein Passwort wurde erfolgreich aktualisiert
+            {t.doneSubtitle}
           </CardDescription>
         </CardHeader>
         
         <CardContent className="space-y-6">
           <div className="bg-green-50 border border-green-200 rounded-lg p-4">
             <p className="text-sm text-green-700">
-              Du wirst automatisch zur Anmeldung weitergeleitet...
+              {t.redirecting}
             </p>
           </div>
           
           <Link href="/login">
             <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white">
-              Jetzt anmelden
+              {t.signIn}
             </Button>
           </Link>
         </CardContent>
@@ -209,10 +259,10 @@ export function NewPasswordForm() {
     <Card className="border-0 shadow-2xl bg-white/80 backdrop-blur-xl">
       <CardHeader className="text-center pb-6">
         <CardTitle className="text-2xl font-bold text-gray-900">
-          Neues Passwort festlegen
+          {t.title}
         </CardTitle>
         <CardDescription className="text-gray-600">
-          Wähle ein sicheres neues Passwort für deinen Account
+          {t.subtitle}
         </CardDescription>
       </CardHeader>
       
@@ -229,14 +279,14 @@ export function NewPasswordForm() {
           {/* New Password Field */}
           <div className="space-y-2">
             <Label htmlFor="password" className="text-gray-700 font-medium">
-              Neues Passwort
+              {t.newPassword}
             </Label>
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
                 id="password"
                 type={showPassword ? 'text' : 'password'}
-                placeholder="Mindestens 6 Zeichen"
+                placeholder={t.newPlaceholder}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="pl-10 pr-10 h-12 border-gray-300 focus:border-blue-500 focus:ring-blue-500 text-base"
@@ -246,6 +296,7 @@ export function NewPasswordForm() {
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
+                aria-label={showPassword ? t.hidePassword : t.showPassword}
                 className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
               >
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -256,14 +307,14 @@ export function NewPasswordForm() {
           {/* Confirm Password Field */}
           <div className="space-y-2">
             <Label htmlFor="confirmPassword" className="text-gray-700 font-medium">
-              Passwort bestätigen
+              {t.confirm}
             </Label>
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
                 id="confirmPassword"
                 type={showConfirmPassword ? 'text' : 'password'}
-                placeholder="Passwort wiederholen"
+                placeholder={t.confirmPlaceholder}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className="pl-10 pr-10 h-12 border-gray-300 focus:border-blue-500 focus:ring-blue-500 text-base"
@@ -273,6 +324,7 @@ export function NewPasswordForm() {
               <button
                 type="button"
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                aria-label={showConfirmPassword ? t.hidePassword : t.showPassword}
                 className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
               >
                 {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -289,10 +341,10 @@ export function NewPasswordForm() {
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Passwort wird aktualisiert...
+                {t.updating}
               </>
             ) : (
-              'Passwort aktualisieren'
+              t.update
             )}
           </Button>
         </form>
@@ -303,7 +355,7 @@ export function NewPasswordForm() {
             href="/login" 
             className="text-blue-600 hover:text-blue-700 font-semibold hover:underline transition-colors"
           >
-            ← Zurück zur Anmeldung
+            {t.back}
           </Link>
         </div>
       </CardContent>

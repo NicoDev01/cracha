@@ -3,6 +3,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { apiFetch } from '@/lib/api/request'
+import { pick } from '@/i18n/client-locale'
 
 export type CrawlStatus =
   | 'pending'
@@ -159,7 +160,13 @@ interface CrawlState {
 }
 
 const activeStatuses = new Set<CrawlStatus>(['pending', 'queued', 'running', 'processing'])
-const legacyIndexingError = 'Die frühere Indexierung wurde nicht vollständig bestätigt. Bitte starte den Crawl erneut.'
+const LEGACY_INDEXING_ERRORS = {
+  de: 'Die frühere Indexierung wurde nicht vollständig bestätigt. Bitte starte den Crawl erneut.',
+  en: 'The earlier indexing was not fully confirmed. Please start the crawl again.',
+} as const
+const legacyIndexingError = () => pick(LEGACY_INDEXING_ERRORS.de, LEGACY_INDEXING_ERRORS.en)
+// The stored job keeps whichever language it was written in.
+const isLegacyIndexingError = (message?: string) => Object.values(LEGACY_INDEXING_ERRORS).some((text) => text === message)
 let pollTimer: ReturnType<typeof setTimeout> | null = null
 let polledRemoteJobId: string | null = null
 
@@ -227,7 +234,7 @@ function migrateJob(value: unknown): CrawlJob | null {
     updated_at: job.updated_at ?? job.created_at,
     completed_at: job.completed_at,
     error: incompleteLegacyJob
-      ? legacyIndexingError
+      ? legacyIndexingError()
       : job.error,
   }
 }
@@ -240,7 +247,7 @@ export const useCrawlStore = create<CrawlState>()(
         job: Pick<CrawlJob, 'tenant_id' | 'name' | 'url' | 'type' | 'page_limit'>,
         request: () => Promise<Response>,
       ) => {
-        if (get().isRunning) throw new Error('Es läuft bereits ein Crawl.')
+        if (get().isRunning) throw new Error(pick('Es läuft bereits ein Crawl.', 'A crawl is already running.'))
 
         stopPolling()
         const now = new Date().toISOString()
@@ -271,7 +278,7 @@ export const useCrawlStore = create<CrawlState>()(
           const response = await request()
           const result = (await response.json().catch(() => ({}))) as CrawlApiResponse
           if (!response.ok || !result.success || !result.job_id) {
-            throw new Error(result.error || `Crawl konnte nicht gestartet werden (${response.status}).`)
+            throw new Error(result.error || pick(`Crawl konnte nicht gestartet werden (${response.status}).`, `The crawl could not be started (${response.status}).`))
           }
 
           const queuedJob: CrawlJob = {
@@ -288,13 +295,13 @@ export const useCrawlStore = create<CrawlState>()(
           set((state) => ({
             currentJob: queuedJob,
             quotaNotice: capped
-              ? `Dein Guthaben reicht für ${result.page_limit} der ${result.requested_page_limit} angefragten Seiten. Der Crawl läuft mit diesem Limit — was er nicht braucht, bekommst du zurück.`
+              ? pick(`Dein Guthaben reicht für ${result.page_limit} der ${result.requested_page_limit} angefragten Seiten. Der Crawl läuft mit diesem Limit — was er nicht braucht, bekommst du zurück.`, `Your balance covers ${result.page_limit} of the ${result.requested_page_limit} pages requested. The crawl runs with this limit — whatever it doesn’t need, you get back.`)
               : null,
             jobs: replaceJob(state.jobs, queuedJob),
           }))
           get().pollJobStatus(localJobId, result.job_id)
         } catch (error) {
-          const message = error instanceof Error ? error.message : 'Crawl konnte nicht gestartet werden.'
+          const message = error instanceof Error ? error.message : pick('Crawl konnte nicht gestartet werden.', 'The crawl could not be started.')
           const failedJob: CrawlJob = {
             ...newJob,
             status: 'failed',
@@ -339,7 +346,7 @@ export const useCrawlStore = create<CrawlState>()(
 
         retryCrawl: async () => {
           const job = get().currentJob
-          if (!job?.tenant_id) throw new Error('Diese Wissensbasis kann nicht erneut eingelesen werden.')
+          if (!job?.tenant_id) throw new Error(pick('Diese Wissensbasis kann nicht erneut eingelesen werden.', 'This knowledge base can’t be read again.'))
           // The re-crawl route reuses the settings the knowledge base was built
           // with, so a retry is the same crawl again, not a crawl with defaults.
           await launch(
@@ -365,7 +372,7 @@ export const useCrawlStore = create<CrawlState>()(
               const response = await apiFetch(`/api/admin/crawl-queue/status/${remoteJobId}`, { signal: AbortSignal.timeout(15_000) })
               const result = (await response.json().catch(() => ({}))) as CrawlStatusResponse
               if (polledRemoteJobId !== remoteJobId) return
-              if (!response.ok) throw new Error(result.error || `Statusabfrage fehlgeschlagen (${response.status}).`)
+              if (!response.ok) throw new Error(result.error || pick(`Statusabfrage fehlgeschlagen (${response.status}).`, `Status request failed (${response.status}).`))
 
               const current = get().jobs.find((job) => job.id === localJobId) ?? get().currentJob
               if (!current) {
@@ -412,7 +419,7 @@ export const useCrawlStore = create<CrawlState>()(
               }
             } catch (error) {
               if (polledRemoteJobId === remoteJobId) {
-                set({ statusError: error instanceof Error ? error.message : 'Status konnte nicht aktualisiert werden.' })
+                set({ statusError: error instanceof Error ? error.message : pick('Status konnte nicht aktualisiert werden.', 'Status could not be updated.') })
               }
             }
 
@@ -424,7 +431,7 @@ export const useCrawlStore = create<CrawlState>()(
 
         resumeCurrentCrawl: () => {
           const job = get().currentJob
-          if (job?.status === 'failed' && job.error === legacyIndexingError) {
+          if (job?.status === 'failed' && isLegacyIndexingError(job.error)) {
             void (async () => {
               try {
                 const response = await apiFetch('/api/databases')
@@ -485,7 +492,7 @@ export const useCrawlStore = create<CrawlState>()(
           })
           const result = (await response.json().catch(() => ({}))) as CrawlApiResponse
           if (!response.ok || !result.success) {
-            const message = result.error || `Crawl konnte nicht abgebrochen werden (${response.status}).`
+            const message = result.error || pick(`Crawl konnte nicht abgebrochen werden (${response.status}).`, `The crawl could not be cancelled (${response.status}).`)
             set({ statusError: message })
             throw new Error(message)
           }

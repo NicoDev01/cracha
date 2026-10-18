@@ -1,6 +1,9 @@
 import { Check } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import { intlLocale } from '@/i18n/copy'
+import { useAppLocale } from '@/i18n/navigation'
+import type { Locale } from '@/i18n/routing'
 
 export interface PackageOption {
   id: string
@@ -9,11 +12,8 @@ export interface PackageOption {
   label: string
 }
 
-const euro = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' })
-const number = new Intl.NumberFormat('de-DE')
-
-export function formatEuro(cents: number): string {
-  return euro.format(cents / 100)
+export function formatEuro(cents: number, locale: Locale = 'de'): string {
+  return new Intl.NumberFormat(intlLocale(locale), { style: 'currency', currency: 'EUR' }).format(cents / 100)
 }
 
 /** Whole answers a balance still pays for; never negative. */
@@ -30,14 +30,14 @@ export function isLowBalance(balance: number, costPerAnswer: number): boolean {
  * Asks the server for a Stripe Checkout URL for one package. The terms were
  * accepted in the dialog before this can be called, hence `acceptTerms: true`.
  */
-export async function requestCheckout(packageId: string): Promise<string> {
+export async function requestCheckout(packageId: string, locale: Locale = 'de'): Promise<string> {
   const response = await fetch('/api/stripe/checkout', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ package: packageId, acceptTerms: true }),
+    body: JSON.stringify({ package: packageId, acceptTerms: true, locale }),
   })
   const result = await response.json() as { url?: string; error?: string }
-  if (!response.ok || !result.url) throw new Error(result.error ?? 'Stripe antwortete nicht.')
+  if (!response.ok || !result.url) throw new Error(result.error ?? (locale === 'en' ? 'Stripe did not respond.' : 'Stripe antwortete nicht.'))
   return result.url
 }
 
@@ -59,8 +59,10 @@ export function PackageOptions({
   costs: { page: number; chatMessage: number }
   disabled?: boolean
 }) {
+  const locale = useAppLocale()
+  const number = new Intl.NumberFormat(intlLocale(locale))
   return (
-    <div role="radiogroup" aria-label="Paket wählen" className="grid gap-2">
+    <div role="radiogroup" aria-label={locale === 'en' ? 'Choose a pack' : 'Paket wählen'} className="grid gap-2">
       {packages.map((pack) => {
         const checked = pack.id === selected
         return (
@@ -93,11 +95,13 @@ export function PackageOptions({
                 <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">{pack.label}</span>
               </span>
               <span className="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">
-                {`≈ ${number.format(questionsFor(pack.credits, costs.chatMessage))} Fragen oder ${number.format(Math.floor(pack.credits / Math.max(1, costs.page)))} Seiten`}
+                {locale === 'en'
+                  ? `≈ ${number.format(questionsFor(pack.credits, costs.chatMessage))} questions or ${number.format(Math.floor(pack.credits / Math.max(1, costs.page)))} pages`
+                  : `≈ ${number.format(questionsFor(pack.credits, costs.chatMessage))} Fragen oder ${number.format(Math.floor(pack.credits / Math.max(1, costs.page)))} Seiten`}
               </span>
             </span>
             <span className="shrink-0 text-sm font-semibold tabular-nums text-gray-900 dark:text-white">
-              {formatEuro(pack.priceCents)}
+              {formatEuro(pack.priceCents, locale)}
             </span>
           </button>
         )

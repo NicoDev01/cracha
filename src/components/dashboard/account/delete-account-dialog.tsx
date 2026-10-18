@@ -16,11 +16,59 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ACCOUNT_DELETION_PHRASE, isAccountDeletionConfirmed } from '@/lib/account-deletion'
+import { ACCOUNT_DELETION_PHRASES, isAccountDeletionConfirmed } from '@/lib/account-deletion'
+import { useAppLocale } from '@/i18n/navigation'
+
+const copy = {
+  de: {
+    failed: 'Kontolöschung fehlgeschlagen. Dein Konto wurde nicht gelöscht. Bitte versuche es erneut.',
+    offline: 'Keine Verbindung. Dein Konto wurde möglicherweise nicht gelöscht. Bitte versuche es erneut.',
+    trigger: 'Konto löschen',
+    title: 'Konto endgültig löschen?',
+    intro: 'Diese Aktion kann nicht rückgängig gemacht werden. Dauerhaft gelöscht werden:',
+    items: [
+      'alle deine Wissensbasen mit ihren indexierten Inhalten',
+      'laufende Crawls, die dafür abgebrochen werden',
+      'alle deine Chats',
+      'dein Crawl-Verlauf in diesem Browser',
+      'dein restliches Guthaben, auch gekaufte Credits – ohne Erstattung',
+      'dein Zugang mit E-Mail-Adresse und Name',
+    ],
+    records: 'Zahlungsbelege bewahren wir wegen gesetzlicher Aufbewahrungspflichten auf, aber ohne Verbindung zu deinem Konto.',
+    typeBefore: 'Gib zur Bestätigung',
+    typeAfter: 'ein',
+    cancel: 'Abbrechen',
+    deleting: 'Konto wird gelöscht…',
+    confirm: 'Konto endgültig löschen',
+  },
+  en: {
+    failed: 'Account deletion failed. Your account was not deleted. Please try again.',
+    offline: 'No connection. Your account may not have been deleted. Please try again.',
+    trigger: 'Delete account',
+    title: 'Delete your account permanently?',
+    intro: 'This action can’t be undone. The following will be deleted permanently:',
+    items: [
+      'all your knowledge bases with their indexed content',
+      'running crawls, which will be cancelled',
+      'all your chats',
+      'your crawl history in this browser',
+      'your remaining balance, including purchased credits – without refund',
+      'your access with email address and name',
+    ],
+    records: 'We keep payment records because of statutory retention obligations, but without any link to your account.',
+    typeBefore: 'Type',
+    typeAfter: 'to confirm',
+    cancel: 'Cancel',
+    deleting: 'Deleting account…',
+    confirm: 'Delete account permanently',
+  },
+} as const
 
 const DANGER = 'bg-error-600 text-white hover:bg-error-700'
 
 export function DeleteAccountDialog({ onDeleted }: { onDeleted: () => Promise<void> | void }) {
+  const locale = useAppLocale()
+  const t = copy[locale]
   const [open, setOpen] = useState(false)
   const [phrase, setPhrase] = useState('')
   const [busy, setBusy] = useState(false)
@@ -48,13 +96,13 @@ export function DeleteAccountDialog({ onDeleted }: { onDeleted: () => Promise<vo
       })
       const body = (await response.json().catch(() => null)) as { success?: boolean; error?: string } | null
       if (!response.ok || !body?.success) {
-        setError(body?.error ?? 'Kontolöschung fehlgeschlagen. Dein Konto wurde nicht gelöscht. Bitte versuche es erneut.')
+        setError(body?.error ?? t.failed)
         setBusy(false)
         return
       }
       await onDeleted()
     } catch {
-      setError('Keine Verbindung. Dein Konto wurde möglicherweise nicht gelöscht. Bitte versuche es erneut.')
+      setError(t.offline)
       setBusy(false)
     }
   }
@@ -62,32 +110,24 @@ export function DeleteAccountDialog({ onDeleted }: { onDeleted: () => Promise<vo
   return (
     <AlertDialog open={open} onOpenChange={changeOpen}>
       <AlertDialogTrigger asChild>
-        <Button type="button" className={DANGER}>Konto löschen</Button>
+        <Button type="button" className={DANGER}>{t.trigger}</Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Konto endgültig löschen?</AlertDialogTitle>
+          <AlertDialogTitle>{t.title}</AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div className="space-y-3 text-left">
-              <p>Diese Aktion kann nicht rückgängig gemacht werden. Dauerhaft gelöscht werden:</p>
+              <p>{t.intro}</p>
               <ul className="list-disc space-y-1 pl-5">
-                <li>alle deine Wissensbasen mit ihren indexierten Inhalten</li>
-                <li>laufende Crawls, die dafür abgebrochen werden</li>
-                <li>alle deine Chats</li>
-                <li>dein Crawl-Verlauf in diesem Browser</li>
-                <li>dein restliches Guthaben, auch gekaufte Credits – ohne Erstattung</li>
-                <li>dein Zugang mit E-Mail-Adresse und Name</li>
+                {t.items.map((item) => <li key={item}>{item}</li>)}
               </ul>
-              <p>
-                Zahlungsbelege bewahren wir wegen gesetzlicher Aufbewahrungspflichten auf, aber ohne
-                Verbindung zu deinem Konto.
-              </p>
+              <p>{t.records}</p>
             </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <div className="space-y-2">
           <label htmlFor="delete-account-confirm" className="block text-sm font-medium">
-            Gib zur Bestätigung <strong>{ACCOUNT_DELETION_PHRASE}</strong> ein
+            {t.typeBefore} <strong>{ACCOUNT_DELETION_PHRASES[locale]}</strong> {t.typeAfter}
           </label>
           <Input
             id="delete-account-confirm"
@@ -101,7 +141,7 @@ export function DeleteAccountDialog({ onDeleted }: { onDeleted: () => Promise<vo
           {error && <p role="alert" className="text-sm text-error-600">{error}</p>}
         </div>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={busy}>Abbrechen</AlertDialogCancel>
+          <AlertDialogCancel disabled={busy}>{t.cancel}</AlertDialogCancel>
           <AlertDialogAction
             onClick={(event) => {
               // Stays open while the request runs and when it fails.
@@ -112,7 +152,7 @@ export function DeleteAccountDialog({ onDeleted }: { onDeleted: () => Promise<vo
             className={DANGER}
           >
             {busy && <Loader2 className="mr-2 size-4 animate-spin" />}
-            {busy ? 'Konto wird gelöscht…' : 'Konto endgültig löschen'}
+            {busy ? t.deleting : t.confirm}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

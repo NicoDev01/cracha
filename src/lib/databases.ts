@@ -1,14 +1,25 @@
 import type { Database } from '@/types/chat'
+import { intlLocale } from '@/i18n/copy'
+import type { Locale } from '@/i18n/routing'
 
 export const STATUS_LABELS = {
-  active: 'Aktiv',
-  crawling: 'Wird eingelesen',
-  pending: 'Ausstehend',
-  failed: 'Fehler',
-  inactive: 'Inaktiv',
+  de: {
+    active: 'Aktiv',
+    crawling: 'Wird eingelesen',
+    pending: 'Ausstehend',
+    failed: 'Fehler',
+    inactive: 'Inaktiv',
+  },
+  en: {
+    active: 'Active',
+    crawling: 'Reading',
+    pending: 'Pending',
+    failed: 'Error',
+    inactive: 'Inactive',
+  },
 } as const
 
-export type DatabaseStatus = keyof typeof STATUS_LABELS
+export type DatabaseStatus = keyof (typeof STATUS_LABELS)['de']
 
 /**
  * The registry writes `pending | crawling | active | failed`, but older records
@@ -17,7 +28,7 @@ export type DatabaseStatus = keyof typeof STATUS_LABELS
  */
 export function databaseStatus(database: Pick<Database, 'status'>): DatabaseStatus {
   if (database.status === 'error') return 'failed'
-  return database.status && database.status in STATUS_LABELS
+  return database.status && database.status in STATUS_LABELS.de
     ? (database.status as DatabaseStatus)
     : 'pending'
 }
@@ -54,22 +65,22 @@ function toDate(value?: string | Date | null): Date | null {
   return Number.isNaN(date.getTime()) ? null : date
 }
 
-/** Compact form for tight rows: `6. Aug. 2026`. */
-export function formatDate(value?: string | Date | null): string {
+/** Compact form for tight rows: `6. Aug. 2026` / `Aug 6, 2026`. */
+export function formatDate(value?: string | Date | null, locale: Locale = 'de'): string {
   const date = toDate(value)
-  return date ? new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium' }).format(date) : '–'
+  return date ? new Intl.DateTimeFormat(intlLocale(locale), { dateStyle: 'medium' }).format(date) : '–'
 }
 
 /** Full form for the management table, where the exact time matters. */
-export function formatDateTime(value?: string | Date | null): string {
+export function formatDateTime(value?: string | Date | null, locale: Locale = 'de'): string {
   const date = toDate(value)
   return date
-    ? new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' }).format(date)
+    ? new Intl.DateTimeFormat(intlLocale(locale), { dateStyle: 'medium', timeStyle: 'short' }).format(date)
     : '–'
 }
 
-export function formatNumber(value?: number): string {
-  return new Intl.NumberFormat('de-DE').format(value ?? 0)
+export function formatNumber(value?: number, locale: Locale = 'de'): string {
+  return new Intl.NumberFormat(intlLocale(locale)).format(value ?? 0)
 }
 
 /** Newest crawl first; never-crawled bases sink to the bottom. */

@@ -1,8 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import Link from 'next/link'
+import { Link, useAppLocale, useRouter } from "@/i18n/navigation";
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -11,7 +10,45 @@ import { useAuthStore } from '@/stores/auth-store'
 import { Eye, EyeOff, Mail, Lock, AlertCircle, Loader2 } from 'lucide-react'
 import { GoogleAuthButton } from './GoogleAuthButton'
 
+const copy = {
+  de: {
+    title: 'Willkommen zurück',
+    subtitle: 'Melde dich an, um auf dein CraCha Dashboard zuzugreifen',
+    orEmail: 'Oder mit E-Mail',
+    email: 'E-Mail-Adresse',
+    emailPlaceholder: 'deine@email.com',
+    password: 'Passwort',
+    passwordPlaceholder: 'Dein Passwort',
+    hidePassword: 'Passwort verbergen',
+    showPassword: 'Passwort anzeigen',
+    signingIn: 'Anmeldung läuft...',
+    signIn: 'Anmelden',
+    forgot: 'Passwort vergessen?',
+    noAccount: 'Noch kein Account?',
+    register: 'Jetzt registrieren',
+    home: '← Zurück zur Startseite',
+  },
+  en: {
+    title: 'Welcome back',
+    subtitle: 'Sign in to access your CraCha dashboard',
+    orEmail: 'Or with email',
+    email: 'Email address',
+    emailPlaceholder: 'you@example.com',
+    password: 'Password',
+    passwordPlaceholder: 'Your password',
+    hidePassword: 'Hide password',
+    showPassword: 'Show password',
+    signingIn: 'Signing in...',
+    signIn: 'Sign in',
+    forgot: 'Forgot your password?',
+    noAccount: 'No account yet?',
+    register: 'Sign up now',
+    home: '← Back to the home page',
+  },
+} as const
+
 export function LoginForm() {
+  const t = copy[useAppLocale()]
   const router = useRouter()
   const { login, isLoading, error, clearError } = useAuthStore()
   const [showPassword, setShowPassword] = useState(false)
@@ -41,10 +78,10 @@ export function LoginForm() {
     <Card className="border-0 shadow-2xl bg-white/80 backdrop-blur-xl">
       <CardHeader className="text-center pb-6">
         <CardTitle className="text-2xl font-bold text-gray-900">
-          Willkommen zurück
+          {t.title}
         </CardTitle>
         <CardDescription className="text-gray-600">
-          Melde dich an, um auf dein CraCha Dashboard zuzugreifen
+          {t.subtitle}
         </CardDescription>
       </CardHeader>
 
@@ -53,12 +90,12 @@ export function LoginForm() {
         <GoogleAuthButton />
 
         {/* Divider */}
-        <div className="relative" role="separator" aria-label="Oder mit E-Mail">
+        <div className="relative" role="separator" aria-label={t.orEmail}>
           <div className="absolute inset-0 flex items-center">
             <span className="w-full border-t border-gray-300" />
           </div>
           <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-white px-2 text-gray-500">Oder mit E-Mail</span>
+            <span className="bg-white px-2 text-gray-500">{t.orEmail}</span>
           </div>
         </div>
 
@@ -74,14 +111,14 @@ export function LoginForm() {
           {/* Email Field */}
           <div className="space-y-2">
             <Label htmlFor="email" className="text-gray-700 font-medium">
-              E-Mail-Adresse
+              {t.email}
             </Label>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
                 id="email"
                 type="email"
-                placeholder="deine@email.com"
+                placeholder={t.emailPlaceholder}
                 value={formData.email}
                 onChange={(e) => handleInputChange('email', e.target.value)}
                 className="pl-10 h-12 border-gray-300 focus:border-blue-500 focus:ring-blue-500 text-base"
@@ -94,14 +131,14 @@ export function LoginForm() {
           {/* Password Field */}
           <div className="space-y-2">
             <Label htmlFor="password" className="text-gray-700 font-medium">
-              Passwort
+              {t.password}
             </Label>
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
                 id="password"
                 type={showPassword ? 'text' : 'password'}
-                placeholder="Dein Passwort"
+                placeholder={t.passwordPlaceholder}
                 value={formData.password}
                 onChange={(e) => handleInputChange('password', e.target.value)}
                 className="pl-10 pr-10 h-12 border-gray-300 focus:border-blue-500 focus:ring-blue-500 text-base"
@@ -112,7 +149,7 @@ export function LoginForm() {
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1 rounded-md hover:bg-gray-100 transition-colors"
-                aria-label={showPassword ? 'Passwort verbergen' : 'Passwort anzeigen'}
+                aria-label={showPassword ? t.hidePassword : t.showPassword}
               >
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
@@ -128,10 +165,10 @@ export function LoginForm() {
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Anmeldung läuft...
+                {t.signingIn}
               </>
             ) : (
-              'Anmelden'
+              t.signIn
             )}
           </Button>
         </form>
@@ -142,19 +179,19 @@ export function LoginForm() {
             href="/reset-password"
             className="text-sm text-blue-600 hover:text-blue-700 hover:underline transition-colors"
           >
-            Passwort vergessen?
+            {t.forgot}
           </Link>
         </div>
 
         {/* Register Link */}
         <div className="text-center">
           <p className="text-gray-600">
-            Noch kein Account?{' '}
+            {t.noAccount}{' '}
             <Link
               href="/register"
               className="text-blue-600 hover:text-blue-700 font-semibold hover:underline transition-colors"
             >
-              Jetzt registrieren
+              {t.register}
             </Link>
           </p>
         </div>
@@ -165,7 +202,7 @@ export function LoginForm() {
             href="/"
             className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
           >
-            ← Zurück zur Startseite
+            {t.home}
           </Link>
         </div>
       </CardContent>

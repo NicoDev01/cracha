@@ -1,3 +1,6 @@
+import { localeFromRequest } from '@/i18n/request-locale'
+import { tr } from '@/i18n/server-messages'
+import type { Locale } from '@/i18n/routing'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 
@@ -17,54 +20,57 @@ const UNAVAILABLE = 'Der Chatverlauf ist gerade nicht erreichbar. Bitte versuche
  * One conversation of the signed-in account. The user id comes from the
  * session only; an id that belongs to someone else reads as not found.
  */
-async function owner(params: Context['params']): Promise<{ response: NextResponse } | { userId: string; id: string }> {
+async function owner(params: Context['params'], locale: Locale): Promise<{ response: NextResponse } | { userId: string; id: string }> {
   const user = await getAuthenticatedUser()
-  if (!user) return { response: NextResponse.json({ success: false, error: 'Authentifizierung erforderlich.' }, { status: 401 }) }
+  if (!user) return { response: NextResponse.json({ success: false, error: tr(locale, 'Authentifizierung erforderlich.') }, { status: 401 }) }
   const id = conversationId.safeParse((await params).id)
-  if (!id.success) return { response: NextResponse.json({ success: false, error: NOT_FOUND }, { status: 404 }) }
+  if (!id.success) return { response: NextResponse.json({ success: false, error: tr(locale, NOT_FOUND) }, { status: 404 }) }
   return { userId: user.id, id: id.data }
 }
 
-function unavailable(event: string, error: unknown) {
+function unavailable(event: string, error: unknown, locale: Locale) {
   console.error(JSON.stringify({ event, reason: String(error) }))
-  return NextResponse.json({ success: false, error: UNAVAILABLE }, { status: 503 })
+  return NextResponse.json({ success: false, error: tr(locale, UNAVAILABLE) }, { status: 503 })
 }
 
 export async function GET(_request: NextRequest, { params }: Context) {
-  const target = await owner(params)
+  const locale = localeFromRequest(_request)
+  const target = await owner(params, locale)
   if ('response' in target) return target.response
   try {
     const chat = await getConversation(target.userId, target.id)
-    if (!chat) return NextResponse.json({ success: false, error: NOT_FOUND }, { status: 404 })
+    if (!chat) return NextResponse.json({ success: false, error: tr(locale, NOT_FOUND) }, { status: 404 })
     return NextResponse.json({ success: true, ...chat })
   } catch (error) {
-    return unavailable('chat_history_read_failed', error)
+    return unavailable('chat_history_read_failed', error, locale)
   }
 }
 
 export async function PATCH(request: NextRequest, { params }: Context) {
-  const target = await owner(params)
+  const locale = localeFromRequest(request)
+  const target = await owner(params, locale)
   if ('response' in target) return target.response
   const body = (await request.json().catch(() => null)) as { title?: unknown } | null
   const title = typeof body?.title === 'string' ? cleanTitle(body.title.slice(0, MAX_TITLE_LENGTH * 4)) : ''
-  if (!title) return NextResponse.json({ success: false, error: 'Bitte gib einen Namen ein.' }, { status: 400 })
+  if (!title) return NextResponse.json({ success: false, error: tr(locale, 'Bitte gib einen Namen ein.') }, { status: 400 })
   try {
     const chat = await renameConversation(target.userId, target.id, title)
-    if (!chat) return NextResponse.json({ success: false, error: NOT_FOUND }, { status: 404 })
+    if (!chat) return NextResponse.json({ success: false, error: tr(locale, NOT_FOUND) }, { status: 404 })
     return NextResponse.json({ success: true, chat })
   } catch (error) {
-    return unavailable('chat_history_rename_failed', error)
+    return unavailable('chat_history_rename_failed', error, locale)
   }
 }
 
 /** Deleting what is already gone succeeds, so a retry after a lost reply is harmless. */
 export async function DELETE(_request: NextRequest, { params }: Context) {
-  const target = await owner(params)
+  const locale = localeFromRequest(_request)
+  const target = await owner(params, locale)
   if ('response' in target) return target.response
   try {
     await deleteConversation(target.userId, target.id)
     return NextResponse.json({ success: true })
   } catch (error) {
-    return unavailable('chat_history_delete_failed', error)
+    return unavailable('chat_history_delete_failed', error, locale)
   }
 }

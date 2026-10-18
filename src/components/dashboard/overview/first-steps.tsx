@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import { Link } from "@/i18n/navigation";
 import { Globe } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -10,9 +10,14 @@ export const FIRST_CRAWL_PAGES = 20
 export const primaryCta = 'h-10 gap-1.5 bg-brand-500 px-5 !text-white shadow-sm hover:bg-brand-600'
 
 /** What a brand-new account sees instead of an empty knowledge base list. */
-export function FirstSteps() {
+export function FirstSteps({ locale = 'de' }: { locale?: 'de' | 'en' }) {
   const questionsLeft = Math.floor((CREDITS.welcome - FIRST_CRAWL_PAGES * CREDITS.perPage) / CREDITS.perChatMessage)
-  const steps = [
+  const en = locale === 'en'
+  const steps = en ? [
+    { title: 'Crawl a website', text: `Enter the address of a public website. ${FIRST_CRAWL_PAGES} pages are enough to start.` },
+    { title: 'Wait a moment', text: 'Reading runs in the background. As soon as the knowledge base is ready, it shows up here.' },
+    { title: 'Ask questions', text: 'Ask a concrete question. Every answer links the pages it comes from.' },
+  ] : [
     {
       title: 'Website crawlen',
       text: `Gib die Adresse einer öffentlichen Website ein. Für den Anfang reichen ${FIRST_CRAWL_PAGES} Seiten.`,
@@ -30,10 +35,12 @@ export function FirstSteps() {
   return (
     <section className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-7 dark:border-gray-800 dark:bg-white/[0.03]" aria-labelledby="first-steps">
       <h2 id="first-steps" className="text-base font-semibold text-gray-900 dark:text-white">
-        In drei Schritten zur ersten Antwort
+        {en ? 'Your first answer in three steps' : 'In drei Schritten zur ersten Antwort'}
       </h2>
       <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-        {`Neue Konten starten mit ${CREDITS.welcome} Credits: genug für ${FIRST_CRAWL_PAGES} Seiten und danach ${questionsLeft} Fragen.`}
+        {en
+          ? `New accounts start with ${CREDITS.welcome} credits: enough for ${FIRST_CRAWL_PAGES} pages and then ${questionsLeft} questions.`
+          : `Neue Konten starten mit ${CREDITS.welcome} Credits: genug für ${FIRST_CRAWL_PAGES} Seiten und danach ${questionsLeft} Fragen.`}
       </p>
       {/* The numbers are drawn, not list markers: Tailwind's reset strips those. */}
       <ol className="mt-5 space-y-4">
@@ -54,10 +61,10 @@ export function FirstSteps() {
       </ol>
       <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-3">
         <Button asChild rounded="full" className={primaryCta}>
-          <Link href="/dashboard/crawl" prefetch={false}><Globe className="size-4" />Website crawlen</Link>
+          <Link href="/dashboard/crawl" prefetch={false}><Globe className="size-4" />{en ? 'Crawl a website' : 'Website crawlen'}</Link>
         </Button>
         <Link href="/website-mit-ki-durchsuchen" className="text-sm text-brand-600 underline underline-offset-2 dark:text-brand-400">
-          Anleitung mit Beispielfragen
+          {en ? 'Guide with sample questions' : 'Anleitung mit Beispielfragen'}
         </Link>
       </div>
     </section>

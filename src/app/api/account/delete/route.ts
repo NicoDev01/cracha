@@ -1,3 +1,5 @@
+import { localeFromRequest } from '@/i18n/request-locale'
+import { tr } from '@/i18n/server-messages'
 import { NextRequest, NextResponse } from 'next/server'
 
 import { isAccountDeletionConfirmed } from '@/lib/account-deletion'
@@ -13,15 +15,16 @@ export const dynamic = 'force-dynamic'
  * failure — and after success, which answers success once more.
  */
 export async function POST(request: NextRequest) {
+  const locale = localeFromRequest(request)
   const user = await getAuthenticatedUser()
-  if (!user) return NextResponse.json({ success: false, error: 'Authentifizierung erforderlich.' }, { status: 401 })
+  if (!user) return NextResponse.json({ success: false, error: tr(locale, 'Authentifizierung erforderlich.') }, { status: 401 })
 
   // JSON only: a cross-site form can post text/plain that happens to parse as
   // JSON, but it cannot send this content type without a CORS preflight.
   const isJson = request.headers.get('content-type')?.toLowerCase().startsWith('application/json') ?? false
   const body = isJson ? ((await request.json().catch(() => null)) as { confirm?: unknown } | null) : null
   if (!isAccountDeletionConfirmed(body?.confirm)) {
-    return NextResponse.json({ success: false, error: 'Bitte bestätige die Löschung mit dem Wort LÖSCHEN.' }, { status: 400 })
+    return NextResponse.json({ success: false, error: tr(locale, 'Bitte bestätige die Löschung mit dem Wort LÖSCHEN.') }, { status: 400 })
   }
 
   let admitted: boolean
@@ -31,21 +34,21 @@ export async function POST(request: NextRequest) {
     // request_limits references the auth user, so this fails once the account
     // is gone. A repeated request after success must not look like an error.
     if (await accountIsGone(user.id).catch(() => false)) return NextResponse.json({ success: true })
-    return NextResponse.json({ success: false, error: 'Kontolöschung ist gerade nicht möglich. Bitte versuche es später erneut.' }, { status: 503 })
+    return NextResponse.json({ success: false, error: tr(locale, 'Kontolöschung ist gerade nicht möglich. Bitte versuche es später erneut.') }, { status: 503 })
   }
   if (!admitted) {
-    return NextResponse.json({ success: false, error: 'Zu viele Versuche. Bitte warte eine Weile und versuche es dann erneut.' }, { status: 429 })
+    return NextResponse.json({ success: false, error: tr(locale, 'Zu viele Versuche. Bitte warte eine Weile und versuche es dann erneut.') }, { status: 429 })
   }
 
   try {
     await deleteAccount(user.id)
   } catch (error) {
     if (error instanceof AccountDeletionError) {
-      return NextResponse.json({ success: false, error: error.message }, { status: error.status })
+      return NextResponse.json({ success: false, error: tr(locale, error.message) }, { status: error.status })
     }
-    console.error(JSON.stringify({ event: 'account_deletion_failed', userId: user.id, error: String(error) }))
+    console.error(JSON.stringify({ event: 'account_deletion_failed', userId: user.id, error: tr(locale, String(error)) }))
     return NextResponse.json(
-      { success: false, error: 'Kontolöschung konnte nicht abgeschlossen werden. Dein Konto wurde nicht gelöscht. Bitte versuche es erneut.' },
+      { success: false, error: tr(locale, 'Kontolöschung konnte nicht abgeschlossen werden. Dein Konto wurde nicht gelöscht. Bitte versuche es erneut.') },
       { status: 500 },
     )
   }

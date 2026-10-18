@@ -3,6 +3,8 @@ import { BadgeCheck, FileCheck, Languages, Network, SearchX } from "lucide-react
 
 import MaxWidthWrapper from "@/components/shared/max-width-wrapper";
 import { GridItem } from "@/components/landing/ui/grid-item";
+import { bilingual } from "@/i18n/copy";
+import { getAppLocale } from "@/i18n/server";
 
 interface Feature {
   title: string;
@@ -26,46 +28,48 @@ interface Feature {
  * The caveat that such an answer can still be wrong lives in the FAQ
  * ("Sind die Antworten immer richtig?"), not on this card.
  */
-const features: Feature[] = [
-  {
-    title: "Findet die Unterseiten selbst",
-    description:
-      "Du gibst eine Adresse ein, nicht hundert. CraCha folgt den Links und der Sitemap und liest die Website Seite für Seite.",
-    icon: <Network className="h-4 w-4" />,
-  },
-  {
-    title: "Jede Antwort mit Quelle",
-    description:
-      "Unter jeder Antwort stehen die Seiten, auf die sie sich stützt – als klickbare Links. Ein Klick, und du liest die Aussage im Original nach.",
-    icon: <BadgeCheck className="h-4 w-4" />,
-  },
-  {
-    title: "Sagt, wenn es nicht drinsteht",
-    description:
-      "CraCha antwortet nur aus der Website, die du gewählt hast. Steht die Antwort dort nicht, sagt CraCha dir das, statt etwas zu erfinden.",
-    icon: <SearchX className="h-4 w-4" />,
-  },
-  {
-    title: "Frag auf Deutsch",
-    description:
-      "Auch wenn die Website englisch ist. Die Quellenlinks führen auf die Originalseiten.",
-    icon: <Languages className="h-4 w-4" />,
-  },
-  {
-    title: "Texte gegen die Website prüfen",
-    description:
-      "Füg einen Entwurf oder eine Preisliste in den Content-Check ein. CraCha zeigt Widersprüche und veraltete Angaben, mit Quelle.",
-    icon: <FileCheck className="h-4 w-4" />,
-  },
+const icons = [
+  <Network key="n" className="h-4 w-4" />,
+  <BadgeCheck key="b" className="h-4 w-4" />,
+  <SearchX key="s" className="h-4 w-4" />,
+  <Languages key="l" className="h-4 w-4" />,
+  <FileCheck key="f" className="h-4 w-4" />,
 ];
 
-export default function Features() {
+const copy = bilingual<{ heading: string; accent: string; features: Omit<Feature, "icon">[] }>(
+  {
+    heading: "Was du ",
+    accent: "davon hast",
+    features: [
+      { title: "Findet die Unterseiten selbst", description: "Du gibst eine Adresse ein, nicht hundert. CraCha folgt den Links und der Sitemap und liest die Website Seite für Seite." },
+      { title: "Jede Antwort mit Quelle", description: "Unter jeder Antwort stehen die Seiten, auf die sie sich stützt – als klickbare Links. Ein Klick, und du liest die Aussage im Original nach." },
+      { title: "Sagt, wenn es nicht drinsteht", description: "CraCha antwortet nur aus der Website, die du gewählt hast. Steht die Antwort dort nicht, sagt CraCha dir das, statt etwas zu erfinden." },
+      { title: "Frag auf Deutsch", description: "Auch wenn die Website englisch ist. Die Quellenlinks führen auf die Originalseiten." },
+      { title: "Texte gegen die Website prüfen", description: "Füg einen Entwurf oder eine Preisliste in den Content-Check ein. CraCha zeigt Widersprüche und veraltete Angaben, mit Quelle." },
+    ],
+  },
+  {
+    heading: "What you ",
+    accent: "get out of it",
+    features: [
+      { title: "Finds the subpages itself", description: "You enter one address, not a hundred. CraCha follows the links and the sitemap and reads the website page by page." },
+      { title: "Every answer with a source", description: "Below every answer you see the pages it is based on – as clickable links. One click and you read the statement in the original." },
+      { title: "Tells you when it isn’t there", description: "CraCha answers only from the website you chose. If the answer isn’t on it, CraCha says so instead of making something up." },
+      { title: "Ask in your language", description: "Even if the website is in another language. The source links lead to the original pages." },
+      { title: "Check texts against the website", description: "Paste a draft or a price list into the Content Check. CraCha shows contradictions and outdated details, with sources." },
+    ],
+  },
+);
+
+export default async function Features() {
+  const t = copy[await getAppLocale()];
+  const features: Feature[] = t.features.map((feature, index) => ({ ...feature, icon: icons[index] }));
   return (
     <section id="features" className="py-16 md:py-24">
         <MaxWidthWrapper>
              <div className="mx-auto mb-12 max-w-3xl text-center">
                 <h2 className="font-heading text-3xl leading-tight md:text-5xl text-foreground">
-                    Was du <span className="text-orange-600 dark:text-orange-400">davon hast</span>
+                    {t.heading}<span className="text-orange-600 dark:text-orange-400">{t.accent}</span>
                 </h2>
             </div>
 

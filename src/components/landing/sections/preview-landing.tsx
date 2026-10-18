@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { useAppLocale } from "@/i18n/navigation";
+
 /**
  * The promo film from `video/` under the hero: crawl, knowledge base, chat in
  * 33 seconds, which says more than the dashboard screenshot that sat here.
@@ -18,7 +20,13 @@ import { useEffect, useRef, useState } from "react";
  * on a phone connection it took most of the bandwidth of the first seconds,
  * while the poster already shows the same first frame.
  */
+const label = {
+  de: "CraCha in 33 Sekunden: eine Website wird Seite für Seite gelesen und im Chat mit Quellen befragt",
+  en: "CraCha in 33 seconds: a website is read page by page and questioned in the chat with sources",
+} as const;
+
 export default function PreviewLanding() {
+  const locale = useAppLocale();
   const ref = useRef<HTMLVideoElement>(null);
   const [src, setSrc] = useState<string>();
 
@@ -55,7 +63,7 @@ export default function PreviewLanding() {
           loop
           playsInline
           preload="auto"
-          aria-label="CraCha in 33 Sekunden: eine Website wird Seite für Seite gelesen und im Chat mit Quellen befragt"
+          aria-label={label[locale]}
         />
       </div>
     </div>

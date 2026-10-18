@@ -17,7 +17,7 @@
  * so without one there is nobody to recognise and the store is never loaded.
  */
 
-import Link from 'next/link'
+import { Link } from "@/i18n/navigation";
 import { useEffect, useSyncExternalStore, type ComponentProps } from 'react'
 
 const SESSION_COOKIE = /(?:^|;\s*)sb-[^=;]+-auth-token(?:\.\d+)?=/

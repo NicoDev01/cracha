@@ -1,6 +1,43 @@
 'use client'
 
-import Link from 'next/link'
+import { Link, useAppLocale } from "@/i18n/navigation";
+
+const copy = {
+  de: {
+    loadFailed: 'Wissensbasen konnten nicht geladen werden.',
+    overview: 'Übersicht',
+    crawl: 'Website crawlen',
+    retry: 'Erneut versuchen',
+    crawling: (count: number) => (count === 1 ? 'Eine Website wird gerade eingelesen' : `${count} Websites werden gerade eingelesen`),
+    failed: (count: number) => (count === 1 ? 'Eine Wissensbasis ist fehlgeschlagen' : `${count} Wissensbasen sind fehlgeschlagen`),
+    yours: 'Deine Wissensbasen',
+    refreshLabel: 'Wissensbasen aktualisieren',
+    refresh: 'Aktualisieren',
+    manage: 'Alle verwalten',
+    loading: 'Wissensbasen werden geladen',
+    pages: 'Seiten',
+    ask: 'Fragen',
+    notReady: 'Diese Wissensbasis ist noch nicht durchsuchbar.',
+    count: (shown: number, total: number) => `${shown} von ${total} Wissensbasen`,
+  },
+  en: {
+    loadFailed: 'Knowledge bases could not be loaded.',
+    overview: 'Overview',
+    crawl: 'Crawl a website',
+    retry: 'Try again',
+    crawling: (count: number) => (count === 1 ? 'One website is being read' : `${count} websites are being read`),
+    failed: (count: number) => (count === 1 ? 'One knowledge base failed' : `${count} knowledge bases failed`),
+    yours: 'Your knowledge bases',
+    refreshLabel: 'Refresh knowledge bases',
+    refresh: 'Refresh',
+    manage: 'Manage all',
+    loading: 'Loading knowledge bases',
+    pages: 'pages',
+    ask: 'Ask',
+    notReady: 'This knowledge base isn’t searchable yet.',
+    count: (shown: number, total: number) => `${shown} of ${total} knowledge bases`,
+  },
+} as const
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, ArrowRight, Globe, Loader2, MessagesSquare, RefreshCw } from 'lucide-react'
 
@@ -50,6 +87,8 @@ function Notice({ href, tone, children }: {
 
 export function DashboardOverview() {
   const { user } = useAuthStore()
+  const locale = useAppLocale()
+  const t = copy[locale]
   const [databases, setDatabases] = useState<Database[]>([])
   const [isLoading, setIsLoading] = useState(() => Boolean(user))
   const [error, setError] = useState<string | null>(null)
@@ -65,12 +104,12 @@ export function DashboardOverview() {
     } catch (loadError) {
       // A dropped background poll keeps the last known list on screen.
       if (!showLoading) return
-      setError(loadError instanceof Error ? loadError.message : 'Wissensbasen konnten nicht geladen werden.')
+      setError(loadError instanceof Error ? loadError.message : t.loadFailed)
       setDatabases([])
     } finally {
       if (showLoading) setIsLoading(false)
     }
-  }, [user])
+  }, [user, t.loadFailed])
 
   useEffect(() => {
     let active = true
@@ -84,7 +123,7 @@ export function DashboardOverview() {
       })
       .catch((loadError) => {
         if (active) {
-          setError(loadError instanceof Error ? loadError.message : 'Wissensbasen konnten nicht geladen werden.')
+          setError(loadError instanceof Error ? loadError.message : t.loadFailed)
           setDatabases([])
         }
       })
@@ -96,7 +135,7 @@ export function DashboardOverview() {
     return () => {
       active = false
     }
-  }, [user])
+  }, [user, t.loadFailed])
 
   const isCrawling = databases.some((database) => databaseStatus(database) === 'crawling')
 
@@ -120,12 +159,12 @@ export function DashboardOverview() {
         A brand-new account sees the three steps instead of an empty list.
       */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold text-gray-800 dark:text-white/90">Übersicht</h1>
+        <h1 className="text-xl font-semibold text-gray-800 dark:text-white/90">{t.overview}</h1>
         {!isEmpty && (
           <Button asChild size="sm" rounded="full" className={primaryCta}>
             <Link href="/dashboard/crawl" prefetch={false}>
               <Globe className="size-4" />
-              Website crawlen
+              {t.crawl}
             </Link>
           </Button>
         )}
@@ -136,22 +175,22 @@ export function DashboardOverview() {
       {error && (
         <div className="flex items-center justify-between gap-3 rounded-xl border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700 dark:border-error-800 dark:bg-error-500/10 dark:text-error-300">
           <span>{error}</span>
-          <Button variant="ghost" size="sm" onClick={() => void load()} className="shrink-0">Erneut versuchen</Button>
+          <Button variant="ghost" size="sm" onClick={() => void load()} className="shrink-0">{t.retry}</Button>
         </div>
       )}
 
-      {isEmpty ? <FirstSteps /> : !error && (
+      {isEmpty ? <FirstSteps locale={locale} /> : !error && (
         <>
           {(crawling > 0 || failed > 0) && (
             <div className="grid gap-2 sm:grid-cols-2">
               {crawling > 0 && (
                 <Notice href="/dashboard/crawl" tone="info">
-                  {crawling === 1 ? 'Eine Website wird gerade eingelesen' : `${crawling} Websites werden gerade eingelesen`}
+                  {t.crawling(crawling)}
                 </Notice>
               )}
               {failed > 0 && (
                 <Notice href="/dashboard/data" tone="error">
-                  {failed === 1 ? 'Eine Wissensbasis ist fehlgeschlagen' : `${failed} Wissensbasen sind fehlgeschlagen`}
+                  {t.failed(failed)}
                 </Notice>
               )}
             </div>
@@ -159,15 +198,15 @@ export function DashboardOverview() {
 
           <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]" aria-labelledby="overview-databases">
             <header className="flex items-center justify-between gap-3 border-b border-gray-100 px-4 py-3 dark:border-gray-800">
-              <h2 id="overview-databases" className="text-sm font-semibold text-gray-900 dark:text-white">Deine Wissensbasen</h2>
+              <h2 id="overview-databases" className="text-sm font-semibold text-gray-900 dark:text-white">{t.yours}</h2>
               <div className="flex items-center gap-1">
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={() => void load()}
                   disabled={isLoading}
-                  aria-label="Wissensbasen aktualisieren"
-                  title="Aktualisieren"
+                  aria-label={t.refreshLabel}
+                  title={t.refresh}
                   className="size-8 shrink-0 rounded-full text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
                 >
                   <RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />
@@ -177,7 +216,7 @@ export function DashboardOverview() {
                   prefetch={false}
                   className="text-xs font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400"
                 >
-                  Alle verwalten
+                  {t.manage}
                 </Link>
               </div>
             </header>
@@ -185,7 +224,7 @@ export function DashboardOverview() {
             {isLoading ? (
               <div className="flex items-center justify-center gap-2 px-4 py-12 text-sm text-gray-500">
                 <Loader2 className="size-4 animate-spin" />
-                Wissensbasen werden geladen
+                {t.loading}
               </div>
             ) : (
               <ul className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -202,14 +241,14 @@ export function DashboardOverview() {
                           <StatusBadge status={status} />
                         </div>
                         <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">
-                          {hostname(url)} · {formatNumber(pageCount(database))} Seiten · {formatDate(database.last_crawl)}
+                          {hostname(url)} · {formatNumber(pageCount(database), locale)} {t.pages} · {formatDate(database.last_crawl, locale)}
                         </p>
                       </div>
                       {status === 'active' ? (
                         <Button asChild variant="outline" size="sm" className="h-9 shrink-0 gap-2 rounded-full px-4">
                           <Link href={chatHref(database.id)} prefetch={false}>
                             <MessagesSquare className="size-4" />
-                            Fragen
+                            {t.ask}
                           </Link>
                         </Button>
                       ) : (
@@ -219,10 +258,10 @@ export function DashboardOverview() {
                           size="sm"
                           disabled
                           className="h-9 shrink-0 gap-2 rounded-full px-4"
-                          title="Diese Wissensbasis ist noch nicht durchsuchbar."
+                          title={t.notReady}
                         >
                           <MessagesSquare className="size-4" />
-                          Fragen
+                          {t.ask}
                         </Button>
                       )}
                     </li>
@@ -233,7 +272,7 @@ export function DashboardOverview() {
 
             {!isLoading && databases.length > VISIBLE_DATABASES && (
               <p className="border-t border-gray-100 px-4 py-2.5 text-xs text-gray-400 dark:border-gray-800">
-                {`${VISIBLE_DATABASES} von ${databases.length} Wissensbasen`}
+                {t.count(VISIBLE_DATABASES, databases.length)}
               </p>
             )}
           </section>

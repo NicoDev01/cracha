@@ -43,10 +43,11 @@ export async function sendDueActivationReminders(
   const { data, error } = await supabase.rpc("claim_activation_reminders", { p_limit: 50 });
   if (error) throw new Error(`claim_activation_reminders fehlgeschlagen: ${error.message}`);
 
-  const email = activationReminderEmail();
   let sent = 0;
   let failed = 0;
   for (const { user_id: userId, email: address } of (data ?? []) as { user_id: string; email: string }[]) {
+    // The language the account chose on the site, stored in its metadata.
+    const email = activationReminderEmail(await accountLocale(supabase, userId));
     const response = await fetchImpl("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -68,4 +69,15 @@ export async function sendDueActivationReminders(
     if (!ok) console.error(JSON.stringify({ event: "activation_reminder_send_failed", status: response?.status ?? null }));
   }
   return { configured: true, sent, failed };
+}
+
+/** The language the account chose on the site, or undefined (German) when it cannot be read. */
+async function accountLocale(supabase: { auth: { admin: { getUserById(id: string): Promise<{ data: { user: { user_metadata?: Record<string, unknown> } | null } | null }> } } }, userId: string): Promise<string | undefined> {
+  try {
+    const { data } = await supabase.auth.admin.getUserById(userId);
+    const locale = data?.user?.user_metadata?.locale;
+    return typeof locale === "string" ? locale : undefined;
+  } catch {
+    return undefined;
+  }
 }

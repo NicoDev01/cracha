@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { useRouter } from "next/navigation"
+import { useAppLocale, useRouter } from "@/i18n/navigation";
 import { Check, ChevronDown, Database, Calendar, FileText, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -19,8 +19,41 @@ import { getDatabases } from "@/stores/chat-store"
 import { useAuthStore } from "@/stores/auth-store"
 import type { Database as DatabaseType } from "@/types/chat"
 
+const copy = {
+  de: {
+    loadFailed: 'Wissensbasen konnten nicht geladen werden.',
+    choose: 'Wissensbasis wählen',
+    yours: 'Deine Wissensbasen',
+    refresh: 'Wissensbasen aktualisieren',
+    retry: 'Erneut versuchen',
+    loading: 'Wissensbasen werden geladen …',
+    none: 'Noch keine Wissensbasis',
+    noneHint: 'Lies eine Website ein, um eine Wissensbasis zu erstellen.',
+    pages: 'Seiten',
+    reread: (name: string) => `„${name}“ neu einlesen`,
+    rereadThis: 'Diese Wissensbasis neu einlesen',
+    crawl: 'Website crawlen',
+  },
+  en: {
+    loadFailed: 'Knowledge bases could not be loaded.',
+    choose: 'Choose a knowledge base',
+    yours: 'Your knowledge bases',
+    refresh: 'Refresh knowledge bases',
+    retry: 'Try again',
+    loading: 'Loading knowledge bases …',
+    none: 'No knowledge base yet',
+    noneHint: 'Read a website to create a knowledge base.',
+    pages: 'pages',
+    reread: (name: string) => `Read “${name}” again`,
+    rereadThis: 'Read this knowledge base again',
+    crawl: 'Crawl a website',
+  },
+} as const
+
 export function DatabaseSelector() {
   const router = useRouter()
+  const locale = useAppLocale()
+  const t = copy[locale]
   const { selectedDatabase, selectDatabase } = useHydratedChatStore()
   const { user } = useAuthStore()
   const [databases, setDatabases] = useState<DatabaseType[]>([])
@@ -49,14 +82,14 @@ export function DatabaseSelector() {
       setDatabases(dbs)
     } catch (error) {
       console.error('Failed to load databases:', error)
-      const errorMessage = error instanceof Error ? error.message : 'Wissensbasen konnten nicht geladen werden.'
+      const errorMessage = error instanceof Error ? error.message : t.loadFailed
       setError(errorMessage)
       setDatabases([])
     } finally {
       setIsLoading(false)
       setIsRefreshing(false)
     }
-  }, [user])
+  }, [user, t.loadFailed])
 
   // Load databases only on component mount and when user changes. Inline with
   // a cancelled flag rather than calling loadDatabases(): that helper flips
@@ -74,7 +107,7 @@ export function DatabaseSelector() {
         }
       } catch (loadError) {
         if (!cancelled) {
-          const errorMessage = loadError instanceof Error ? loadError.message : 'Wissensbasen konnten nicht geladen werden.'
+          const errorMessage = loadError instanceof Error ? loadError.message : t.loadFailed
           setError(errorMessage)
           setDatabases([])
         }
@@ -85,7 +118,7 @@ export function DatabaseSelector() {
     return () => {
       cancelled = true
     }
-  }, [user])
+  }, [user, t.loadFailed])
 
   // Manual refresh function
   const handleRefresh = () => {
@@ -104,7 +137,7 @@ export function DatabaseSelector() {
           <div className="flex items-center gap-2">
             <Database className="w-4 h-4 text-gray-500 dark:text-gray-400" />
             <span className="truncate">
-              {selectedDb ? selectedDb.name : "Wissensbasis wählen"}
+              {selectedDb ? selectedDb.name : t.choose}
             </span>
           </div>
           <ChevronDown className="w-4 h-4 text-gray-500 dark:text-gray-400" />
@@ -118,7 +151,7 @@ export function DatabaseSelector() {
         <DropdownMenuLabel className="flex items-center justify-between text-gray-700 dark:text-white/90">
           <div className="flex items-center gap-2">
             <Database className="w-4 h-4" />
-            Deine Wissensbasen
+            {t.yours}
             {(isLoading || isRefreshing) && (
               <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin"></div>
             )}
@@ -128,7 +161,7 @@ export function DatabaseSelector() {
             size="sm"
             onClick={handleRefresh}
             disabled={isLoading || isRefreshing}
-            aria-label="Wissensbasen aktualisieren"
+            aria-label={t.refresh}
             className="size-6 rounded-full p-0 hover:bg-gray-100 dark:hover:bg-gray-800"
           >
             <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin' : ''}`} />
@@ -147,20 +180,20 @@ export function DatabaseSelector() {
             className="mt-2 rounded-full text-red-600 hover:text-red-700"
           >
             <RefreshCw className="w-3 h-3 mr-1" />
-            Erneut versuchen
+            {t.retry}
           </Button>
           </div>
         ) : isLoading ? (
           <div className="p-4 text-center text-gray-500">
             <div className="w-6 h-6 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin mx-auto mb-2"></div>
-            <p className="text-sm">Wissensbasen werden geladen …</p>
+            <p className="text-sm">{t.loading}</p>
           </div>
         ) : databases.length === 0 ? (
           <div className="p-4 text-center text-gray-500">
             <Database className="w-8 h-8 mx-auto mb-2 text-gray-300" />
-            <p className="text-sm">Noch keine Wissensbasis</p>
+            <p className="text-sm">{t.none}</p>
             <p className="text-xs text-gray-400 mt-1">
-              Lies eine Website ein, um eine Wissensbasis zu erstellen.
+              {t.noneHint}
             </p>
           </div>
         ) : (
@@ -191,13 +224,13 @@ export function DatabaseSelector() {
                   <div className="flex items-center gap-3 text-xs text-gray-400 dark:text-gray-400">
                     <div className="flex items-center gap-1">
                       <FileText className="w-3 h-3" />
-                      <span>{formatNumber(pageCount(database))} Seiten</span>
+                      <span>{formatNumber(pageCount(database), locale)} {t.pages}</span>
                     </div>
 
                     {database.last_crawl && (
                       <div className="flex items-center gap-1">
                         <Calendar className="w-3 h-3" />
-                        <span>{formatDate(database.last_crawl)}</span>
+                        <span>{formatDate(database.last_crawl, locale)}</span>
                       </div>
                     )}
                   </div>
@@ -208,14 +241,14 @@ export function DatabaseSelector() {
                   {(database.source_url || database.url || database.urls?.[0]) && (
                     <button
                       type="button"
-                      title={`„${database.name}“ neu einlesen`}
+                      title={t.reread(database.name)}
                       onClick={(e) => {
                         e.stopPropagation()
                         const targetUrl = database.source_url || database.url || database.urls?.[0] || ''
                         router.push(`/dashboard/crawl?url=${encodeURIComponent(targetUrl)}&name=${encodeURIComponent(database.name)}`)
                       }}
                       className="rounded p-1 text-gray-400 hover:bg-gray-200 hover:text-gray-700 dark:hover:bg-gray-700 dark:hover:text-gray-200 transition-colors"
-                      aria-label={`„${database.name}“ neu einlesen`}
+                      aria-label={t.reread(database.name)}
                     >
                       <RefreshCw className="w-3 h-3" />
                     </button>
@@ -239,7 +272,7 @@ export function DatabaseSelector() {
               }}
             >
               <RefreshCw className="w-4 h-4 mr-2" />
-              Diese Wissensbasis neu einlesen
+              {t.rereadThis}
             </Button>
           )}
           <Button
@@ -249,7 +282,7 @@ export function DatabaseSelector() {
             onClick={() => router.push('/dashboard/crawl')}
           >
             <Database className="w-4 h-4 mr-2" />
-            Website crawlen
+            {t.crawl}
           </Button>
         </div>
       </DropdownMenuContent>

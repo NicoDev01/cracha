@@ -3,6 +3,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import type { RetrievalProgress } from '@/types/chat';
+import { useAppLocale } from '@/i18n/navigation';
+import type { Locale } from '@/i18n/routing';
+
+const copy = {
+  de: { checked: 'Geprüfte Quellen:', passages: 'Textstellen', selected: 'ausgewählt', terms: 'Suchbegriffe:' },
+  en: { checked: 'Sources checked:', passages: 'passages', selected: 'selected', terms: 'Search terms:' },
+} as const;
 
 /**
  * Counts up to each new value instead of jumping to it. The search reports in
@@ -35,13 +42,20 @@ function useCountUp(target: number, duration = 700): number {
   return value;
 }
 
-function stageLabel(progress: RetrievalProgress | null): string {
+function stageLabel(progress: RetrievalProgress | null, locale: Locale): string {
+  if (locale === 'en') {
+    if (progress?.stage === 'collection') return progress.title ? `Reading “${progress.title}” in full …` : 'Reading the overview page in full …';
+    if (progress?.stage === 'selected') return 'Choosing the best-matching sources …';
+    return 'Searching the knowledge base …';
+  }
   if (progress?.stage === 'collection') return progress.title ? `Lese „${progress.title}“ vollständig …` : 'Lese die Übersichtsseite vollständig …';
   if (progress?.stage === 'selected') return 'Wähle die passendsten Quellen …';
   return 'Durchsuche die Wissensbasis …';
 }
 
 export function SearchProgress({ progress }: { progress: RetrievalProgress | null }) {
+  const locale = useAppLocale();
+  const t = copy[locale];
   const pages = useCountUp(progress?.pages ?? 0);
   const passages = useCountUp(progress?.passages ?? 0);
   const selected = progress?.stage === 'selected' ? progress.sources : undefined;
@@ -53,22 +67,22 @@ export function SearchProgress({ progress }: { progress: RetrievalProgress | nul
         <Search className="relative size-4" aria-hidden="true" />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-gray-700 dark:text-gray-200">{stageLabel(progress)}</p>
+        <p className="text-sm font-medium text-gray-700 dark:text-gray-200">{stageLabel(progress, locale)}</p>
         <p className="mt-0.5 flex flex-wrap items-baseline gap-x-2 text-xs text-gray-500 dark:text-gray-400">
           <span>
-            Geprüfte Quellen:{' '}
+            {t.checked}{' '}
             <span className="font-semibold tabular-nums text-brand-600 dark:text-brand-300">{pages}</span>
           </span>
           {passages > 0 && (
-            <span className="tabular-nums">· {passages} Textstellen</span>
+            <span className="tabular-nums">· {passages} {t.passages}</span>
           )}
           {selected !== undefined && (
-            <span className="tabular-nums">· {selected} ausgewählt</span>
+            <span className="tabular-nums">· {selected} {t.selected}</span>
           )}
         </p>
         {progress?.search_query && (
           <p className="mt-1.5 truncate text-[11px] text-gray-400 dark:text-gray-500">
-            Suchbegriffe: <span className="text-gray-500 dark:text-gray-400">„{progress.search_query}“</span>
+            {t.terms} <span className="text-gray-500 dark:text-gray-400">„{progress.search_query}“</span>
           </p>
         )}
       </div>

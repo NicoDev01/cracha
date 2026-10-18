@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { describe, expect, it } from 'vitest'
 
-import { legacyHostRedirect } from './middleware'
+import { legacyHostRedirect } from './lib/legacy-host'
 
 const onHost = (host: string, path: string) =>
   new NextRequest(`https://${host}${path}`, { headers: { host } })
