@@ -37,8 +37,10 @@ const copy = bilingual(
   },
 );
 
-// Every post is prerendered; an unknown slug is a 404, not a render on demand.
-export const dynamicParams = false;
+// Every post is prerendered; an unknown slug ends in notFound() below.
+// `dynamicParams = false` would say the same, but OpenNext checks it against
+// the address before the language rewrite (/blog/x, not /de/blog/x) and
+// answered every article with a 404.
 
 export function generateStaticParams() {
   return routing.locales.flatMap((locale) => blogPosts[locale].map((post) => ({ locale, slug: post.slug })));

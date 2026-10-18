@@ -13,7 +13,7 @@ async function check() {
   const response = await fetch(new URL('/api/version', origin), { cache: 'no-store', signal: AbortSignal.timeout(15000) });
   const version = await response.json();
   if (!response.ok || !version.release || (expected && version.release !== expected)) throw new Error('Wrong release is serving the public domain');
-  for (const path of ['/', '/beispiele', '/register', '/widerrufsbelehrung', '/nutzungsbedingungen', '/en', '/en/pricing']) {
+  for (const path of ['/', '/beispiele', '/register', '/widerrufsbelehrung', '/nutzungsbedingungen', '/en', '/en/pricing', '/blog/cracha-vs-notebooklm', '/en/blog/cracha-vs-notebooklm']) {
     const response = await fetch(new URL(path, origin), { cache: 'no-store', signal: AbortSignal.timeout(15000) });
     const html = await response.text();
     if (!response.ok || !html.includes('<title>')) throw new Error(`Page unavailable: ${path}`);

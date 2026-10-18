@@ -6,9 +6,14 @@ import { bilingual } from "@/i18n/copy";
 import { Link } from "@/i18n/navigation";
 import { getAppLocale } from "@/i18n/server";
 
+// One title for both languages: metadata of a 404 inside a prerendered route
+// (an unknown blog slug) is resolved where the page's language is unknown, and
+// reading it from the request headers there broke the render with a 500.
+// Next adds noindex to 404 responses itself.
+export const metadata: Metadata = { title: "Seite nicht gefunden · Page not found" };
+
 const copy = bilingual(
   {
-    title: "Seite nicht gefunden",
     code: "Fehler 404",
     heading: "Diese Seite gibt es nicht",
     text: "Vielleicht wurde sie verschoben, oder der Link enthält einen Tippfehler.",
@@ -21,7 +26,6 @@ const copy = bilingual(
     ],
   },
   {
-    title: "Page not found",
     code: "Error 404",
     heading: "This page doesn't exist",
     text: "It may have moved, or the link has a typo.",
@@ -34,11 +38,6 @@ const copy = bilingual(
     ],
   },
 );
-
-// Next adds noindex to 404 responses itself.
-export async function generateMetadata(): Promise<Metadata> {
-  return { title: copy[await getAppLocale()].title };
-}
 
 export default async function NotFound() {
   const t = copy[await getAppLocale()];

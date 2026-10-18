@@ -6,6 +6,7 @@ import { siteConfig, siteDescription, siteTitle } from "@/config/site";
 import { bilingual } from "@/i18n/copy";
 import { languageAlternates, localizePath } from "@/i18n/paths";
 import type { Locale } from "@/i18n/routing";
+import { shareImage } from "@/lib/marketing/page-metadata";
 import { organizationJsonLd, softwareApplicationJsonLd } from "@/lib/marketing/structured-data";
 
 const keywords = bilingual(
@@ -31,8 +32,8 @@ const keywords = bilingual(
  * The landing page had a title and a description and nothing else. Shared in
  * WhatsApp, Slack or LinkedIn it arrived as a bare URL: no Open Graph tags at
  * all in the delivered HTML, and the one image the config pointed at
- * (/_static/og.jpg) answered 404 — the directory does not exist. The image now
- * comes from the segment's opengraph-image.png, which Next serves and tags itself.
+ * (/_static/og.jpg) answered 404 — the directory does not exist. The image is
+ * the language's own, from public/og.
  *
  * `alternates.canonical` matters here specifically because /home permanently
  * redirects to this page, so two paths lead to the same content.
@@ -55,11 +56,13 @@ export async function generateMetadata({ params }: LayoutProps<"/[locale]">): Pr
       siteName: siteConfig.name,
       title: siteTitle[locale],
       description: siteDescription[locale],
+      images: [shareImage(locale)],
     },
     twitter: {
       card: "summary_large_image",
       title: siteTitle[locale],
       description: siteDescription[locale],
+      images: [shareImage(locale).url],
     },
   };
 }
