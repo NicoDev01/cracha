@@ -41,6 +41,7 @@ function preferEnglishAbroad(request: NextRequest): NextRequest {
 }
 
 export const config = {
-  // Metadata routes (robots, sitemap, Open Graph images) have no language.
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml)$).*)'],
+  // Metadata routes (robots, sitemap, Open Graph images) and files from
+  // public/ have no language.
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|mp4|webm)$).*)'],
 }

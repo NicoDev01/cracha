@@ -8,9 +8,10 @@ import { useAppLocale } from "@/i18n/navigation";
  * The promo film from `video/` under the hero: crawl, knowledge base, chat in
  * 33 seconds, which says more than the dashboard screenshot that sat here.
  *
- * The file in public/videos is a web encode of `video/out/cracha-promo.mp4`
- * (H.264, CRF 26, faststart, no audio track), ~4 MB instead of 11 MB. The
- * poster is its first frame, so nothing jumps when playback starts.
+ * The files in public/videos are web encodes (H.264, CRF 26, faststart, no
+ * audio track): German `video/out/cracha-promo.mp4`, ~4 MB instead of 11 MB;
+ * English the 20-second spot `CraCha-spot-20s.mp4`, ~2.3 MB instead of 8 MB.
+ * Each poster is its film's first frame, so nothing jumps when playback starts.
  *
  * It plays muted and in a loop like an animated image. Visitors who asked for
  * reduced motion get the paused film with controls instead.
@@ -20,25 +21,33 @@ import { useAppLocale } from "@/i18n/navigation";
  * on a phone connection it took most of the bandwidth of the first seconds,
  * while the poster already shows the same first frame.
  */
-const label = {
-  de: "CraCha in 33 Sekunden: eine Website wird Seite für Seite gelesen und im Chat mit Quellen befragt",
-  en: "CraCha in 33 seconds: a website is read page by page and questioned in the chat with sources",
+const film = {
+  de: {
+    src: "/videos/cracha-promo.mp4?v=20260928-fire-v3",
+    poster: "/videos/cracha-promo-poster.webp?v=20260928-fire-v2",
+    label: "CraCha in 33 Sekunden: eine Website wird Seite für Seite gelesen und im Chat mit Quellen befragt",
+  },
+  en: {
+    src: "/videos/cracha-promo-en.mp4?v=20261022-spot-20s",
+    poster: "/videos/cracha-promo-en-poster.webp?v=20261022-spot-20s",
+    label: "CraCha in 20 seconds: a website is read page by page and questioned in the chat with sources",
+  },
 } as const;
 
 export default function PreviewLanding() {
-  const locale = useAppLocale();
+  const { src: filmSrc, poster, label } = film[useAppLocale()];
   const ref = useRef<HTMLVideoElement>(null);
   const [src, setSrc] = useState<string>();
 
   useEffect(() => {
-    const attach = () => setSrc("/videos/cracha-promo.mp4?v=20260928-fire-v3");
+    const attach = () => setSrc(filmSrc);
     if (document.readyState === "complete") {
       attach();
       return;
     }
     window.addEventListener("load", attach, { once: true });
     return () => window.removeEventListener("load", attach);
-  }, []);
+  }, [filmSrc]);
 
   useEffect(() => {
     const video = ref.current;
@@ -55,7 +64,7 @@ export default function PreviewLanding() {
           ref={ref}
           className="block aspect-video w-full"
           src={src}
-          poster="/videos/cracha-promo-poster.webp?v=20260928-fire-v2"
+          poster={poster}
           width={1920}
           height={1080}
           autoPlay
@@ -63,7 +72,7 @@ export default function PreviewLanding() {
           loop
           playsInline
           preload="auto"
-          aria-label={label[locale]}
+          aria-label={label}
         />
       </div>
     </div>
